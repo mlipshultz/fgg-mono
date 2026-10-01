@@ -6,3 +6,4 @@ cdk.out
 .turbo
 pnpm-lock.yaml
 docs/handoff
+next-env.d.ts
