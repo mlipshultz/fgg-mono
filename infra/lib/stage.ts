@@ -19,6 +19,9 @@ export interface StageConfig {
   /** Cognito hosted-UI domain prefix. Globally unique per region. */
   cognitoDomainPrefix: string;
   githubRepo: string;
+  /** Subject patterns the deploy role trusts. GitHub issues immutable subjects with IDs
+   *  (`repo:owner@id/repo@id:...`); the plain form is kept for older tokens. */
+  githubSubjects: string[];
 }
 
 export function stageConfig(stage: Stage): StageConfig {
@@ -32,6 +35,7 @@ export function stageConfig(stage: Stage): StageConfig {
       : ['http://localhost:3000'],
     cognitoDomainPrefix: `feelgoodgaming-${stage}`,
     githubRepo: 'mlipshultz/fgg-mono',
+    githubSubjects: ['repo:mlipshultz/fgg-mono:*', 'repo:mlipshultz@8192110/fgg-mono@1398552177:*'],
   };
 }
 

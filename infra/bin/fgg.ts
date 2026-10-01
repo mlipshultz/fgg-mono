@@ -14,7 +14,11 @@ const env = { account, region: REGION };
 Tags.of(app).add('Project', PROJECT_TAG);
 
 // Account-level, stage-independent. Deployed once; harmless to include in every deploy.
-new GithubOidcStack(app, 'Fgg-GithubOidc', { env, githubRepo: config.githubRepo });
+new GithubOidcStack(app, 'Fgg-GithubOidc', {
+  env,
+  githubRepo: config.githubRepo,
+  githubSubjects: config.githubSubjects,
+});
 
 const auth = new AuthStack(app, `Fgg-${config.stage}-Auth`, { env, config });
 const data = new DataStack(app, `Fgg-${config.stage}-Data`, { env, config });

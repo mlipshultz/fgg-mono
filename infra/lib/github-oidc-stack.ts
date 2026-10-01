@@ -4,6 +4,7 @@ import type { Construct } from 'constructs';
 
 export interface GithubOidcStackProps extends StackProps {
   githubRepo: string;
+  githubSubjects: string[];
 }
 
 /**
@@ -29,7 +30,7 @@ export class GithubOidcStack extends Stack {
       maxSessionDuration: Duration.hours(1),
       assumedBy: new iam.WebIdentityPrincipal(provider.openIdConnectProviderArn, {
         StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
-        StringLike: { 'token.actions.githubusercontent.com:sub': `repo:${props.githubRepo}:*` },
+        StringLike: { 'token.actions.githubusercontent.com:sub': props.githubSubjects },
       }),
     });
 

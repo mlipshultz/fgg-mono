@@ -67,7 +67,11 @@ describe('DataStack', () => {
 
 describe('GithubOidcStack', () => {
   const t = Template.fromStack(
-    new GithubOidcStack(new App(), 'Oidc', { env, githubRepo: 'mlipshultz/fgg-mono' }),
+    new GithubOidcStack(new App(), 'Oidc', {
+      env,
+      githubRepo: 'mlipshultz/fgg-mono',
+      githubSubjects: ['repo:mlipshultz/fgg-mono:*', 'repo:mlipshultz@1/fgg-mono@2:*'],
+    }),
   );
 
   it('limits the trust to the repo and the role to CDK bootstrap roles', () => {
@@ -79,7 +83,10 @@ describe('GithubOidcStack', () => {
             Condition: {
               StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
               StringLike: {
-                'token.actions.githubusercontent.com:sub': 'repo:mlipshultz/fgg-mono:*',
+                'token.actions.githubusercontent.com:sub': [
+                  'repo:mlipshultz/fgg-mono:*',
+                  'repo:mlipshultz@1/fgg-mono@2:*',
+                ],
               },
             },
           }),
