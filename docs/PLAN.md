@@ -256,7 +256,13 @@ EAS Update with a channel per stage.
 Each phase ends with something demoable on dev. Estimates are working days for one developer with
 Claude Code, and are rough.
 
-### Phase 0: Skeleton (1–2 days)
+### Phase 0: Skeleton (1–2 days) — **done 2026-10-01** on branch `phase-0/skeleton`
+
+Deployed to dev (account 077536487082, us-east-1): `Fgg-GithubOidc` (role `fgg-github-deploy`),
+`Fgg-dev-Auth` (pool `us-east-1_ZDZ78wXWg`), `Fgg-dev-Data` (table `fgg-dev`, bucket
+`fgg-media-dev-077536487082`). Remaining GitHub setup needs the `mlipshultz` account in `gh`: open
+the PR, set repo variable `AWS_DEPLOY_ROLE_ARN`, create `dev`/`prod` environments (prod with a
+required reviewer), protect `main`.
 
 - pnpm + Turborepo workspace, shared `tsconfig`, ESLint, Prettier, Vitest.
 - `packages/tokens` from handoff §7 with Style Dictionary; CSS variables and RN theme output; a
