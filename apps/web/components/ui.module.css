@@ -1,0 +1,72 @@
+/* Shared section typography (eyebrow + H2) and layout helpers. */
+.eyebrow {
+  display: block;
+  font-family: var(--type-eyebrow-font-family);
+  font-weight: var(--type-eyebrow-font-weight);
+  font-size: 13px;
+  line-height: var(--type-eyebrow-line-height);
+  letter-spacing: var(--type-eyebrow-letter-spacing);
+  text-transform: var(--type-eyebrow-text-transform);
+  color: var(--color-pink-text);
+}
+.eyebrowInk {
+  color: var(--color-ink);
+}
+.eyebrowMuted {
+  color: var(--color-muted);
+}
+
+.h2 {
+  margin: 4px 0 0;
+  font-family: var(--type-h2-font-family);
+  font-weight: var(--type-h2-font-weight);
+  font-size: var(--type-h2-font-size);
+  line-height: var(--type-h2-line-height);
+  letter-spacing: var(--type-h2-letter-spacing);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 3px 10px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--color-white);
+}
+.pillOpen {
+  background: var(--status-open);
+}
+.pillSoon {
+  background: var(--status-coming-soon);
+}
+.pillClosed {
+  background: var(--status-closed);
+}
+
+.container {
+  padding-left: var(--layout-header-padding-x);
+  padding-right: var(--layout-header-padding-x);
+}
+
+.stripe {
+  background-color: var(--color-yellow);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.06) 0 8px,
+    transparent 8px 16px
+  );
+}
+
+@media (max-width: 767px) {
+  .h2 {
+    font-size: var(--type-h2-font-size-phone);
+  }
+  .container {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}

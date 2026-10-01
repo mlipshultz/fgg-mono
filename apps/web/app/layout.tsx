@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { Fredoka, Nunito } from 'next/font/google';
+import { Header } from '@/components/Header';
+import { Footer } from '@/components/Footer';
+import { getHomeContent } from '@/lib/api';
 import './globals.css';
 
 const fredoka = Fredoka({
@@ -18,14 +21,20 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: 'Feel Good Gaming',
-  description: 'The feel-good card & gaming fest.',
+  title: { default: 'Feel Good Gaming', template: '%s · Feel Good Gaming' },
+  description:
+    'The feel-good card & gaming fest. Family shows across Maryland where kids trade, play and earn XP.',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const { settings } = await getHomeContent();
   return (
     <html lang="en" className={`${fredoka.variable} ${nunito.variable}`}>
-      <body>{children}</body>
+      <body>
+        <Header />
+        {children}
+        <Footer settings={settings} />
+      </body>
     </html>
   );
 }

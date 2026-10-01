@@ -42,6 +42,30 @@ export class GithubOidcStack extends Stack {
       }),
     );
 
+    // Static site publish: sync apps/web/out into the web bucket and invalidate CloudFront.
+    this.deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'SyncWebBuckets',
+        actions: ['s3:ListBucket', 's3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+        resources: ['arn:aws:s3:::fgg-web-*', 'arn:aws:s3:::fgg-web-*/*'],
+      }),
+    );
+    this.deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'InvalidateDistributions',
+        actions: ['cloudfront:CreateInvalidation', 'cloudfront:GetInvalidation'],
+        resources: [`arn:aws:cloudfront::${this.account}:distribution/*`],
+      }),
+    );
+    // Read stack outputs so the web build can find the API URL, Cognito IDs and bucket names.
+    this.deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadStackOutputs',
+        actions: ['cloudformation:DescribeStacks'],
+        resources: [`arn:aws:cloudformation:*:${this.account}:stack/Fgg-*/*`],
+      }),
+    );
+
     new CfnOutput(this, 'DeployRoleArn', { value: this.deployRole.roleArn });
   }
 }

@@ -1,0 +1,33 @@
+{
+  "name": "@fgg/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lambda handlers for the FGG API. Bundled by CDK NodejsFunction (esbuild).",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "seed:dev": "AWS_PROFILE=fgg STAGE=dev tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.900.0",
+    "@aws-sdk/client-s3": "^3.1144.0",
+    "@aws-sdk/client-sesv2": "^3.900.0",
+    "@aws-sdk/lib-dynamodb": "^3.900.0",
+    "@fgg/types": "workspace:*",
+    "ulid": "^3.0.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "aws-sdk-client-mock": "^4.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

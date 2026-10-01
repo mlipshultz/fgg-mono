@@ -1,7 +1,10 @@
 import { App, Tags } from 'aws-cdk-lib';
+import { ApiStack } from '../lib/api-stack.js';
 import { AuthStack } from '../lib/auth-stack.js';
 import { DataStack } from '../lib/data-stack.js';
 import { GithubOidcStack } from '../lib/github-oidc-stack.js';
+import { MediaStack } from '../lib/media-stack.js';
+import { WebStack } from '../lib/web-stack.js';
 import { PROJECT_TAG, REGION, parseStage, stageConfig } from '../lib/stage.js';
 
 const app = new App();
@@ -22,5 +25,13 @@ new GithubOidcStack(app, 'Fgg-GithubOidc', {
 
 const auth = new AuthStack(app, `Fgg-${config.stage}-Auth`, { env, config });
 const data = new DataStack(app, `Fgg-${config.stage}-Data`, { env, config });
+const media = new MediaStack(app, `Fgg-${config.stage}-Media`, { env, config });
+const web = new WebStack(app, `Fgg-${config.stage}-Web`, { env, config });
+const api = new ApiStack(app, `Fgg-${config.stage}-Api`, {
+  env,
+  config,
+  table: data.table,
+  mediaBaseUrl: media.baseUrl,
+});
 
-for (const stack of [auth, data]) Tags.of(stack).add('Stage', config.stage);
+for (const stack of [auth, data, media, web, api]) Tags.of(stack).add('Stage', config.stage);

@@ -20,7 +20,7 @@ permissions:
   id-token: write
 
 jobs:
-  deploy:
+  infra:
     name: cdk deploy (${{ inputs.stage || 'dev' }})
     runs-on: ubuntu-latest
     # The prod GitHub Environment carries the required-reviewer gate.
@@ -45,3 +45,10 @@ jobs:
         with:
           name: cdk-outputs-${{ inputs.stage || 'dev' }}
           path: infra/outputs.json
+
+  web:
+    needs: infra
+    uses: ./.github/workflows/web-deploy.yml
+    with:
+      stage: ${{ inputs.stage || 'dev' }}
+    secrets: inherit

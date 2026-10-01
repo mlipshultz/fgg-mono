@@ -1,0 +1,32 @@
+.page {
+  min-height: 50vh;
+  padding: var(--space-48) 18px var(--space-90);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-card-lg);
+  padding: var(--space-32);
+  box-shadow: var(--shadow-card-yellow);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  align-items: flex-start;
+}
+.title {
+  margin: 0;
+  font-family: var(--type-h2-font-family);
+  font-weight: var(--type-h2-font-weight);
+  font-size: 36px;
+  line-height: 1.05;
+}
+.text {
+  margin: 0;
+  color: var(--color-muted);
+  line-height: 1.5;
+}

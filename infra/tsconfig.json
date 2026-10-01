@@ -4,7 +4,8 @@
     "noEmit": true,
     "types": ["node"],
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "exactOptionalPropertyTypes": false
   },
   "include": ["bin", "lib", "test"]
 }
