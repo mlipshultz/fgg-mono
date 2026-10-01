@@ -55,7 +55,7 @@ jobs:
         working-directory: infra
         run: |
           set -o pipefail
-          pnpm cdk diff --all -c stage=dev 2>&1 | tee diff.txt
+          pnpm cdk diff -c stage=dev 2>&1 | tee diff.txt
       - name: Comment diff on PR
         if: always() && steps.diff.outcome != 'skipped'
         env:

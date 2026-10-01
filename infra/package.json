@@ -12,7 +12,7 @@
     "cdk": "cdk",
     "synth": "cdk synth --quiet",
     "deploy:dev": "cdk deploy --all -c stage=dev --profile fgg",
-    "diff:dev": "cdk diff --all -c stage=dev --profile fgg"
+    "diff:dev": "cdk diff -c stage=dev --profile fgg"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.272.0",
