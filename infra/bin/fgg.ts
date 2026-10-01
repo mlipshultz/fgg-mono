@@ -23,8 +23,8 @@ new GithubOidcStack(app, 'Fgg-GithubOidc', {
   githubSubjects: config.githubSubjects,
 });
 
-const auth = new AuthStack(app, `Fgg-${config.stage}-Auth`, { env, config });
 const data = new DataStack(app, `Fgg-${config.stage}-Data`, { env, config });
+const auth = new AuthStack(app, `Fgg-${config.stage}-Auth`, { env, config, table: data.table });
 const media = new MediaStack(app, `Fgg-${config.stage}-Media`, { env, config });
 const web = new WebStack(app, `Fgg-${config.stage}-Web`, { env, config });
 const api = new ApiStack(app, `Fgg-${config.stage}-Api`, {
@@ -32,6 +32,8 @@ const api = new ApiStack(app, `Fgg-${config.stage}-Api`, {
   config,
   table: data.table,
   mediaBaseUrl: media.baseUrl,
+  userPool: auth.userPool,
+  userPoolClient: auth.userPoolClient,
 });
 
 for (const stack of [auth, data, media, web, api]) Tags.of(stack).add('Stage', config.stage);

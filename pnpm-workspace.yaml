@@ -11,3 +11,4 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - '@aws-sdk/client-s3@3.1144.0'
+  - '@aws-sdk/client-cognito-identity-provider@3.1145.0'

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { Activity, Partner } from './content.js';
 import { EventDay, VendorTableStatus } from './event.js';
-import { IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
+import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
+import { Me, Role } from './user.js';
 
 /** Every error response from the API has this shape. */
 export const ApiError = z.object({
@@ -160,3 +161,80 @@ export const GalleryPage = Paginated(PublicGalleryItem).extend({
 export type GalleryPage = z.infer<typeof GalleryPage>;
 
 /** POST /public/subscribe, /public/contact, /public/events/{id}/waitlist all return Ok. */
+
+// ---------------------------------------------------------------------------
+// Authenticated (Cognito JWT) account API.
+// ---------------------------------------------------------------------------
+
+export const UpdateMeInput = z.object({
+  displayName: z.string().min(1).max(60),
+});
+export type UpdateMeInput = z.infer<typeof UpdateMeInput>;
+
+/** Derived from the XP total and the Level config (packages/game). */
+export const LevelProgress = z.object({
+  level: z.number().int().positive(),
+  title: z.string(),
+  xp: z.number().int().nonnegative(),
+  /** XP earned inside the current level and the size of the level. */
+  xpIntoLevel: z.number().int().nonnegative(),
+  xpForLevel: z.number().int().positive(),
+  xpToNext: z.number().int().nonnegative(),
+  /** 0..1 */
+  pct: z.number().min(0).max(1),
+  nextLevel: z.number().int().positive().optional(),
+  nextTitle: z.string().optional(),
+  nextUnlocks: z.string().optional(),
+});
+export type LevelProgress = z.infer<typeof LevelProgress>;
+
+export const BadgeStatus = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  artUrl: z.string().url().optional(),
+  earned: z.boolean(),
+  awardedAt: IsoDateTime.optional(),
+});
+export type BadgeStatus = z.infer<typeof BadgeStatus>;
+
+/** GET /me/dashboard — everything the attendee dashboard (mock 2c) needs. */
+export const Dashboard = z.object({
+  me: Me,
+  progress: LevelProgress,
+  stats: z.object({
+    fests: z.number().int().nonnegative(),
+    badgesEarned: z.number().int().nonnegative(),
+    badgesTotal: z.number().int().nonnegative(),
+    memberSince: IsoDateTime,
+  }),
+  badges: z.array(BadgeStatus),
+  savedEvents: z.array(PublicEvent),
+});
+export type Dashboard = z.infer<typeof Dashboard>;
+
+/** GET /me/saved — ids only, for heart state on event cards. */
+export const SavedEventIds = z.object({ eventIds: z.array(Ulid) });
+export type SavedEventIds = z.infer<typeof SavedEventIds>;
+
+// ---------------------------------------------------------------------------
+// Admin (staff / superadmin).
+// ---------------------------------------------------------------------------
+
+export const AdminUserRow = z.object({
+  sub: CognitoSub,
+  email: Email,
+  displayName: z.string(),
+  roles: z.array(Role),
+  vendorId: z.string().optional(),
+  memberSince: IsoDateTime,
+});
+export type AdminUserRow = z.infer<typeof AdminUserRow>;
+
+/** GET /admin/users?cursor=&q= (q = exact email) */
+export const AdminUserList = Paginated(AdminUserRow);
+export type AdminUserList = z.infer<typeof AdminUserList>;
+
+/** PUT /admin/users/{sub}/roles — superadmin only. */
+export const SetRolesInput = z.object({ roles: z.array(Role).min(1) });
+export type SetRolesInput = z.infer<typeof SetRolesInput>;

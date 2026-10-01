@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import ui from '@/components/ui.module.css';
 import { dayRange, fullDateLabel, monthAbbr, stubColor, year } from '@/lib/dates';
 import styles from './EventCard.module.css';
+import { HeartButton } from './HeartButton';
 import { TablesLeft } from './TablesLeft';
 import { WaitlistButton } from './WaitlistButton';
 
@@ -32,10 +33,13 @@ export function EventCard({ ev, index }: { ev: PublicEvent; index: number }) {
           <h3 id={`event-${ev.slug}-name`} className={styles.name}>
             {ev.name}
           </h3>
-          <div className={styles.tile} aria-hidden="true">
-            <div className={`${styles.tileMon} ${TILE[color]}`}>{monthAbbr(ev.startDate)}</div>
-            <div className={styles.tileDay}>{dayRange(ev.startDate, ev.endDate)}</div>
-            <div className={styles.tileYear}>{year(ev.startDate)}</div>
+          <div className={styles.titleTools}>
+            <HeartButton eventId={ev.id} slug={ev.slug} name={ev.name} />
+            <div className={styles.tile} aria-hidden="true">
+              <div className={`${styles.tileMon} ${TILE[color]}`}>{monthAbbr(ev.startDate)}</div>
+              <div className={styles.tileDay}>{dayRange(ev.startDate, ev.endDate)}</div>
+              <div className={styles.tileYear}>{year(ev.startDate)}</div>
+            </div>
           </div>
         </div>
         <div className={styles.meta}>

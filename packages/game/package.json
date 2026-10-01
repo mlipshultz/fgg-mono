@@ -1,0 +1,29 @@
+{
+  "name": "@fgg/game",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "XP, level and badge rules with placeholder configs (handoff §0A). Pure functions shared by API, web and mobile.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fgg/types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

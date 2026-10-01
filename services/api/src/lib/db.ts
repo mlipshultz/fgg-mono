@@ -1,12 +1,23 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
+  DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import type { Activity, Event, FloorPlan, GalleryItem, Partner, Venue } from '@fgg/types';
+import type {
+  Activity,
+  Event,
+  FloorPlan,
+  GalleryItem,
+  Partner,
+  Role,
+  User,
+  Venue,
+} from '@fgg/types';
 
 /** Single table (docs/PLAN.md §3.4). Name from TABLE_NAME. */
 export const TABLE = process.env.TABLE_NAME ?? 'fgg-dev';
@@ -63,7 +74,33 @@ export const keys = {
     PK: `EVENT#${eventId}`,
     SK: `${kind === 'waitlist' ? 'WAIT' : 'NOTIFY'}#${ts}#${email.toLowerCase()}`,
   }),
+  user: (sub: string): Keys => ({ PK: `USER#${sub}`, SK: 'META' }),
+  /** META plus the email lookup (GSI1) and the sharded admin list (GSI2). */
+  userIndex: (u: Pick<User, 'sub' | 'email' | 'createdAt'>): Keys => ({
+    ...keys.user(u.sub),
+    GSI1PK: `EMAIL#${u.email.toLowerCase()}`,
+    GSI1SK: `USER#${u.sub}`,
+    GSI2PK: `USERS#${userShard(u.sub)}`,
+    GSI2SK: u.createdAt,
+  }),
+  userStats: (sub: string): Keys => ({ PK: `USER#${sub}`, SK: 'STATS' }),
+  userBadge: (sub: string, badgeId: string): Keys => ({
+    PK: `USER#${sub}`,
+    SK: `BADGE#${badgeId}`,
+  }),
+  savedEvent: (sub: string, eventId: string): Keys => ({
+    PK: `USER#${sub}`,
+    SK: `SAVED#${eventId}`,
+  }),
 };
+
+export const USER_SHARDS = 10;
+/** Stable 0..9 shard from the sub so admin paging spreads across partitions. */
+export function userShard(sub: string): number {
+  let h = 0;
+  for (const ch of sub) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % USER_SHARDS;
+}
 
 export function pad(n: number, width = 4): string {
   return String(n).padStart(width, '0');
@@ -241,3 +278,176 @@ export async function listFeaturedGallery(max: number): Promise<StoredGalleryIte
 export async function putItem(item: Item): Promise<void> {
   await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
 }
+
+// ---------------------------------------------------------------------------
+// Users (Phase 2)
+// ---------------------------------------------------------------------------
+
+export interface UserStats {
+  xp: number;
+  checkins: number;
+  fests: number;
+  updatedAt?: string;
+}
+
+export interface UserBadgeItem {
+  SK: string;
+  badgeId: string;
+  awardedAt: string;
+  eventId?: string;
+}
+
+export interface SavedEventItem {
+  SK: string;
+  eventId: string;
+  savedAt: string;
+}
+
+export async function getUser(sub: string): Promise<User | undefined> {
+  const res = await ddb.send(new GetCommand({ TableName: TABLE, Key: keys.user(sub) }));
+  return res.Item as User | undefined;
+}
+
+export async function getUserByEmail(email: string): Promise<User | undefined> {
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE,
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk',
+      ExpressionAttributeValues: { ':pk': `EMAIL#${email.toLowerCase()}` },
+      Limit: 1,
+    }),
+  );
+  return res.Items?.[0] as User | undefined;
+}
+
+/** Create the USER record only if it does not exist. Returns true when created. */
+export async function createUserIfMissing(user: User): Promise<boolean> {
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: { ...keys.userIndex(user), ...user },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      }),
+    );
+    return true;
+  } catch (e) {
+    if ((e as { name?: string }).name === 'ConditionalCheckFailedException') return false;
+    throw e;
+  }
+}
+
+export async function updateUser(
+  sub: string,
+  patch: Partial<Pick<User, 'displayName' | 'roles' | 'vendorId'>>,
+): Promise<User> {
+  const sets: string[] = ['#u = :u'];
+  const names: Record<string, string> = { '#u': 'updatedAt' };
+  const values: Record<string, unknown> = { ':u': new Date().toISOString() };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    sets.push(`#${k} = :${k}`);
+    names[`#${k}`] = k;
+    values[`:${k}`] = v;
+  }
+  const res = await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE,
+      Key: keys.user(sub),
+      UpdateExpression: `SET ${sets.join(', ')}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+      ConditionExpression: 'attribute_exists(PK)',
+      ReturnValues: 'ALL_NEW',
+    }),
+  );
+  return res.Attributes as User;
+}
+
+/** Everything under USER#sub in one query: META, STATS, BADGE#…, SAVED#…. */
+export async function listUserItems(sub: string): Promise<{
+  user?: User;
+  stats: UserStats;
+  badges: UserBadgeItem[];
+  saved: SavedEventItem[];
+}> {
+  const items = await queryAll({
+    KeyConditionExpression: 'PK = :pk',
+    ExpressionAttributeValues: { ':pk': `USER#${sub}` },
+  });
+  const out: { user?: User; stats: UserStats; badges: UserBadgeItem[]; saved: SavedEventItem[] } = {
+    stats: { xp: 0, checkins: 0, fests: 0 },
+    badges: [],
+    saved: [],
+  };
+  for (const it of items) {
+    const sk = String(it.SK);
+    if (sk === 'META') out.user = it as unknown as User;
+    else if (sk === 'STATS')
+      out.stats = {
+        xp: Number(it.xp ?? 0),
+        checkins: Number(it.checkins ?? 0),
+        fests: Number(it.fests ?? 0),
+      };
+    else if (sk.startsWith('BADGE#')) out.badges.push(it as unknown as UserBadgeItem);
+    else if (sk.startsWith('SAVED#')) out.saved.push(it as unknown as SavedEventItem);
+  }
+  return out;
+}
+
+export async function listSavedEventIds(sub: string): Promise<string[]> {
+  const items = await queryAll({
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `USER#${sub}`, ':sk': 'SAVED#' },
+    ProjectionExpression: 'eventId',
+  });
+  return items.map((it) => String(it.eventId));
+}
+
+export async function saveEvent(sub: string, eventId: string): Promise<void> {
+  await putItem({ ...keys.savedEvent(sub, eventId), eventId, savedAt: new Date().toISOString() });
+}
+
+export async function unsaveEvent(sub: string, eventId: string): Promise<void> {
+  await ddb.send(new DeleteCommand({ TableName: TABLE, Key: keys.savedEvent(sub, eventId) }));
+}
+
+export interface UserPage {
+  users: User[];
+  /** Opaque continuation: shard + DynamoDB key. */
+  next?: { shard: number; key?: Record<string, unknown> };
+}
+
+/** Page through all users shard by shard (GSI2 USERS#<shard>, ordered by createdAt). */
+export async function listUsers(
+  limit: number,
+  cursor?: { shard: number; key?: Record<string, unknown> },
+): Promise<UserPage> {
+  const users: User[] = [];
+  let shard = cursor?.shard ?? 0;
+  let key = cursor?.key;
+  while (shard < USER_SHARDS && users.length < limit) {
+    const res = await ddb.send(
+      new QueryCommand({
+        TableName: TABLE,
+        IndexName: 'GSI2',
+        KeyConditionExpression: 'GSI2PK = :pk',
+        ExpressionAttributeValues: { ':pk': `USERS#${shard}` },
+        Limit: limit - users.length,
+        ...(key ? { ExclusiveStartKey: key } : {}),
+      }),
+    );
+    users.push(...((res.Items ?? []) as unknown as User[]));
+    if (res.LastEvaluatedKey) {
+      key = res.LastEvaluatedKey;
+      if (users.length >= limit) return { users, next: { shard, key } };
+    } else {
+      shard += 1;
+      key = undefined;
+    }
+  }
+  return shard < USER_SHARDS ? { users, next: { shard, ...(key ? { key } : {}) } } : { users };
+}
+
+export type { Role };
