@@ -1,0 +1,78 @@
+name: Web deploy
+
+# Reusable: builds the static Next.js export against a stage's stack outputs,
+# syncs it to the web bucket and invalidates CloudFront. Called by deploy.yml
+# after `cdk deploy`, and by rebuild-site.yml when admin publishes content.
+on:
+  workflow_call:
+    inputs:
+      stage:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  web:
+    name: Build + publish web (${{ inputs.stage }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.stage }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Read stack outputs
+        id: outputs
+        run: |
+          out() { aws cloudformation describe-stacks --stack-name "$1" \
+                    --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text; }
+          S=${{ inputs.stage }}
+          {
+            echo "api_url=$(out Fgg-$S-Api ApiUrl)"
+            echo "media_url=$(out Fgg-$S-Media MediaBaseUrl)"
+            echo "pool_id=$(out Fgg-$S-Auth UserPoolId)"
+            echo "client_id=$(out Fgg-$S-Auth UserPoolClientId)"
+            echo "cognito_domain=$(out Fgg-$S-Auth UserPoolDomain)"
+            echo "bucket=$(out Fgg-$S-Web WebBucketName)"
+            echo "distribution=$(out Fgg-$S-Web WebDistributionId)"
+            echo "web_url=$(out Fgg-$S-Web WebUrl)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build static export
+        env:
+          NEXT_PUBLIC_STAGE: ${{ inputs.stage }}
+          NEXT_PUBLIC_API_URL: ${{ steps.outputs.outputs.api_url }}
+          NEXT_PUBLIC_MEDIA_URL: ${{ steps.outputs.outputs.media_url }}
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID: ${{ steps.outputs.outputs.pool_id }}
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: ${{ steps.outputs.outputs.client_id }}
+          NEXT_PUBLIC_COGNITO_DOMAIN: ${{ steps.outputs.outputs.cognito_domain }}
+          NEXT_PUBLIC_SITE_URL: ${{ steps.outputs.outputs.web_url }}
+        run: pnpm turbo run build --filter=@fgg/web...
+
+      - name: Sync to S3
+        env:
+          BUCKET: ${{ steps.outputs.outputs.bucket }}
+        run: |
+          # Hashed assets are immutable; everything else revalidates on every request.
+          aws s3 sync apps/web/out "s3://$BUCKET" --delete \
+            --exclude "_next/static/*" \
+            --cache-control "public, max-age=0, must-revalidate"
+          aws s3 sync apps/web/out/_next/static "s3://$BUCKET/_next/static" --delete \
+            --cache-control "public, max-age=31536000, immutable"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.outputs.outputs.distribution }} --paths "/*"
+          echo "Published ${{ steps.outputs.outputs.web_url }}" >> "$GITHUB_STEP_SUMMARY"

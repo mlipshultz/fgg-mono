@@ -8,3 +8,6 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - '@aws-sdk/client-s3@3.1144.0'

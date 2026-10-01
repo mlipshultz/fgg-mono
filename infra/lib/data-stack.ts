@@ -1,6 +1,5 @@
-import { CfnOutput, Duration, Stack, type StackProps } from 'aws-cdk-lib';
+import { CfnOutput, Stack, type StackProps } from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as s3 from 'aws-cdk-lib/aws-s3';
 import type { Construct } from 'constructs';
 import type { StageConfig } from './stage.js';
 
@@ -8,10 +7,9 @@ export interface DataStackProps extends StackProps {
   config: StageConfig;
 }
 
-/** Single table + GSI1/GSI2 (docs/PLAN.md §3.4) and the private media bucket. */
+/** Single table + GSI1/GSI2 (docs/PLAN.md §3.4). The media bucket lives in MediaStack. */
 export class DataStack extends Stack {
   readonly table: dynamodb.TableV2;
-  readonly mediaBucket: s3.Bucket;
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
     super(scope, id, props);
@@ -44,27 +42,6 @@ export class DataStack extends Stack {
       ],
     });
 
-    this.mediaBucket = new s3.Bucket(this, 'MediaBucket', {
-      bucketName: `fgg-media-${config.stage}-${this.account}`,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      versioned: config.isProd,
-      removalPolicy: config.removalPolicy,
-      autoDeleteObjects: !config.isProd,
-      cors: [
-        {
-          // Presigned uploads from the admin console.
-          allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET, s3.HttpMethods.HEAD],
-          allowedOrigins: config.webOrigins,
-          allowedHeaders: ['*'],
-          maxAge: 3000,
-        },
-      ],
-      lifecycleRules: [{ abortIncompleteMultipartUploadAfter: Duration.days(2) }],
-    });
-
     new CfnOutput(this, 'TableName', { value: this.table.tableName });
-    new CfnOutput(this, 'MediaBucketName', { value: this.mediaBucket.bucketName });
   }
 }

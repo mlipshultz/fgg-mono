@@ -1,0 +1,105 @@
+.btn {
+  --btn-shadow: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  font-family: var(--type-button-font-family);
+  font-weight: var(--type-button-font-weight);
+  line-height: var(--type-button-line-height);
+  color: var(--color-ink);
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--btn-shadow) var(--btn-shadow) 0 var(--color-ink);
+  transition:
+    transform var(--motion-press) ease-out,
+    box-shadow var(--motion-press) ease-out;
+}
+.btn:hover {
+  color: var(--color-ink);
+  transform: translate(-1px, -1px);
+  box-shadow: calc(var(--btn-shadow) + 1px) calc(var(--btn-shadow) + 1px) 0 var(--color-ink);
+}
+.btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+  box-shadow: var(--btn-shadow) var(--btn-shadow) 0 var(--color-ink);
+}
+
+.sm {
+  padding: 9px 16px;
+  font-size: 14px;
+}
+.md {
+  padding: 11px 20px;
+  font-size: 15px;
+}
+.lg {
+  --btn-shadow: 4px;
+  padding: 16px 28px;
+  font-size: 17px;
+}
+
+.primary {
+  background: var(--color-pink);
+}
+.secondary {
+  background: var(--color-white);
+}
+.yellow {
+  background: var(--color-yellow);
+}
+.dark {
+  --btn-shadow: 0px;
+  background: var(--color-ink);
+  color: var(--color-white);
+  border-color: var(--color-ink);
+  box-shadow: none;
+}
+.dark:hover {
+  color: var(--color-white);
+  box-shadow: 3px 3px 0 var(--color-pink);
+}
+.dark:disabled {
+  box-shadow: none;
+}
+.outline {
+  --btn-shadow: 0px;
+  box-shadow: none;
+}
+.outline:hover {
+  box-shadow: 2px 2px 0 var(--color-ink);
+}
+.outline:disabled {
+  box-shadow: none;
+}
+.ghost {
+  --btn-shadow: 0px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.ghost:hover {
+  box-shadow: none;
+  color: var(--color-pink-text);
+}
+
+.block {
+  display: flex;
+  width: 100%;
+}
+
+@media (max-width: 767px) {
+  .btn {
+    min-height: var(--layout-tap-target);
+  }
+}

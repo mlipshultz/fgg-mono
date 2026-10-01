@@ -54,15 +54,6 @@ describe('DataStack', () => {
       ]),
     });
   });
-
-  it('keeps the media bucket private', () => {
-    t.hasResourceProperties('AWS::S3::Bucket', {
-      PublicAccessBlockConfiguration: Match.objectLike({
-        BlockPublicAcls: true,
-        RestrictPublicBuckets: true,
-      }),
-    });
-  });
 });
 
 describe('GithubOidcStack', () => {

@@ -271,7 +271,15 @@ required reviewer), protect `main`.
 - `infra` CDK app with `AuthStack` and `DataStack` for `dev`; GitHub OIDC role; `ci.yml` and
   `deploy.yml` deploying to dev. Branch protection on `main`.
 
-### Phase 1: Public site (4–6 days)
+### Phase 1: Public site (4–6 days) — **built 2026-10-01** on branch `phase-1/public-site`
+
+Deployed to dev: `Fgg-dev-Media` (bucket `fgg-media-dev-…`, CloudFront), `Fgg-dev-Web` (bucket
+`fgg-web-dev-…`, CloudFront with clean-URL function), `Fgg-dev-Api` (HTTP API, one public Lambda).
+Dev table and media bucket are seeded with the canvas placeholder content (`pnpm --filter @fgg/api
+seed:dev`). Notes: the API is API Gateway **HTTP API** (v2), not REST, for cost and the built-in JWT
+authorizer. The media bucket lives in MediaStack, not DataStack, because the OAC bucket policy
+references the distribution. `tablesLeft` counts distinct tables with at least one open day. Contact
+email via SES and the Supabase seed are deferred until an SES identity and the service key exist.
 
 - `ApiStack` with the events, venues, partners, activities, gallery, subscribe and contact routes.
 - `WebStack`: S3 + CloudFront + ACM for the dev domain, static export pipeline, rebuild dispatch.

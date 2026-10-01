@@ -1,0 +1,29 @@
+name: Rebuild site
+
+# Fired by the API (`POST /admin/site/rebuild`, Phase 4) via repository_dispatch
+# when staff publish or edit content. Rebuilds the static export for that stage.
+on:
+  repository_dispatch:
+    types: [rebuild-site]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to rebuild
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+concurrency:
+  group: web-${{ github.event.client_payload.stage || inputs.stage || 'dev' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  web:
+    uses: ./.github/workflows/web-deploy.yml
+    with:
+      stage: ${{ github.event.client_payload.stage || inputs.stage || 'dev' }}
+    secrets: inherit

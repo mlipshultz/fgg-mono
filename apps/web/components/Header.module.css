@@ -1,0 +1,105 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: 14px var(--layout-header-padding-x);
+  min-height: var(--layout-header-height);
+  background: color-mix(in srgb, var(--color-paper) 94%, transparent);
+  border-bottom: var(--border-width) solid var(--border-color);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  text-decoration: none;
+  color: var(--color-ink);
+}
+.brand:hover {
+  color: var(--color-ink);
+}
+.logo {
+  width: var(--layout-logo-size);
+  height: var(--layout-logo-size);
+  display: block;
+}
+.brandName {
+  font-family: var(--type-brand-font-family);
+  font-weight: var(--type-brand-font-weight);
+  font-size: var(--type-brand-font-size);
+  line-height: var(--type-brand-line-height);
+}
+.brandShort {
+  display: none;
+}
+
+.nav {
+  display: flex;
+  gap: var(--layout-nav-gap);
+  font-family: var(--type-nav-font-family);
+  font-weight: var(--type-nav-font-weight);
+  font-size: var(--type-nav-font-size);
+}
+.nav a {
+  text-decoration: none;
+}
+
+.right {
+  display: flex;
+  gap: var(--space-12);
+  align-items: center;
+}
+.login {
+  font-family: var(--type-nav-font-family);
+  font-weight: var(--type-nav-font-weight);
+  font-size: var(--type-nav-font-size);
+  text-decoration: none;
+  padding: 10px 14px;
+}
+.eventsPhone {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .nav {
+    gap: var(--space-18);
+  }
+}
+
+@media (max-width: 767px) {
+  .header {
+    padding: 14px 18px;
+  }
+  .logo {
+    width: 36px;
+    height: 36px;
+  }
+  .brandName {
+    display: none;
+  }
+  .brandShort {
+    display: inline;
+    font-family: var(--type-brand-font-family);
+    font-weight: var(--type-brand-font-weight);
+    font-size: 18px;
+  }
+  .nav,
+  .login,
+  .eventsDesktop {
+    display: none;
+  }
+  .eventsPhone {
+    display: inline-flex;
+    padding: 9px 14px;
+    font-size: 13px;
+    --btn-shadow: 0px;
+    box-shadow: none;
+  }
+  .right {
+    gap: var(--space-8);
+  }
+}

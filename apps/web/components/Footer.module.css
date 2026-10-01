@@ -1,0 +1,107 @@
+.footer {
+  border-top: var(--border-width) solid var(--border-color);
+  padding: var(--space-48) var(--layout-header-padding-x) var(--space-32);
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 30px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.brandCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  align-items: flex-start;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  text-decoration: none;
+}
+.brand img {
+  width: 40px;
+  height: 40px;
+}
+.brand span {
+  font-family: var(--type-brand-font-family);
+  font-weight: var(--type-brand-font-weight);
+  font-size: 20px;
+}
+.blurb {
+  color: var(--color-muted);
+  max-width: 280px;
+  line-height: 1.5;
+}
+.email {
+  text-decoration: none;
+  font-weight: var(--font-weight-extrabold);
+}
+.social {
+  display: flex;
+  gap: var(--space-8);
+  margin-top: var(--space-6);
+}
+.social a {
+  width: 38px;
+  height: 38px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-white);
+  color: var(--color-ink);
+  transition:
+    transform var(--motion-press) ease-out,
+    box-shadow var(--motion-press) ease-out;
+}
+.social a:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--color-ink);
+}
+.social svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+}
+.col b {
+  margin-bottom: 4px;
+}
+.col a {
+  text-decoration: none;
+}
+.legal {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--color-line);
+  padding-top: var(--space-16);
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+@media (max-width: 1199px) {
+  .footer {
+    grid-template-columns: 1fr 1fr;
+  }
+  .brandCol {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 767px) {
+  .footer {
+    grid-template-columns: 1fr;
+    padding: var(--space-24) 18px 30px;
+    font-size: 13px;
+    gap: var(--space-16);
+  }
+  .social a {
+    width: var(--layout-tap-target);
+    height: var(--layout-tap-target);
+  }
+}

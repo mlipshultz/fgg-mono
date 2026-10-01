@@ -5,6 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "preserve",
+    "exactOptionalPropertyTypes": false,
     "noEmit": true,
     "allowJs": true,
     "incremental": true,

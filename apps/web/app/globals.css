@@ -51,3 +51,24 @@ a:hover {
     font-size: var(--type-body-font-size-phone);
   }
 }
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+button {
+  font: inherit;
+}
+img {
+  max-width: 100%;
+}
