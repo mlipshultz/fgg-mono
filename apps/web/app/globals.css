@@ -1,0 +1,53 @@
+@import '@fgg/tokens/css';
+
+/* next/font exposes --font-fredoka / --font-nunito; point the token families at them. */
+:root {
+  --font-family-display: var(--font-fredoka), 'Fredoka', system-ui, sans-serif;
+  --font-family-body: var(--font-nunito), 'Nunito', system-ui, sans-serif;
+  --type-hero-font-family: var(--font-family-display);
+  --type-h2-font-family: var(--font-family-display);
+  --type-card-title-font-family: var(--font-family-display);
+  --type-brand-font-family: var(--font-family-display);
+  --type-body-font-family: var(--font-family-body);
+  --type-body-lg-font-family: var(--font-family-body);
+  --type-eyebrow-font-family: var(--font-family-body);
+  --type-button-font-family: var(--font-family-body);
+  --type-nav-font-family: var(--font-family-body);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--type-body-font-weight);
+  font-size: var(--type-body-font-size);
+  line-height: var(--type-body-line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-ink);
+}
+a:hover {
+  color: var(--color-pink-text);
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+@media (max-width: 767px) {
+  body {
+    font-size: var(--type-body-font-size-phone);
+  }
+}

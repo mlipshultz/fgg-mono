@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  checks:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # turbo --affected needs main's history
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm turbo run lint typecheck test build --affected
+        env:
+          TURBO_SCM_BASE: origin/main
+
+  cdk-diff:
+    name: CDK synth + diff (dev)
+    runs-on: ubuntu-latest
+    needs: checks
+    if: github.event_name == 'pull_request' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: cdk diff
+        id: diff
+        working-directory: infra
+        run: |
+          set -o pipefail
+          pnpm cdk diff --all -c stage=dev 2>&1 | tee diff.txt
+      - name: Comment diff on PR
+        if: always() && steps.diff.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### `cdk diff` (dev)'
+            echo '<details><summary>Show diff</summary>'
+            echo
+            echo '```'
+            tail -c 60000 infra/diff.txt
+            echo '```'
+            echo '</details>'
+          } > comment.md
+          gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md --edit-last || \
+            gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md

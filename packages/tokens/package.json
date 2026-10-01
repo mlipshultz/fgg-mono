@@ -1,0 +1,31 @@
+{
+  "name": "@fgg/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "FGG design tokens (handoff §7). Single source for web CSS variables and the React Native theme.",
+  "exports": {
+    "./css": "./dist/css/tokens.css",
+    "./theme": {
+      "types": "./dist/theme.d.ts",
+      "import": "./dist/theme.js"
+    },
+    "./json": "./dist/json/tokens.json",
+    "./tokens.json": "./tokens.json"
+  },
+  "files": [
+    "dist",
+    "tokens.json"
+  ],
+  "scripts": {
+    "build": "node build.mjs && tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "style-dictionary": "^5.5.5",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@fgg/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AWS CDK app: Auth, Data, (later) Api, Web, Media, Email stacks. Stage via -c stage=dev|prod.",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "cdk": "cdk",
+    "synth": "cdk synth --quiet",
+    "deploy:dev": "cdk deploy --all -c stage=dev --profile fgg",
+    "diff:dev": "cdk diff --all -c stage=dev --profile fgg"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.272.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.1143.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.3"
+  }
+}
