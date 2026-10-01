@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+.next/
+.turbo/
+cdk.out/
+cdk.context.json
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+*.log
+infra/outputs*.json
+next-env.d.ts

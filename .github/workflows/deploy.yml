@@ -1,0 +1,47 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to deploy
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+concurrency:
+  group: deploy-${{ inputs.stage || 'dev' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: cdk deploy (${{ inputs.stage || 'dev' }})
+    runs-on: ubuntu-latest
+    # The prod GitHub Environment carries the required-reviewer gate.
+    environment: ${{ inputs.stage || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@fgg/infra...
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: cdk deploy
+        working-directory: infra
+        run: pnpm cdk deploy --all -c stage=${{ inputs.stage || 'dev' }} --require-approval never --outputs-file outputs.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cdk-outputs-${{ inputs.stage || 'dev' }}
+          path: infra/outputs.json
