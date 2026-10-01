@@ -1,13 +1,8 @@
 {
   "app": "npx tsx bin/fgg.ts",
   "watch": {
-    "include": [
-      "bin/**",
-      "lib/**"
-    ],
-    "exclude": [
-      "**/*.test.ts"
-    ]
+    "include": ["bin/**", "lib/**"],
+    "exclude": ["**/*.test.ts"]
   },
   "context": {
     "@aws-cdk-containers/ecs-service-extensions:enableDefaultLogDriver": true,

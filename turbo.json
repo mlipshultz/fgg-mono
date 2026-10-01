@@ -3,35 +3,21 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "dist/**",
-        "out/**",
-        ".next/**",
-        "!.next/cache/**",
-        "cdk.out/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "out/**", ".next/**", "!.next/cache/**", "cdk.out/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     },
     "typecheck": {
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     }
   },
   "agentGuidance": false
