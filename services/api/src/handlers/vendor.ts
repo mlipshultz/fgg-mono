@@ -24,6 +24,7 @@ import {
 import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
 import {
   createHold,
+  heldTables,
   history,
   loadHold,
   quoteFromHold,
@@ -109,17 +110,29 @@ function prefillFrom(v: Vendor): NonNullable<HoldResponse['prefill']> {
 }
 
 async function holdResponse(items: HoldItem[], ctx: Ctx, vendor: Vendor): Promise<HoldResponse> {
-  const table = ctx.floorPlan.tables.find((t) => t.id === items[0]!.tableId);
-  const rowLabel = table ? `Row ${table.row} · Main Hall` : items[0]!.tableId;
-  const nearby = table ? nearbyText(table, ctx.floorPlan) : '';
+  const describe = (tableId: string) => {
+    const table = ctx.floorPlan.tables.find((t) => t.id === tableId);
+    return {
+      rowLabel: table ? `Row ${table.row} · Main Hall` : tableId,
+      nearby: table ? nearbyText(table, ctx.floorPlan) : '',
+    };
+  };
   const [event] = await toPublicEvents([ctx.event]);
   const vi = items[0]!.vendorInfo as VendorInfo | undefined;
   return {
     hold: toTableHold(items),
-    quote: quoteFromHold(items, rowLabel, nearby),
+    quote: quoteFromHold(items, describe),
     event: event!,
     ...(vi ? { vendorInfo: vi } : { prefill: prefillFrom(vendor) }),
   };
+}
+
+/** "Table B7 · Sat Oct 24 + Sun Oct 25" or "2 tables (B7, B8) · Sat Oct 24 + Sun Oct 25". */
+function cartLabel(items: HoldItem[]): string {
+  const tables = heldTables(items);
+  const dates = [...new Set(tables.flatMap((t) => t.dates))].sort().map(shortDate).join(' + ');
+  if (tables.length === 1) return `Table ${tables[0]!.tableId} · ${dates}`;
+  return `${tables.length} tables (${tables.map((t) => t.tableId).join(', ')}) · ${dates}`;
 }
 
 const LOGO_EXT: Record<string, string> = {
@@ -127,14 +140,6 @@ const LOGO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
 };
-
-function parseQuoteQuery(q: Record<string, string | undefined>) {
-  return QuoteInput.parse({
-    tableId: q.tableId,
-    dates: (q.dates ?? '').split(',').filter(Boolean),
-    rate: q.rate ?? 'standard',
-  });
-}
 
 async function ownedOrder(actor: Actor, id: string): Promise<{ order: Order; vendor: Vendor }> {
   const vendor = await vendorFor(actor);
@@ -185,11 +190,11 @@ const router = new Router()
     };
     return json(req, body, 201, { 'cache-control': 'no-store' });
   })
-  .add('GET', '/vendor/events/{id}/quote', async (req, { id }) => {
+  .add('POST', '/vendor/events/{id}/quote', async (req, { id }) => {
     const actor = claimsFrom(req);
     await vendorFor(actor);
     const ctx = await eventCtx(id!);
-    const input = parseQuoteQuery(req.queryStringParameters ?? {});
+    const input = parseBody(req, QuoteInput);
     const quote = resolveQuote({ ...ctx, ...input });
     return json(req, quote, 200, { 'cache-control': 'no-store' });
   })
@@ -266,6 +271,7 @@ const router = new Router()
     }
 
     const createdAt = now.toISOString();
+    const tables = heldTables(items);
     const order: Order = {
       id: ulid(),
       eventId: ctx.event.id,
@@ -274,17 +280,15 @@ const router = new Router()
       ownerId: vendor.id,
       placedBy: actor.sub,
       status: 'pending_payment',
-      lines: [
-        {
-          type: 'table',
-          tableId: h.tableId,
-          dates: [...h.dates].sort(),
-          rate: h.rate,
-          unitCents: h.unitCents,
-          lineCents: h.amountCents,
-        },
-      ],
-      subtotalCents: h.amountCents,
+      lines: tables.map((t) => ({
+        type: 'table' as const,
+        tableId: t.tableId,
+        dates: t.dates,
+        rate: h.rate,
+        unitCents: t.unitCents,
+        lineCents: t.amountCents,
+      })),
+      subtotalCents: h.subtotalCents,
       feeCents: h.feeCents,
       taxCents: h.taxCents,
       totalCents: h.totalCents,
@@ -293,16 +297,15 @@ const router = new Router()
       createdAt,
       updatedAt: createdAt,
     };
-    const dayLabel = [...h.dates].sort().map(shortDate).join(' + ');
     const draft = await shopify().createDraftOrder({
-      title: `${ctx.event.name} · Table ${h.tableId} · ${dayLabel}`,
+      title: `${ctx.event.name} · ${cartLabel(items)}`,
       totalCents: h.totalCents,
       email: vendorInfo.email,
       attributes: {
         orderId: order.id,
         holdId: h.holdId,
         eventId: ctx.event.id,
-        tableId: h.tableId,
+        tableId: tables.map((t) => t.tableId).join(','),
       },
       tags: ['fgg', 'vendor-table', STAGE],
       note: `${vendorInfo.tableName} · ${h.rate === 'poke_bucks' ? 'PokéBucks partner' : 'Standard'} rate`,

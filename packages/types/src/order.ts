@@ -4,23 +4,33 @@ import { Cents, CognitoSub, IsoDate, IsoDateTime, Ulid } from './common.js';
 export const TableRate = z.enum(['standard', 'poke_bucks']);
 export type TableRate = z.infer<typeof TableRate>;
 
-/** A hold on one table for one or more days of an event. One item per day in storage. */
+export const PricingInputs = z.object({
+  priceWindowId: Ulid.optional(),
+  priceWindowKind: z.string().optional(),
+  tableOverrideCents: Cents.optional(),
+  premiumDeltaCents: Cents.optional(),
+});
+export type PricingInputs = z.infer<typeof PricingInputs>;
+
+/** One table within a hold: its days and the price resolved at hold time (never recomputed). */
+export const HeldTable = z.object({
+  tableId: z.string(),
+  dates: z.array(IsoDate).min(1),
+  unitCents: Cents,
+  amountCents: Cents,
+  pricingInputs: PricingInputs,
+});
+export type HeldTable = z.infer<typeof HeldTable>;
+
+/** A vendor's hold on one or more tables for an event. Stored as one item per table-day. */
 export const TableHold = z.object({
   id: Ulid,
   eventId: Ulid,
   vendorId: Ulid,
   heldBy: CognitoSub,
-  tableId: z.string(),
-  dates: z.array(IsoDate).min(1),
   rate: TableRate,
-  /** Resolved at hold time and never recomputed. */
-  unitCents: Cents,
-  amountCents: Cents,
-  pricingInputs: z.object({
-    priceWindowId: Ulid.optional(),
-    tableOverrideCents: Cents.optional(),
-    premiumDeltaCents: Cents.optional(),
-  }),
+  tables: z.array(HeldTable).min(1),
+  subtotalCents: Cents,
   expiresAt: IsoDateTime,
   createdAt: IsoDateTime,
 });

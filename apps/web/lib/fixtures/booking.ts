@@ -93,40 +93,50 @@ export const floorPlanResponseFixture = EventFloorPlan.parse({
     eventId: halloween.id,
     vendorStatus: 'open',
     tablesLeft: 60 - TAKEN.size,
-    days: halloween.days.map((d) => ({ date: d.date, unavailable: [...TAKEN].sort() })),
+    // A few tables differ by day so the picker's per-day stripes show up in fixture mode.
+    days: halloween.days.map((d, i) => ({
+      date: d.date,
+      unavailable: [...TAKEN, ...(i === 0 ? ['D4', 'E5'] : ['A3', 'C5', 'F1'])].sort(),
+    })),
   },
 });
 
-export function quoteFixture(
-  tableId: string,
-  dates: string[],
-  rate: 'standard' | 'poke_bucks',
-): Quote {
+export interface CartLineFixture {
+  tableId: string;
+  dates: string[];
+}
+
+export function quoteFixture(lines: CartLineFixture[], rate: 'standard' | 'poke_bucks'): Quote {
   const unit = rate === 'poke_bucks' ? 10000 : 20000;
-  const amount = unit * dates.length;
-  const row = tableId[0]!;
-  const n = Number(tableId.slice(1));
+  const priced = lines.map(({ tableId, dates }) => {
+    const row = tableId[0]!;
+    const n = Number(tableId.slice(1));
+    return {
+      tableId,
+      dates: [...dates].sort(),
+      unitCents: unit,
+      lineCents: unit * dates.length,
+      pricingInputs: {},
+      rowLabel: `Row ${row} · Main Hall`,
+      nearby: `${['A', 'B'].includes(row) ? 'Right by the stage and tournaments' : ['C', 'D'].includes(row) ? 'Center of the hall' : 'First row past the entrance (busiest spot)'}, ${n <= 5 ? 'next to the Art Station' : "next to Kids Trading and Find 'Em All"}.`,
+    };
+  });
+  const subtotal = priced.reduce((n, l) => n + l.lineCents, 0);
   return Quote.parse({
-    tableId,
-    dates,
     rate,
-    unitCents: unit,
-    amountCents: amount,
+    lines: priced,
+    subtotalCents: subtotal,
     feeCents: 0,
     taxCents: 0,
-    totalCents: amount,
-    pricingInputs: {},
-    rowLabel: `Row ${row} · Main Hall`,
-    nearby: `${['A', 'B'].includes(row) ? 'Right by the stage and tournaments' : ['C', 'D'].includes(row) ? 'Center of the hall' : 'First row past the entrance (busiest spot)'}, ${n <= 5 ? 'next to the Art Station' : "next to Kids Trading and Find 'Em All"}.`,
+    totalCents: subtotal,
   });
 }
 
 export function holdFixture(
-  tableId: string,
-  dates: string[],
+  lines: CartLineFixture[],
   rate: 'standard' | 'poke_bucks',
 ): HoldResponse {
-  const quote = quoteFixture(tableId, dates, rate);
+  const quote = quoteFixture(lines, rate);
   const now = Date.now();
   return HoldResponse.parse({
     hold: {
@@ -134,12 +144,15 @@ export function holdFixture(
       eventId: halloween.id,
       vendorId: fid('01JVND', 1),
       heldBy: '2f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d',
-      tableId,
-      dates,
       rate,
-      unitCents: quote.unitCents,
-      amountCents: quote.amountCents,
-      pricingInputs: {},
+      tables: quote.lines.map((l) => ({
+        tableId: l.tableId,
+        dates: l.dates,
+        unitCents: l.unitCents,
+        amountCents: l.lineCents,
+        pricingInputs: {},
+      })),
+      subtotalCents: quote.subtotalCents,
       expiresAt: new Date(now + 10 * 60_000).toISOString(),
       createdAt: new Date(now).toISOString(),
     },

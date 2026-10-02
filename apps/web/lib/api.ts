@@ -269,19 +269,23 @@ export async function submitVendorApplication(
 }
 
 export async function getQuote(eventId: string, input: QuoteInput): Promise<Quote> {
-  if (!hasApi) return fake(quoteFixture(input.tableId, input.dates, input.rate), 200);
-  const params = new URLSearchParams({
-    tableId: input.tableId,
-    dates: input.dates.join(','),
-    rate: input.rate,
-  });
+  if (!hasApi) return fake(quoteFixture(input.lines, input.rate), 150);
   return Quote.parse(
-    await authedRequest<unknown>(`/vendor/events/${encodeURIComponent(eventId)}/quote?${params}`),
+    await authedRequest<unknown>(`/vendor/events/${encodeURIComponent(eventId)}/quote`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
   );
 }
 
+/** Fixture mode keeps the last hold so info/checkout steps see what was actually picked. */
+let fixtureHold: HoldResponse | null = null;
+
 export async function createHold(eventId: string, input: QuoteInput): Promise<HoldResponse> {
-  if (!hasApi) return fake(localize(holdFixture(input.tableId, input.dates, input.rate)));
+  if (!hasApi) {
+    fixtureHold = localize(holdFixture(input.lines, input.rate));
+    return fake(fixtureHold);
+  }
   return HoldResponse.parse(
     await authedRequest<unknown>(`/vendor/events/${encodeURIComponent(eventId)}/holds`, {
       method: 'POST',
@@ -290,8 +294,11 @@ export async function createHold(eventId: string, input: QuoteInput): Promise<Ho
   );
 }
 
+const DEFAULT_FIXTURE_HOLD = () =>
+  localize(holdFixture([{ tableId: 'C4', dates: ['2026-10-24', '2026-10-25'] }], 'standard'));
+
 export async function getHold(holdId: string): Promise<HoldResponse> {
-  if (!hasApi) return fake(localize(holdFixture('C4', ['2026-10-24', '2026-10-25'], 'standard')));
+  if (!hasApi) return fake(fixtureHold ?? DEFAULT_FIXTURE_HOLD());
   return HoldResponse.parse(
     await authedRequest<unknown>(`/vendor/holds/${encodeURIComponent(holdId)}`),
   );
@@ -302,11 +309,12 @@ export async function updateHold(
   vendorInfo: VendorInfoInput,
 ): Promise<HoldResponse> {
   if (!hasApi) {
-    const h = localize(holdFixture('C4', ['2026-10-24', '2026-10-25'], 'standard'));
-    return fake({
+    const h = fixtureHold ?? DEFAULT_FIXTURE_HOLD();
+    fixtureHold = {
       ...h,
       vendorInfo: { ...vendorInfo, contactName: 'Maya Johnson', email: 'maya@cardcorner.com' },
-    });
+    };
+    return fake(fixtureHold);
   }
   return HoldResponse.parse(
     await authedRequest<unknown>(`/vendor/holds/${encodeURIComponent(holdId)}`, {

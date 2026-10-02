@@ -5,6 +5,7 @@ import type { VendorOrder } from '@fgg/types';
 import { Button } from '@/components/Button';
 import { PassCard } from '@/components/vendor/PassCard';
 import { downloadVendorFile, getVendorOrder } from '@/lib/api';
+import { tableLinesOf, tablesLabel } from '@/lib/booking';
 import styles from './done.module.css';
 
 const MAX_WAIT_MS = 2 * 60_000;
@@ -47,7 +48,7 @@ export function Done() {
 
   const download = (kind: 'pass.ics' | 'receipt.pdf') => {
     if (!order) return;
-    const base = `${order.event.slug}-table-${order.lines[0]?.type === 'table' ? order.lines[0].tableId : 'pass'}`;
+    const base = `${order.event.slug}-table-${tablesLabel(order).replace(/, /g, '-') || 'pass'}`;
     void downloadVendorFile(
       order.id,
       kind,
@@ -130,8 +131,8 @@ export function Done() {
     );
   }
 
-  const line = order.lines[0];
-  const tableId = line?.type === 'table' ? line.tableId : '';
+  const tables = tablesLabel(order);
+  const many = tableLinesOf(order).length > 1;
   return (
     <main className={styles.page}>
       <div className={styles.card}>
@@ -141,8 +142,8 @@ export function Done() {
         <div>
           <h1 className={styles.title}>You&apos;re booked!</h1>
           <p className={styles.lead}>
-            Table {tableId} at {order.event.name} is yours. Receipt sent to{' '}
-            <b>{order.vendorInfo?.email}</b>.
+            {many ? 'Tables' : 'Table'} {tables} at {order.event.name} {many ? 'are' : 'is'} yours.
+            Receipt sent to <b>{order.vendorInfo?.email}</b>.
           </p>
         </div>
         <PassCard order={order} />

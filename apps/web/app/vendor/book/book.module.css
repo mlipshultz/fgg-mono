@@ -236,6 +236,151 @@
   background: var(--color-pink);
   box-shadow: 3px 3px 0 var(--color-ink);
 }
+/* Open on some days only: stripes come from inline background-image (one per open day). */
+.tablePartial {
+  background-color: var(--color-white);
+}
+.tableId {
+  position: relative;
+  z-index: 1;
+}
+.tablePartial .tableId {
+  background: var(--color-white);
+  border-radius: 999px;
+  padding: 1px 5px;
+}
+/* Not open on the filtered day. */
+.tableDim {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.table:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+.tablePicked:disabled:hover {
+  box-shadow: 3px 3px 0 var(--color-ink);
+}
+/* Day filter chips carry the same stripe as the cells. */
+.dayChipMark {
+  background-color: var(--color-white);
+}
+.dayChipMark[aria-pressed='true'] {
+  background-color: var(--color-white);
+  box-shadow: 3px 3px 0 var(--color-ink);
+  outline: 2px solid var(--color-ink);
+  outline-offset: 0;
+}
+.dayChip > span {
+  background: var(--color-white);
+  border-radius: 999px;
+  padding: 0 4px;
+}
+/* Cart */
+.cart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cartLine {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-tile);
+  padding: 10px;
+  background: var(--color-white);
+}
+.cartTile {
+  width: 48px;
+  height: 40px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 10px;
+  background: var(--color-pink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--type-brand-font-family);
+  font-weight: var(--font-weight-bold);
+  font-size: 16px;
+  box-shadow: 2px 2px 0 var(--color-ink);
+}
+.cartBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cartRow {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.cartDays {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cartDay {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 3px 9px;
+  background: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--color-ink);
+}
+.cartDay[aria-pressed='true'] {
+  background: var(--color-yellow);
+  box-shadow: 2px 2px 0 var(--color-ink);
+}
+.cartDay:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.cartRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.cartPrice {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.cartRemove {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.cartRemove:hover {
+  color: var(--color-pink-text);
+}
+.cartEmpty {
+  border: var(--border-width) dashed var(--color-dash-strong);
+  border-radius: var(--radius-tile);
+  padding: 16px;
+  text-align: center;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.swatchStripe {
+  background-color: var(--color-white);
+}
 .bottomRow {
   display: grid;
   grid-template-columns: 1fr 2fr 1fr;

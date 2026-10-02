@@ -5,7 +5,14 @@ import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from '.
 import { Me, Role } from './user.js';
 import { SocialHandles, Vendor, VendorApplication, VendorApprovalMode } from './vendor.js';
 import { FloorPlan, Venue } from './venue.js';
-import { Order, TableHold, TableRate, VendorInfo, VendorInfoInput } from './order.js';
+import {
+  Order,
+  PricingInputs,
+  TableHold,
+  TableRate,
+  VendorInfo,
+  VendorInfoInput,
+} from './order.js';
 
 /** Every error response from the API has this shape. */
 export const ApiError = z.object({
@@ -276,29 +283,40 @@ export const EventFloorPlan = z.object({
 });
 export type EventFloorPlan = z.infer<typeof EventFloorPlan>;
 
-export const QuoteInput = z.object({
+/** One table in the cart with the days wanted for it. */
+export const QuoteLineInput = z.object({
   tableId: z.string().regex(/^[A-Z]{1,2}\d{1,3}$/),
   dates: z.array(IsoDate).min(1),
+});
+export type QuoteLineInput = z.infer<typeof QuoteLineInput>;
+
+export const MAX_TABLES_PER_ORDER = 10;
+
+/** POST /vendor/events/{id}/quote and /holds: the cart. One rate applies to every table. */
+export const QuoteInput = z.object({
+  lines: z.array(QuoteLineInput).min(1).max(MAX_TABLES_PER_ORDER),
   rate: TableRate,
 });
 export type QuoteInput = z.infer<typeof QuoteInput>;
 
-/** Price resolved server-side (base rate, price window, table override). Stored on the hold. */
-export const Quote = QuoteInput.extend({
+/** Price resolved server-side per table (base rate, price window, table override). */
+export const QuoteLine = QuoteLineInput.extend({
   unitCents: z.number().int().nonnegative(),
-  amountCents: z.number().int().nonnegative(),
-  feeCents: z.number().int().nonnegative(),
-  taxCents: z.number().int().nonnegative(),
-  totalCents: z.number().int().nonnegative(),
-  pricingInputs: z.object({
-    priceWindowId: Ulid.optional(),
-    priceWindowKind: z.string().optional(),
-    tableOverrideCents: z.number().int().optional(),
-    premiumDeltaCents: z.number().int().optional(),
-  }),
+  lineCents: z.number().int().nonnegative(),
+  pricingInputs: PricingInputs,
   /** "Row B · Main Hall", "Right by the stage, next to the Art Station." */
   rowLabel: z.string(),
   nearby: z.string(),
+});
+export type QuoteLine = z.infer<typeof QuoteLine>;
+
+export const Quote = z.object({
+  rate: TableRate,
+  lines: z.array(QuoteLine).min(1),
+  subtotalCents: z.number().int().nonnegative(),
+  feeCents: z.number().int().nonnegative(),
+  taxCents: z.number().int().nonnegative(),
+  totalCents: z.number().int().nonnegative(),
 });
 export type Quote = z.infer<typeof Quote>;
 

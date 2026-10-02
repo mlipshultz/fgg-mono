@@ -1,73 +1,105 @@
 'use client';
 
-import type { FloorPlan, FloorTable } from '@fgg/types';
-import { rowPairs } from '@/lib/booking';
+import type { FloorPlan, FloorTable, IsoDate } from '@fgg/types';
+import { daysShort, rowPairs, stripesFor } from '@/lib/booking';
 import styles from './book.module.css';
 
 function TableButton({
   t,
-  taken,
+  eventDays,
+  openDays,
   picked,
-  onPick,
+  dimmed,
+  disabled,
+  onToggle,
 }: {
   t: FloorTable;
-  taken: boolean;
+  eventDays: IsoDate[];
+  openDays: ReadonlySet<IsoDate>;
   picked: boolean;
-  onPick: (id: string) => void;
+  dimmed: boolean;
+  disabled: boolean;
+  onToggle: (id: string) => void;
 }) {
-  const state = picked ? 'your pick' : taken ? 'taken' : 'available';
+  const taken = openDays.size === 0;
+  const partial = !taken && openDays.size < eventDays.length;
+  const state = picked
+    ? 'in your cart'
+    : taken
+      ? 'taken'
+      : partial
+        ? `open ${daysShort(eventDays, [...openDays])} only`
+        : 'open all days';
+  const stripes = picked ? undefined : stripesFor(eventDays, openDays);
   return (
     <button
       type="button"
-      className={`${styles.table} ${taken ? styles.tableTaken : ''} ${picked ? styles.tablePicked : ''}`}
+      className={[
+        styles.table,
+        taken ? styles.tableTaken : '',
+        picked ? styles.tablePicked : '',
+        partial && !picked ? styles.tablePartial : '',
+        dimmed ? styles.tableDim : '',
+      ].join(' ')}
+      style={stripes ? { backgroundImage: stripes } : undefined}
       aria-pressed={picked}
       aria-label={`Table ${t.id}, ${state}`}
       title={`${t.id} · ${state}`}
-      disabled={taken}
-      onClick={() => onPick(t.id)}
+      disabled={taken || disabled || (dimmed && !picked)}
+      onClick={() => onToggle(t.id)}
     >
-      {t.id}
+      <span className={styles.tableId}>{t.id}</span>
     </button>
   );
 }
 
-/** Floor plan from mock 4a: stage, side zones, rows in back-to-back pairs, entrance row. */
+/**
+ * Floor plan from mock 4a: stage, side zones, rows in back-to-back pairs, entrance row.
+ * Cells show per-day availability: plain = open every day, grey = taken, striped = open on the
+ * striped days only (one colour and direction per day). Tapping toggles the table in the cart.
+ */
 export function FloorPlanMap({
   plan,
-  unavailable,
+  eventDays,
+  openDays,
   picked,
-  onPick,
+  filterDay,
+  disabled = false,
+  onToggle,
 }: {
   plan: FloorPlan;
-  unavailable: ReadonlySet<string>;
-  picked: string | null;
-  onPick: (id: string) => void;
+  eventDays: IsoDate[];
+  openDays: ReadonlyMap<string, ReadonlySet<IsoDate>>;
+  picked: ReadonlySet<string>;
+  /** When set, tables not open on this day are dimmed. */
+  filterDay: IsoDate | null;
+  disabled?: boolean;
+  onToggle: (id: string) => void;
 }) {
   const pairs = rowPairs(plan);
+  const cell = (t: FloorTable) => {
+    const open = openDays.get(t.id) ?? new Set<IsoDate>();
+    return (
+      <TableButton
+        key={t.id}
+        t={t}
+        eventDays={eventDays}
+        openDays={open}
+        picked={picked.has(t.id)}
+        dimmed={filterDay !== null && open.size > 0 && !open.has(filterDay)}
+        disabled={disabled}
+        onToggle={onToggle}
+      />
+    );
+  };
   const line = (row: { row: string; left: FloorTable[]; right: FloorTable[] }) => (
     <div className={styles.rowLine} key={row.row}>
       <span className={styles.rowLabel} aria-hidden="true">
         {row.row}
       </span>
-      {row.left.map((t) => (
-        <TableButton
-          key={t.id}
-          t={t}
-          taken={unavailable.has(t.id)}
-          picked={picked === t.id}
-          onPick={onPick}
-        />
-      ))}
+      {row.left.map(cell)}
       <span className={styles.aisle} aria-hidden="true" />
-      {row.right.map((t) => (
-        <TableButton
-          key={t.id}
-          t={t}
-          taken={unavailable.has(t.id)}
-          picked={picked === t.id}
-          onPick={onPick}
-        />
-      ))}
+      {row.right.map(cell)}
     </div>
   );
   return (
