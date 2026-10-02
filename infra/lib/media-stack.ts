@@ -3,10 +3,12 @@ import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import type { Construct } from 'constructs';
-import type { StageConfig } from './stage.js';
+import { allowedOrigins, type StageConfig } from './stage.js';
 
 export interface MediaStackProps extends StackProps {
   config: StageConfig;
+  /** The web distribution URL; browsers there PUT presigned uploads straight to the bucket. */
+  webUrl: string;
 }
 
 /**
@@ -34,9 +36,9 @@ export class MediaStack extends Stack {
       autoDeleteObjects: !config.isProd,
       cors: [
         {
-          // Presigned uploads from the admin console.
+          // Presigned uploads from the site (vendor logos, later the admin console).
           allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET, s3.HttpMethods.HEAD],
-          allowedOrigins: config.webOrigins,
+          allowedOrigins: allowedOrigins(config, props.webUrl),
           allowedHeaders: ['*'],
           maxAge: 3000,
         },

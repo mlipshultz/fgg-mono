@@ -3,7 +3,7 @@ import { Activity, Partner } from './content.js';
 import { EventDay, VendorTableStatus } from './event.js';
 import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
 import { Me, Role } from './user.js';
-import { Vendor, VendorApplication, VendorApprovalMode } from './vendor.js';
+import { SocialHandles, Vendor, VendorApplication, VendorApprovalMode } from './vendor.js';
 import { FloorPlan, Venue } from './venue.js';
 import { Order, TableHold, TableRate, VendorInfo } from './order.js';
 
@@ -308,6 +308,8 @@ export const HoldResponse = z.object({
   quote: Quote,
   event: PublicEvent,
   vendorInfo: VendorInfo.optional(),
+  /** From the vendor profile, to seed the info step when nothing has been saved yet. */
+  prefill: VendorInfo.omit({ codeOfConductAccepted: true }).partial().optional(),
 });
 export type HoldResponse = z.infer<typeof HoldResponse>;
 
@@ -349,8 +351,12 @@ export const CancelRequestInput = z.object({ reason: z.string().max(1000).option
 export type CancelRequestInput = z.infer<typeof CancelRequestInput>;
 
 /** GET /vendor/dashboard (mock 1m). */
+/** GET/PATCH /vendor/profile — the vendor record with its logo resolved to a URL. */
+export const VendorProfile = Vendor.extend({ logoUrl: z.string().url().optional() });
+export type VendorProfile = z.infer<typeof VendorProfile>;
+
 export const VendorDashboard = z.object({
-  vendor: Vendor,
+  vendor: VendorProfile,
   upcoming: z.array(VendorOrder),
   history: z.array(VendorOrder),
   paidThisYearCents: z.number().int().nonnegative(),
@@ -360,6 +366,20 @@ export const VendorDashboard = z.object({
   refundCutoffDays: z.number().int().nonnegative(),
 });
 export type VendorDashboard = z.infer<typeof VendorDashboard>;
+
+/** GET /public/events/{idOrSlug}/vendors — who has a paid table. No contact details. */
+export const EventVendor = z.object({
+  vendorId: Ulid,
+  name: z.string(),
+  sellsDescription: z.string(),
+  logoUrl: z.string().url().optional(),
+  socials: SocialHandles,
+  tableId: z.string(),
+  dates: z.array(IsoDate).min(1),
+});
+export type EventVendor = z.infer<typeof EventVendor>;
+export const EventVendorList = z.object({ event: PublicEvent, vendors: z.array(EventVendor) });
+export type EventVendorList = z.infer<typeof EventVendorList>;
 
 // ---------------------------------------------------------------------------
 // Admin orders.

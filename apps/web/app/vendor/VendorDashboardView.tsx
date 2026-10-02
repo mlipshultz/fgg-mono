@@ -13,6 +13,7 @@ import { downloadVendorFile, getVendorDashboard, requestCancel } from '@/lib/api
 import { initials } from '@/lib/auth';
 import { fmtCents } from '@/lib/booking';
 import { daysUntil, fullDateLabel, shortDateLabel, year } from '@/lib/dates';
+import { ProfileCard } from './ProfileCard';
 import styles from './vendor.module.css';
 
 const STATUS_LABEL: Record<VendorOrder['status'], string> = {
@@ -147,7 +148,7 @@ export function VendorDashboardView() {
         </Link>
         <Link href="/#events">Book a show</Link>
         <a href="#history">Receipts</a>
-        <Link href="/dashboard">Settings</Link>
+        <a href="#profile">Profile</a>
         <span className={styles.tabAvatar} aria-hidden="true">
           {initials(user?.name ?? vendor.contactName)}
         </span>
@@ -272,6 +273,10 @@ export function VendorDashboardView() {
         </div>
 
         <div className={styles.col}>
+          <ProfileCard
+            profile={vendor}
+            onChange={(p) => setData((cur) => (cur ? { ...cur, vendor: p } : cur))}
+          />
           <div className={styles.card}>
             <span className={styles.cardTitle}>Payments</span>
             <div className={styles.payRow}>

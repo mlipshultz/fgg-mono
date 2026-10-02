@@ -119,7 +119,7 @@ function order(overrides: Partial<Order> = {}): Order {
       contactName: 'Maya',
       phone: '4105550100',
       email: 'maya@cardcorner.com',
-      sells: ['singles'],
+      sellsDescription: 'Singles',
       codeOfConductAccepted: true,
     },
     createdAt: now,

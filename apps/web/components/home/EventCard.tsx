@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { PublicEvent } from '@fgg/types';
 import { BookCta } from '@/components/vendor/BookCta';
 import ui from '@/components/ui.module.css';
@@ -49,6 +50,9 @@ export function EventCard({ ev, index }: { ev: PublicEvent; index: number }) {
           {ev.hoursLabel}
         </div>
         <p className={styles.blurb}>{ev.blurb}</p>
+        <Link href={`/events/${ev.slug}/`} className={styles.whoLink}>
+          See who&apos;s vending →
+        </Link>
         <div className={styles.foot}>
           <span className={styles.vendors}>
             Vendors{' '}

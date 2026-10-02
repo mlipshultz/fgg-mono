@@ -31,7 +31,11 @@ describe('WebStack', () => {
 describe('MediaStack', () => {
   it('owns a private media bucket fronted by an OAC distribution', () => {
     const t = Template.fromStack(
-      new MediaStack(new App(), 'Media', { env, config: stageConfig('dev') }),
+      new MediaStack(new App(), 'Media', {
+        env,
+        config: stageConfig('dev'),
+        webUrl: 'https://d123.cloudfront.net',
+      }),
     );
     t.hasResourceProperties('AWS::S3::Bucket', {
       BucketName: 'fgg-media-dev-123456789012',

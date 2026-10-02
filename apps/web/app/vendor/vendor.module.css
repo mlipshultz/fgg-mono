@@ -346,6 +346,99 @@
   color: var(--color-muted);
   padding: 24px !important;
 }
+.brandHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+.brandText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.brandName {
+  font-family: var(--type-brand-font-family);
+  font-weight: var(--font-weight-bold);
+  font-size: 20px;
+}
+.brandMeta {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 12px;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.brandLabel {
+  display: block;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
+.brandSells {
+  margin: 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+.logo {
+  width: 72px;
+  height: 72px;
+  flex: none;
+  border-radius: 18px;
+  border: var(--border-width) solid var(--border-color);
+  object-fit: cover;
+  background: var(--color-white);
+}
+.logoEmpty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-yellow);
+  font-family: var(--type-brand-font-family);
+  font-weight: var(--font-weight-bold);
+  font-size: 22px;
+}
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+}
+.logoActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.socials {
+  display: flex;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+}
+.socials a {
+  color: var(--color-pink-text);
+  text-decoration: none;
+}
+.formNav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-12);
+}
 .errorCard {
   max-width: 520px;
   margin: 40px auto;

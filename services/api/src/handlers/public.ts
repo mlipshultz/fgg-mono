@@ -6,7 +6,10 @@ import {
   WaitlistInput,
   type Event,
   type EventFloorPlan,
+  type EventVendor,
+  type EventVendorList,
   type GalleryPage,
+  type Order,
   type HomeContent,
   type PublicGalleryItem,
   type PublicSettings,
@@ -16,11 +19,13 @@ import {
   getEventBySlug,
   getFloorPlan,
   getSettingsItem,
+  getVendor,
   keys,
   listActivities,
   listFeaturedGallery,
   listGalleryEvents,
   listPartners,
+  listOrdersForEvent,
   listPublishedEvents,
   putItem,
   queryGallery,
@@ -187,6 +192,44 @@ export const router = new Router()
       availability,
     };
     return json(req, body, 200, { 'cache-control': 'no-store' });
+  })
+  .add('GET', '/public/events/{id}/vendors', async (req, { id }) => {
+    const ev = await resolveEvent(id!);
+    const orders: Order[] = [];
+    let cursor: Record<string, unknown> | undefined;
+    do {
+      const page = await listOrdersForEvent(ev.id, 200, cursor);
+      orders.push(...page.items);
+      cursor = page.lastKey;
+    } while (cursor);
+    const paid = orders.filter((o) => o.status === 'paid' && o.kind === 'vendor_table');
+    const ids = [...new Set(paid.map((o) => o.ownerId))];
+    const vendors = new Map(
+      (await Promise.all(ids.map((vid) => getVendor(vid))))
+        .filter((v): v is NonNullable<typeof v> => !!v)
+        .map((v) => [v.id, v]),
+    );
+    const list: EventVendor[] = [];
+    for (const o of paid) {
+      const v = vendors.get(o.ownerId);
+      if (!v) continue;
+      for (const line of o.lines) {
+        if (line.type !== 'table') continue;
+        list.push({
+          vendorId: v.id,
+          name: o.vendorInfo?.tableName || v.businessName,
+          sellsDescription: o.vendorInfo?.sellsDescription || v.sellsDescription || '',
+          ...(v.logoKey ? { logoUrl: mediaUrl(v.logoKey) } : {}),
+          socials: v.socials ?? {},
+          tableId: line.tableId,
+          dates: [...line.dates].sort(),
+        });
+      }
+    }
+    list.sort((a, b) => a.tableId.localeCompare(b.tableId, 'en', { numeric: true }));
+    const [event] = await toPublicEvents([ev]);
+    const body: EventVendorList = { event: event!, vendors: list };
+    return json(req, body, 200, { 'cache-control': 'public, max-age=60' });
   })
   .add('GET', '/public/events/{id}/availability', async (req, { id }) => {
     const ev = await resolveEvent(id!);

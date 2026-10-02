@@ -24,9 +24,9 @@ new GithubOidcStack(app, 'Fgg-GithubOidc', {
 });
 
 const data = new DataStack(app, `Fgg-${config.stage}-Data`, { env, config });
-const media = new MediaStack(app, `Fgg-${config.stage}-Media`, { env, config });
-// Web before Auth/Api: both allow-list the distribution's hostname.
+// Web first: Media (bucket CORS), Auth (OAuth redirects) and Api (CORS) all allow-list its hostname.
 const web = new WebStack(app, `Fgg-${config.stage}-Web`, { env, config });
+const media = new MediaStack(app, `Fgg-${config.stage}-Media`, { env, config, webUrl: web.url });
 const auth = new AuthStack(app, `Fgg-${config.stage}-Auth`, {
   env,
   config,
@@ -38,6 +38,7 @@ const api = new ApiStack(app, `Fgg-${config.stage}-Api`, {
   config,
   table: data.table,
   mediaBaseUrl: media.baseUrl,
+  mediaBucket: media.bucket,
   userPool: auth.userPool,
   userPoolClient: auth.userPoolClient,
   webUrl: web.url,

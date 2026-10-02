@@ -1,4 +1,4 @@
-import type { EventAvailability, FloorPlan, FloorTable, IsoDate, SellsCategory } from '@fgg/types';
+import type { EventAvailability, FloorPlan, FloorTable, IsoDate } from '@fgg/types';
 import { dayOfWeek, parseIsoDate } from './dates';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -29,21 +29,6 @@ export function fmtTime(hhmm: string): string {
   const hour = h % 12 === 0 ? 12 : h % 12;
   return m ? `${hour}:${String(m).padStart(2, '0')}${suffix}` : `${hour}${suffix}`;
 }
-
-export const SELLS_LABELS: Record<SellsCategory, string> = {
-  pokemon_cards: 'Pokémon cards',
-  other_tcg: 'Other TCGs',
-  video_games: 'Video games',
-  collectibles: 'Collectibles',
-  art: 'Art',
-  apparel: 'Apparel',
-  accessories: 'Accessories',
-  food: 'Food & drink',
-  other: 'Other',
-};
-
-/** Vendor-info "What do you sell?" chips (mock 1l). */
-export const TABLE_SELLS = ['Singles', 'Sealed', 'Graded', 'Plush & toys', 'Art', 'Other'];
 
 /** Table ids unavailable on ANY of the selected dates. */
 export function unavailableFor(availability: EventAvailability, dates: IsoDate[]): Set<string> {

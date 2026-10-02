@@ -1,11 +1,13 @@
 import {
   AdminOrderList,
   EventFloorPlan,
+  EventVendorList,
   HoldResponse,
   Quote,
   VendorApplication,
   VendorDashboard,
   VendorOrder,
+  VendorProfile,
   VendorStanding,
   type FloorPlan,
   type FloorTable,
@@ -143,6 +145,13 @@ export function holdFixture(
     },
     quote,
     event: halloween,
+    prefill: {
+      tableName: vendorFixture.businessName,
+      contactName: vendorFixture.contactName,
+      phone: vendorFixture.phone,
+      email: vendorFixture.email,
+      sellsDescription: vendorFixture.sellsDescription,
+    },
   });
 }
 
@@ -200,7 +209,7 @@ export const paidOrderFixture: VendorOrder = VendorOrder.parse({
     contactName: 'Maya Johnson',
     phone: '4105550100',
     email: 'maya@cardcorner.com',
-    sells: ['Singles', 'Sealed'],
+    sellsDescription: 'Vintage and modern singles, graded slabs, a $1 bulk bin.',
     codeOfConductAccepted: true,
   },
   shopifyOrderId: 'gid://shopify/Order/1001',
@@ -238,8 +247,46 @@ const refundedOrderFixture: VendorOrder = VendorOrder.parse({
   loadInLabel: undefined,
 });
 
+export const vendorProfileFixture: VendorProfile = VendorProfile.parse({
+  ...vendorFixture,
+  logoKey: 'vendors/fixture/logo.png',
+  logoUrl: 'https://fixture.local/fixtures/vendor-logo.svg',
+});
+
+/** Who's vending at Halloween Fest (public). */
+export const eventVendorsFixture: EventVendorList = EventVendorList.parse({
+  event: halloween,
+  vendors: [
+    {
+      vendorId: vendorFixture.id,
+      name: "Maya's Card Corner",
+      sellsDescription: 'Vintage and modern singles, graded slabs, a $1 bulk bin.',
+      logoUrl: 'https://fixture.local/fixtures/vendor-logo.svg',
+      socials: { instagram: 'mayascardcorner' },
+      tableId: 'B7',
+      dates: ['2026-10-24', '2026-10-25'],
+    },
+    {
+      vendorId: fid('01JVND', 2),
+      name: 'Pocket Monsters MD',
+      sellsDescription: 'Modern singles, a $1 bulk bin and a few sealed ETBs.',
+      socials: { instagram: 'pocketmonstersmd', tiktok: 'pmmd' },
+      tableId: 'C2',
+      dates: ['2026-10-24'],
+    },
+    {
+      vendorId: fid('01JVND', 3),
+      name: 'Plush Pals',
+      sellsDescription: 'Handmade plush and embroidered hats.',
+      socials: { website: 'https://plushpals.example' },
+      tableId: 'E4',
+      dates: ['2026-10-24', '2026-10-25'],
+    },
+  ],
+});
+
 export const vendorDashboardFixture: VendorDashboard = VendorDashboard.parse({
-  vendor: vendorFixture,
+  vendor: vendorProfileFixture,
   upcoming: [paidOrderFixture],
   history: [paidOrderFixture, refundedOrderFixture],
   paidThisYearCents: 50000,
