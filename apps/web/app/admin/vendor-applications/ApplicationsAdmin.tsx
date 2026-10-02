@@ -5,7 +5,6 @@ import type { VendorApplication, VendorApplicationStatus } from '@fgg/types';
 import { Button } from '@/components/Button';
 import ui from '@/components/ui.module.css';
 import { adminApprove, adminCallScheduled, adminListApplications, adminReject } from '@/lib/api';
-import { SELLS_LABELS } from '@/lib/booking';
 import styles from '@/components/admin/admin.module.css';
 
 const TABS: { status: VendorApplicationStatus; label: string }[] = [
@@ -138,7 +137,6 @@ export function ApplicationsAdmin() {
                       .filter(Boolean)
                       .join(' · ') || 'No socials'}
                   </span>
-                  {app.additionalInfo && <span className={styles.sub}>“{app.additionalInfo}”</span>}
                 </td>
                 <td>
                   <span className={styles.name}>{app.contactName}</span>
@@ -146,19 +144,9 @@ export function ApplicationsAdmin() {
                   <span className={styles.sub}>{app.phone}</span>
                 </td>
                 <td>
-                  <div className={styles.chips}>
-                    {app.sells.map((s) => (
-                      <span key={s} className={styles.chip}>
-                        {SELLS_LABELS[s]}
-                      </span>
-                    ))}
-                  </div>
+                  <span className={styles.sub}>{app.sellsDescription || '—'}</span>
                 </td>
                 <td>
-                  <span className={styles.sub}>
-                    {app.previousFggEvents} previous{' '}
-                    {app.previousFggEvents === 1 ? 'show' : 'shows'}
-                  </span>
                   <span className={styles.sub}>
                     PokéBucks: {app.pokeBucksInterest ? 'yes' : 'no'}
                   </span>

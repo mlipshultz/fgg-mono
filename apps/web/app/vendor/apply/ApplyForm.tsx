@@ -2,15 +2,12 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Attribution, SellsCategory, VendorApplicationInput } from '@fgg/types';
+import type { Attribution, VendorApplicationInput } from '@fgg/types';
 import { Button } from '@/components/Button';
 import { AuthCard, Field, authStyles as a } from '@/components/auth/AuthCard';
 import { useAuth } from '@/components/Providers';
 import { getVendorStanding, submitVendorApplication, hasApi } from '@/lib/api';
-import { SELLS_LABELS } from '@/lib/booking';
 import v from '@/components/vendor/vendor.module.css';
-
-const SELLS = Object.keys(SELLS_LABELS) as SellsCategory[];
 
 function readAttribution(): Attribution {
   const q = new URLSearchParams(window.location.search);
@@ -40,13 +37,11 @@ export function ApplyForm() {
   const [contactName, setContactName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [sells, setSells] = useState<SellsCategory[]>([]);
   const [instagram, setInstagram] = useState('');
   const [tiktok, setTiktok] = useState('');
   const [website, setWebsite] = useState('');
-  const [previous, setPrevious] = useState('0');
+  const [sellsDescription, setSellsDescription] = useState('');
   const [pokeBucks, setPokeBucks] = useState<boolean | null>(null);
-  const [additional, setAdditional] = useState('');
   const [conduct, setConduct] = useState(false);
   const [sealed, setSealed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -81,9 +76,6 @@ export function ApplyForm() {
 
   const attribution = useMemo(() => (typeof window === 'undefined' ? {} : readAttribution()), []);
 
-  const toggleSell = (s: SellsCategory) =>
-    setSells((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
-
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
     const errs: Record<string, string> = {};
@@ -92,7 +84,7 @@ export function ApplyForm() {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()))
       errs.email = "Hmm, that email doesn't look right";
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'Add a phone number we can reach you at.';
-    if (sells.length === 0) errs.sells = 'Pick at least one.';
+    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell us what you plan to bring.';
     if (pokeBucks === null) errs.pokeBucks = 'Let us know either way.';
     if (!conduct) errs.conduct = 'Please agree to the code of conduct.';
     if (!sealed) errs.sealed = 'Please agree to the sealed product policy.';
@@ -112,13 +104,11 @@ export function ApplyForm() {
       contactName: contactName.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
-      sells,
+      sellsDescription: sellsDescription.trim().slice(0, 1000),
       socials,
-      previousFggEvents: Math.max(0, Math.min(100, Number(previous) || 0)),
       pokeBucksInterest: pokeBucks === true,
       codeOfConductAccepted: true,
       sealedPolicyAccepted: true,
-      ...(additional.trim() ? { additionalInfo: additional.trim().slice(0, 2000) } : {}),
       attribution,
     };
     try {
@@ -187,28 +177,13 @@ export function ApplyForm() {
             autoComplete="email"
           />
         </Field>
-        <Field label="What do you sell?" error={errors.sells}>
-          <div className={v.chips} role="group" aria-label="What do you sell">
-            {SELLS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={v.chip}
-                aria-pressed={sells.includes(s)}
-                onClick={() => toggleSell(s)}
-              >
-                {SELLS_LABELS[s]}
-              </button>
-            ))}
-          </div>
-        </Field>
         <div className={a.two}>
           <Field label="Instagram" hint="Optional">
             <input
               className={a.input}
               value={instagram}
               onChange={(e) => setInstagram(e.target.value)}
-              placeholder="@handle"
+              placeholder="yourhandle"
             />
           </Field>
           <Field label="TikTok" hint="Optional">
@@ -216,31 +191,19 @@ export function ApplyForm() {
               className={a.input}
               value={tiktok}
               onChange={(e) => setTiktok(e.target.value)}
-              placeholder="@handle"
+              placeholder="yourhandle"
             />
           </Field>
         </div>
-        <div className={a.two}>
-          <Field label="Website" hint="Optional">
-            <input
-              className={a.input}
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="yourshop.com"
-              inputMode="url"
-            />
-          </Field>
-          <Field label="Previous FGG events as a vendor">
-            <input
-              className={a.input}
-              type="number"
-              min={0}
-              max={100}
-              value={previous}
-              onChange={(e) => setPrevious(e.target.value)}
-            />
-          </Field>
-        </div>
+        <Field label="Website" hint="Optional">
+          <input
+            className={a.input}
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            placeholder="yourshop.com"
+            inputMode="url"
+          />
+        </Field>
         <Field
           label="Want 50% off your table with PokéBucks?"
           error={errors.pokeBucks}
@@ -265,13 +228,18 @@ export function ApplyForm() {
             </button>
           </div>
         </Field>
-        <Field label="Anything else?" hint="Optional">
+        <Field
+          label="What do you plan to sell?"
+          hint="Singles, sealed, graded, plush, price range — whatever you'll bring to the table."
+          error={errors.sellsDescription}
+        >
           <textarea
             className={a.input}
-            rows={3}
-            value={additional}
-            onChange={(e) => setAdditional(e.target.value)}
-            placeholder="Special setup needs, questions, your favorite card…"
+            rows={4}
+            value={sellsDescription}
+            onChange={(e) => setSellsDescription(e.target.value)}
+            placeholder="Mostly modern singles and a $1 bulk bin, some sealed ETBs…"
+            maxLength={1000}
           />
         </Field>
         <label className={v.checkCard}>
