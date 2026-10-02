@@ -86,6 +86,31 @@ describe('ApiStack', () => {
     });
   });
 
+  it('exposes the Shopify install routes without auth and scopes the secret permissions', () => {
+    for (const key of ['GET /shopify/install', 'GET /shopify/callback']) {
+      t.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+        RouteKey: key,
+        AuthorizationType: 'NONE',
+      });
+    }
+    t.hasResourceProperties('AWS::Lambda::Function', {
+      Environment: { Variables: Match.objectLike({ SHOPIFY_SECRET_ID: 'fgg/dev/shopify' }) },
+    });
+    t.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: Match.arrayWith([
+              'secretsmanager:GetSecretValue',
+              'secretsmanager:PutSecretValue',
+            ]),
+            Resource: Match.stringLikeRegexp('secret:fgg/dev/shopify-\\*$'),
+          }),
+        ]),
+      }),
+    });
+  });
+
   it('configures the Lambda runtime and environment', () => {
     t.hasResourceProperties('AWS::Lambda::Function', {
       Runtime: 'nodejs22.x',

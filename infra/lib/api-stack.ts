@@ -34,6 +34,7 @@ export class ApiStack extends Stack {
   readonly api: apigw.HttpApi;
   readonly publicFn: NodejsFunction;
   readonly accountFn: NodejsFunction;
+  readonly shopifyFn: NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -111,7 +112,40 @@ export class ApiStack extends Stack {
       this.api.addRoutes({ path: p, methods: authed, integration: accountIntegration, authorizer });
     }
 
+    // Shopify app install: exchanges the OAuth code and stores the Admin API token in the
+    // stage's secret (`fgg/{stage}/shopify`), which staff create with shop/clientId/clientSecret.
+    const shopifySecretName = `fgg/${config.stage}/shopify`;
+    this.shopifyFn = this.lambda('ShopifyFn', 'handlers/shopify.ts', {
+      STAGE: config.stage,
+      WEB_ORIGINS: origins.join(','),
+      SHOPIFY_SECRET_ID: shopifySecretName,
+    });
+    this.shopifyFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'secretsmanager:GetSecretValue',
+          'secretsmanager:PutSecretValue',
+          'secretsmanager:DescribeSecret',
+        ],
+        resources: [
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${shopifySecretName}-*`,
+        ],
+      }),
+    );
+    const shopifyIntegration = new HttpLambdaIntegration('ShopifyIntegration', this.shopifyFn);
+    for (const p of ['/shopify/install', '/shopify/callback']) {
+      this.api.addRoutes({
+        path: p,
+        methods: [apigw.HttpMethod.GET],
+        integration: shopifyIntegration,
+      });
+    }
+
     new CfnOutput(this, 'ApiUrl', { value: this.api.apiEndpoint });
+    new CfnOutput(this, 'ShopifyInstallUrl', { value: `${this.api.apiEndpoint}/shopify/install` });
+    new CfnOutput(this, 'ShopifyCallbackUrl', {
+      value: `${this.api.apiEndpoint}/shopify/callback`,
+    });
   }
 
   private lambda(id: string, entry: string, environment: Record<string, string>): NodejsFunction {

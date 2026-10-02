@@ -23,7 +23,8 @@
     "ulid": "^3.0.2",
     "zod": "^4.6.5",
     "@aws-sdk/client-cognito-identity-provider": "^3.1145.0",
-    "@fgg/game": "workspace:*"
+    "@fgg/game": "workspace:*",
+    "@aws-sdk/client-secrets-manager": "^3.1145.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.164",
