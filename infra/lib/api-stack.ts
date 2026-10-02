@@ -11,7 +11,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import type { Construct } from 'constructs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { StageConfig } from './stage.js';
+import { allowedOrigins, type StageConfig } from './stage.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(here, '../..');
@@ -24,6 +24,8 @@ export interface ApiStackProps extends StackProps {
   mediaBaseUrl: string;
   userPool: cognito.IUserPool;
   userPoolClient: cognito.IUserPoolClient;
+  /** The web distribution URL; allowed as a CORS origin and used for Shopify return links. */
+  webUrl: string;
 }
 
 /**
@@ -42,9 +44,10 @@ export class ApiStack extends Stack {
     super(scope, id, props);
     const { config, table, userPool, userPoolClient } = props;
 
-    const origins = config.isProd
-      ? config.webOrigins
-      : [...new Set([...config.webOrigins, 'http://localhost:3000'])];
+    const origins = allowedOrigins(config, props.webUrl);
+    // Where Shopify sends vendors after checkout. Prod uses the real hostname; dev has only
+    // the distribution.
+    const webUrl = config.isProd ? (config.webOrigins[0] ?? props.webUrl) : props.webUrl;
 
     this.api = new apigw.HttpApi(this, 'HttpApi', {
       apiName: `fgg-${config.stage}`,
@@ -154,7 +157,7 @@ export class ApiStack extends Stack {
       STAGE: config.stage,
       WEB_ORIGINS: origins.join(','),
       SHOPIFY_SECRET_ID: shopifySecretName,
-      WEB_URL: config.webOrigins[0] ?? '',
+      WEB_URL: webUrl,
     });
     table.grantReadWriteData(this.vendorFn);
     this.vendorFn.addToRolePolicy(secretRead);

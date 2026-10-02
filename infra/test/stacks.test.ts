@@ -13,11 +13,26 @@ function authStack(stage: 'dev' | 'prod', context: Record<string, unknown> = {})
   const app = new App({ context });
   const holder = new Stack(app, `Holder-${stage}`, { env });
   const table = dynamodb.TableV2.fromTableName(holder, 'Table', `fgg-${stage}`);
-  return new AuthStack(app, `Auth-${stage}`, { env, config: stageConfig(stage), table });
+  return new AuthStack(app, `Auth-${stage}`, {
+    env,
+    config: stageConfig(stage),
+    table,
+    webUrl: 'https://d123.cloudfront.net',
+  });
 }
 
 describe('AuthStack', () => {
   const t = Template.fromStack(authStack('dev'));
+
+  it('allows the web distribution and localhost as OAuth redirects', () => {
+    t.hasResourceProperties('AWS::Cognito::UserPoolClient', {
+      CallbackURLs: Match.arrayWith([
+        'http://localhost:3000/auth/callback/',
+        'https://d123.cloudfront.net/auth/callback/',
+      ]),
+      LogoutURLs: Match.arrayWith(['https://d123.cloudfront.net/']),
+    });
+  });
 
   it('creates one group per role', () => {
     t.resourceCountIs('AWS::Cognito::UserPoolGroup', ROLE_GROUPS.length);

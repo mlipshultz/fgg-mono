@@ -24,9 +24,15 @@ new GithubOidcStack(app, 'Fgg-GithubOidc', {
 });
 
 const data = new DataStack(app, `Fgg-${config.stage}-Data`, { env, config });
-const auth = new AuthStack(app, `Fgg-${config.stage}-Auth`, { env, config, table: data.table });
 const media = new MediaStack(app, `Fgg-${config.stage}-Media`, { env, config });
+// Web before Auth/Api: both allow-list the distribution's hostname.
 const web = new WebStack(app, `Fgg-${config.stage}-Web`, { env, config });
+const auth = new AuthStack(app, `Fgg-${config.stage}-Auth`, {
+  env,
+  config,
+  table: data.table,
+  webUrl: web.url,
+});
 const api = new ApiStack(app, `Fgg-${config.stage}-Api`, {
   env,
   config,
@@ -34,6 +40,7 @@ const api = new ApiStack(app, `Fgg-${config.stage}-Api`, {
   mediaBaseUrl: media.baseUrl,
   userPool: auth.userPool,
   userPoolClient: auth.userPoolClient,
+  webUrl: web.url,
 });
 
 for (const stack of [auth, data, media, web, api]) Tags.of(stack).add('Stage', config.stage);

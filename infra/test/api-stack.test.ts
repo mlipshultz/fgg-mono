@@ -26,6 +26,7 @@ describe('ApiStack', () => {
       mediaBaseUrl: 'https://media.test',
       userPool,
       userPoolClient,
+      webUrl: 'https://d123.cloudfront.net',
     }),
   );
 
@@ -33,7 +34,7 @@ describe('ApiStack', () => {
     t.hasResourceProperties('AWS::ApiGatewayV2::Api', {
       ProtocolType: 'HTTP',
       CorsConfiguration: Match.objectLike({
-        AllowOrigins: Match.arrayWith(['http://localhost:3000']),
+        AllowOrigins: Match.arrayWith(['http://localhost:3000', 'https://d123.cloudfront.net']),
       }),
     });
   });
@@ -126,7 +127,7 @@ describe('ApiStack', () => {
       Environment: {
         Variables: Match.objectLike({
           SHOPIFY_SECRET_ID: 'fgg/dev/shopify',
-          WEB_URL: 'http://localhost:3000',
+          WEB_URL: 'https://d123.cloudfront.net',
         }),
       },
     });
