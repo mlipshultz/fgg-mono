@@ -24,6 +24,7 @@ export async function approve(
     email: application.email,
     phone: application.phone,
     sells: application.sells,
+    sellsDescription: application.sellsDescription,
     socials: application.socials,
     pokeBucksPartner: application.pokeBucksInterest,
     status: 'active',

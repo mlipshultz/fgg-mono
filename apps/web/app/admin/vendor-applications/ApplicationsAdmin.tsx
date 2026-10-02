@@ -138,7 +138,6 @@ export function ApplicationsAdmin() {
                       .filter(Boolean)
                       .join(' · ') || 'No socials'}
                   </span>
-                  {app.additionalInfo && <span className={styles.sub}>“{app.additionalInfo}”</span>}
                 </td>
                 <td>
                   <span className={styles.name}>{app.contactName}</span>
@@ -153,12 +152,11 @@ export function ApplicationsAdmin() {
                       </span>
                     ))}
                   </div>
+                  {app.sellsDescription && (
+                    <span className={styles.sub}>{app.sellsDescription}</span>
+                  )}
                 </td>
                 <td>
-                  <span className={styles.sub}>
-                    {app.previousFggEvents} previous{' '}
-                    {app.previousFggEvents === 1 ? 'show' : 'shows'}
-                  </span>
                   <span className={styles.sub}>
                     PokéBucks: {app.pokeBucksInterest ? 'yes' : 'no'}
                   </span>

@@ -38,10 +38,14 @@ describe('schemas', () => {
       email: 'sam@example.com',
       phone: '4105551234',
       sells: ['pokemon_cards'],
+      sellsDescription: 'Singles and a bulk bin',
       codeOfConductAccepted: true,
       sealedPolicyAccepted: true,
     };
     expect(VendorApplicationInput.safeParse(base).success).toBe(true);
+    expect(VendorApplicationInput.safeParse({ ...base, sellsDescription: ' ' }).success).toBe(
+      false,
+    );
     expect(VendorApplicationInput.safeParse({ ...base, sealedPolicyAccepted: false }).success).toBe(
       false,
     );

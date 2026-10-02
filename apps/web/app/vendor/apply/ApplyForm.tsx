@@ -44,9 +44,8 @@ export function ApplyForm() {
   const [instagram, setInstagram] = useState('');
   const [tiktok, setTiktok] = useState('');
   const [website, setWebsite] = useState('');
-  const [previous, setPrevious] = useState('0');
+  const [sellsDescription, setSellsDescription] = useState('');
   const [pokeBucks, setPokeBucks] = useState<boolean | null>(null);
-  const [additional, setAdditional] = useState('');
   const [conduct, setConduct] = useState(false);
   const [sealed, setSealed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -93,6 +92,7 @@ export function ApplyForm() {
       errs.email = "Hmm, that email doesn't look right";
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'Add a phone number we can reach you at.';
     if (sells.length === 0) errs.sells = 'Pick at least one.';
+    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell us what you plan to bring.';
     if (pokeBucks === null) errs.pokeBucks = 'Let us know either way.';
     if (!conduct) errs.conduct = 'Please agree to the code of conduct.';
     if (!sealed) errs.sealed = 'Please agree to the sealed product policy.';
@@ -113,12 +113,11 @@ export function ApplyForm() {
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
       sells,
+      sellsDescription: sellsDescription.trim().slice(0, 1000),
       socials,
-      previousFggEvents: Math.max(0, Math.min(100, Number(previous) || 0)),
       pokeBucksInterest: pokeBucks === true,
       codeOfConductAccepted: true,
       sealedPolicyAccepted: true,
-      ...(additional.trim() ? { additionalInfo: additional.trim().slice(0, 2000) } : {}),
       attribution,
     };
     try {
@@ -220,27 +219,15 @@ export function ApplyForm() {
             />
           </Field>
         </div>
-        <div className={a.two}>
-          <Field label="Website" hint="Optional">
-            <input
-              className={a.input}
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="yourshop.com"
-              inputMode="url"
-            />
-          </Field>
-          <Field label="Previous FGG events as a vendor">
-            <input
-              className={a.input}
-              type="number"
-              min={0}
-              max={100}
-              value={previous}
-              onChange={(e) => setPrevious(e.target.value)}
-            />
-          </Field>
-        </div>
+        <Field label="Website" hint="Optional">
+          <input
+            className={a.input}
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            placeholder="yourshop.com"
+            inputMode="url"
+          />
+        </Field>
         <Field
           label="Want 50% off your table with PokéBucks?"
           error={errors.pokeBucks}
@@ -265,13 +252,18 @@ export function ApplyForm() {
             </button>
           </div>
         </Field>
-        <Field label="Anything else?" hint="Optional">
+        <Field
+          label="What do you plan to sell?"
+          hint="Singles, sealed, graded, plush, price range — whatever you'll bring to the table."
+          error={errors.sellsDescription}
+        >
           <textarea
             className={a.input}
-            rows={3}
-            value={additional}
-            onChange={(e) => setAdditional(e.target.value)}
-            placeholder="Special setup needs, questions, your favorite card…"
+            rows={4}
+            value={sellsDescription}
+            onChange={(e) => setSellsDescription(e.target.value)}
+            placeholder="Mostly modern singles and a $1 bulk bin, some sealed ETBs…"
+            maxLength={1000}
           />
         </Field>
         <label className={v.checkCard}>

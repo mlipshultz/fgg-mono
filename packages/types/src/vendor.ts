@@ -51,18 +51,20 @@ export const VendorApplicationInput = z.object({
   email: Email,
   phone: z.string().min(7).max(30),
   sells: z.array(SellsCategory).min(1),
+  /** Free text: what they plan to bring to the table. Staff read this before the call. */
+  sellsDescription: z.string().trim().min(1).max(1000),
   socials: SocialHandles.default({}),
-  previousFggEvents: z.number().int().min(0).max(100).default(0),
   pokeBucksInterest: z.boolean().default(false),
   codeOfConductAccepted: z.literal(true),
   sealedPolicyAccepted: z.literal(true),
-  additionalInfo: z.string().max(2000).optional(),
   attribution: Attribution.default({}),
 });
 export type VendorApplicationInput = z.infer<typeof VendorApplicationInput>;
 
 export const VendorApplication = VendorApplicationInput.extend({
   id: Ulid,
+  /** Older rows (and imported legacy vendors) have no description. */
+  sellsDescription: z.string().max(1000).default(''),
   userId: CognitoSub,
   status: VendorApplicationStatus,
   /** Evidence captured regardless of approval mode, so the mode can be switched later. */
@@ -89,6 +91,7 @@ export const Vendor = z.object({
   email: Email,
   phone: z.string().min(7).max(30),
   sells: z.array(SellsCategory),
+  sellsDescription: z.string().max(1000).default(''),
   socials: SocialHandles,
   pokeBucksPartner: z.boolean(),
   status: VendorStatus,
