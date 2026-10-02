@@ -318,6 +318,10 @@ Verified on dev: application → approve → quote → hold → vendor info → 
 order whose invoice renders in Shopify checkout with our attributes; the test payment itself was
 left to Matt (auto mode blocks transactions), after which the paid webhook path is confirmed.
 Ops: `infra/scripts/dev-token.sh` mints an ID token via the IAM-gated admin auth flow.
+2026-10-02: vendor profile (`GET/PATCH /vendor/profile`, logo via presigned S3 PUT to
+`vendors/{id}/`, resized in the browser) prefills the booking info step; "what you sell" is free
+text everywhere (application, profile, per-order); `GET /public/events/{id}/vendors` powers the
+public `/events/{slug}/` "who's vending" page, fetched at runtime so it needs no rebuild.
 Not built: SES emails, PokéBucks toggle endpoint, QR on the vendor pass (Phase 5), tests in web.
 
 - Vendor application form, Calendly pending screen, review queue in admin, approval that creates

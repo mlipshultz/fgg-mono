@@ -495,7 +495,7 @@ router
         contactName: vendor.contactName,
         phone: vendor.phone,
         email: vendor.email,
-        sells: vendor.sells,
+        ...(vendor.sellsDescription ? { sellsDescription: vendor.sellsDescription } : {}),
         codeOfConductAccepted: true,
       },
       createdAt: now,

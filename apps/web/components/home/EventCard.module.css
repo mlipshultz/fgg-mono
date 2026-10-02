@@ -144,6 +144,17 @@
   font-size: 14px;
   line-height: 1.5;
 }
+.whoLink {
+  align-self: flex-start;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+  color: var(--color-pink-text);
+  text-decoration: none;
+}
+.whoLink:hover {
+  text-decoration: underline;
+}
 .foot {
   display: flex;
   flex-wrap: wrap;

@@ -1,6 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { HoldResponse, CheckoutResponse, VendorDashboard, VendorOrder } from '@fgg/types';
+import {
+  EventVendorList,
+  HoldResponse,
+  CheckoutResponse,
+  LogoUploadResponse,
+  VendorDashboard,
+  VendorOrder,
+  VendorProfile,
+} from '@fgg/types';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { FakeDdb } from './fake-ddb.js';
 import { EVENT_ID, event, floorPlan, parse, req as baseReq, venue } from './fixtures.js';
@@ -16,6 +24,8 @@ const { clearVenueCache } = await import('../src/lib/events.js');
 const { FakeShopifyClient, setShopifyClient } = await import('../src/lib/shopify.js');
 const { handler } = await import('../src/handlers/vendor.js');
 const { handler: webhookHandler } = await import('../src/handlers/webhooks.js');
+const { handler: publicHandler } = await import('../src/handlers/public.js');
+const { setPresigner } = await import('../src/lib/media.js');
 const { _resetShopifyConfigCache } = await import('../src/lib/shopify-secret.js');
 const { mockClient } = await import('aws-sdk-client-mock');
 const { GetSecretValueCommand, SecretsManagerClient } =
@@ -61,7 +71,7 @@ const vendorInfo = {
   contactName: 'Maya Johnson',
   phone: '4105550100',
   email: 'maya@cardcorner.com',
-  sells: ['singles', 'sealed'],
+  sellsDescription: 'Singles and sealed',
   codeOfConductAccepted: true,
 };
 
@@ -136,6 +146,9 @@ describe('vendor booking flow', () => {
     const hr = HoldResponse.parse(held.body);
     expect(hr.quote.rowLabel).toBe('Row B · Main Hall');
     expect(hr.hold.dates).toHaveLength(2);
+    // Nothing saved yet, so the info step is seeded from the vendor profile.
+    expect(hr.vendorInfo).toBeUndefined();
+    expect(hr.prefill).toMatchObject({ tableName: "Maya's Card Corner", phone: '4105550100' });
 
     const noInfo = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
     expect(noInfo.status).toBe(400);
@@ -145,6 +158,7 @@ describe('vendor booking flow', () => {
     );
     expect(patched.status).toBe(200);
     expect(HoldResponse.parse(patched.body).vendorInfo?.tableName).toBe("Maya's Card Corner");
+    expect(HoldResponse.parse(patched.body).prefill).toBeUndefined();
 
     const checkout = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
     expect(checkout.status).toBe(201);
@@ -206,6 +220,27 @@ describe('vendor booking flow', () => {
     );
     expect(cancel.status).toBe(200);
     expect(cancel.body.cancelRequestedAt).toBeDefined();
+
+    // The paid table shows up on the public "who's vending" list, without contact details.
+    const who = parse(await publicHandler(baseReq('GET', `/public/events/${EVENT_ID}/vendors`)));
+    expect(who.status).toBe(200);
+    const list = EventVendorList.parse(who.body);
+    expect(list.vendors).toEqual([
+      expect.objectContaining({
+        vendorId: VENDOR,
+        name: "Maya's Card Corner",
+        sellsDescription: 'Singles and sealed',
+        tableId: 'B2',
+        dates: ['2026-10-24', '2026-10-25'],
+      }),
+    ]);
+    expect(JSON.stringify(who.body)).not.toContain('4105550100');
+  });
+
+  it('shows an empty vendor list before anyone has paid', async () => {
+    const who = parse(await publicHandler(baseReq('GET', `/public/events/${EVENT_ID}/vendors`)));
+    expect(who.status).toBe(200);
+    expect(EventVendorList.parse(who.body).vendors).toEqual([]);
   });
 
   it('rejects anyone without a vendor and expired holds', async () => {
@@ -238,6 +273,78 @@ describe('vendor booking flow', () => {
     db.put({ ...it, expiresAt: new Date(Date.now() - 1000).toISOString() });
     const res = parse(await handler(authed('GET', `/vendor/holds/${id}`)));
     expect(res.status).toBe(410);
+  });
+});
+
+describe('vendor profile', () => {
+  it('reads and updates the profile, keeping the vendor list index in step', async () => {
+    const got = parse(await handler(authed('GET', '/vendor/profile')));
+    expect(got.status).toBe(200);
+    expect(VendorProfile.parse(got.body).logoUrl).toBeUndefined();
+
+    const patched = parse(
+      await handler(
+        authed('PATCH', '/vendor/profile', {
+          businessName: 'Maya & Co',
+          email: 'Maya@CardCorner.com',
+          sellsDescription: 'Vintage singles and slabs',
+          socials: { instagram: 'mayaco' },
+        }),
+      ),
+    );
+    expect(patched.status).toBe(200);
+    const p = VendorProfile.parse(patched.body);
+    expect(p.businessName).toBe('Maya & Co');
+    expect(p.email).toBe('maya@cardcorner.com');
+    expect(p.sellsDescription).toBe('Vintage singles and slabs');
+    expect(p.socials.instagram).toBe('mayaco');
+    const k = keys.vendor(VENDOR);
+    expect(db.get(k.PK, k.SK)?.GSI1SK).toBe('maya & co');
+
+    // The next hold is seeded from the updated profile.
+    const held = parse(
+      await handler(
+        authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
+          tableId: 'B3',
+          dates: ['2026-10-24'],
+          rate: 'standard',
+        }),
+      ),
+    );
+    expect(HoldResponse.parse(held.body).prefill).toMatchObject({
+      tableName: 'Maya & Co',
+      sellsDescription: 'Vintage singles and slabs',
+    });
+  });
+
+  it('presigns a logo upload under the vendor prefix and rejects foreign keys', async () => {
+    setPresigner(
+      async (key, type) => `https://bucket.test/${key}?type=${encodeURIComponent(type)}`,
+    );
+    try {
+      const up = parse(
+        await handler(authed('POST', '/vendor/profile/logo-upload', { contentType: 'image/png' })),
+      );
+      expect(up.status).toBe(201);
+      const u = LogoUploadResponse.parse(up.body);
+      expect(u.key).toMatch(new RegExp(`^vendors/${VENDOR}/logo-[0-9a-z]{26}\\.png$`));
+      expect(u.uploadUrl).toContain(u.key);
+      expect(u.logoUrl).toBe(`https://media.test/vendors/${VENDOR}/${u.key.split('/').pop()}`);
+
+      const saved = parse(await handler(authed('PATCH', '/vendor/profile', { logoKey: u.key })));
+      expect(VendorProfile.parse(saved.body).logoUrl).toBe(u.logoUrl);
+
+      const foreign = parse(
+        await handler(authed('PATCH', '/vendor/profile', { logoKey: 'vendors/other/logo.png' })),
+      );
+      expect(foreign.status).toBe(400);
+      const badType = parse(
+        await handler(authed('POST', '/vendor/profile/logo-upload', { contentType: 'image/gif' })),
+      );
+      expect(badType.status).toBe(400);
+    } finally {
+      setPresigner(undefined);
+    }
   });
 });
 

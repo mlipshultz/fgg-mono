@@ -611,7 +611,7 @@ export async function getVendorForUser(sub: string): Promise<Vendor | undefined>
 
 export async function updateVendor(
   id: string,
-  patch: Partial<Pick<Vendor, 'pokeBucksPartner' | 'status' | 'shopifyCustomerId'>>,
+  patch: Partial<Omit<Vendor, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
   const sets: string[] = ['#u = :u'];
   const names: Record<string, string> = { '#u': 'updatedAt' };
@@ -621,6 +621,15 @@ export async function updateVendor(
     sets.push(`#${k} = :${k}`);
     names[`#${k}`] = k;
     values[`:${k}`] = v;
+  }
+  // Keep the vendor list index (GSI1 VENDORS#status / name) in step with the record.
+  if (patch.status) {
+    sets.push('GSI1PK = :gsi1pk');
+    values[':gsi1pk'] = `VENDORS#${patch.status}`;
+  }
+  if (patch.businessName) {
+    sets.push('GSI1SK = :gsi1sk');
+    values[':gsi1sk'] = patch.businessName.toLowerCase();
   }
   await ddb.send(
     new UpdateCommand({

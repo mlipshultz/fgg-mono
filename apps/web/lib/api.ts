@@ -9,9 +9,12 @@ import {
   Dashboard,
   EventAvailability,
   EventFloorPlan,
+  EventVendorList,
   GalleryPage,
   HoldResponse,
   HomeContent,
+  type LogoContentType,
+  LogoUploadResponse,
   Me,
   Quote,
   type QuoteInput,
@@ -28,6 +31,8 @@ import {
   type VendorInfo,
   VendorOrder,
   VendorOrderList,
+  VendorProfile,
+  type VendorProfileInput,
   VendorStanding,
   type WaitlistInput,
 } from '@fgg/types';
@@ -37,12 +42,14 @@ import { adminUsersFixture, dashboardFixture } from './fixtures/dashboard';
 import {
   adminOrdersFixture,
   applicationsFixture,
+  eventVendorsFixture,
   floorPlanResponseFixture,
   holdFixture,
   paidOrderFixture,
   quoteFixture,
   standingFixture,
   vendorDashboardFixture,
+  vendorProfileFixture,
 } from './fixtures/booking';
 import { getIdToken } from './auth';
 
@@ -360,6 +367,65 @@ export async function requestCancel(
 export async function getVendorDashboard(): Promise<VendorDashboard> {
   if (!hasApi) return fake(localize(vendorDashboardFixture));
   return VendorDashboard.parse(await authedRequest<unknown>('/vendor/dashboard'));
+}
+
+/** Public: who has a paid table at an event. Fetched at runtime so it stays fresh. */
+export async function getEventVendors(idOrSlug: string): Promise<EventVendorList> {
+  if (!hasApi) return fake(localize(eventVendorsFixture));
+  return EventVendorList.parse(
+    await request<unknown>(`/public/events/${encodeURIComponent(idOrSlug)}/vendors`),
+  );
+}
+
+// Vendor profile (business details + brand logo).
+
+let fixtureProfile: VendorProfile = vendorProfileFixture;
+let fixtureLogoUrl: string | undefined;
+
+export async function getVendorProfile(): Promise<VendorProfile> {
+  if (!hasApi) return fake(localize(fixtureProfile));
+  return VendorProfile.parse(await authedRequest<unknown>('/vendor/profile'));
+}
+
+export async function updateVendorProfile(input: VendorProfileInput): Promise<VendorProfile> {
+  if (!hasApi) {
+    fixtureProfile = {
+      ...fixtureProfile,
+      ...input,
+      ...(input.logoKey && fixtureLogoUrl ? { logoUrl: fixtureLogoUrl } : {}),
+    };
+    return fake(localize(fixtureProfile));
+  }
+  return VendorProfile.parse(
+    await authedRequest<unknown>('/vendor/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Presign, PUT the file straight to S3, and hand back the key to save on the profile. */
+export async function uploadVendorLogo(
+  blob: Blob,
+  contentType: LogoContentType,
+): Promise<{ key: string; logoUrl: string }> {
+  if (!hasApi) {
+    fixtureLogoUrl = URL.createObjectURL(blob);
+    return fake({ key: 'vendors/fixture/logo-new.webp', logoUrl: fixtureLogoUrl });
+  }
+  const up = LogoUploadResponse.parse(
+    await authedRequest<unknown>('/vendor/profile/logo-upload', {
+      method: 'POST',
+      body: JSON.stringify({ contentType }),
+    }),
+  );
+  const res = await fetch(up.uploadUrl, {
+    method: 'PUT',
+    body: blob,
+    headers: { 'content-type': contentType },
+  });
+  if (!res.ok) throw new ApiError(`Upload failed (${res.status})`, res.status);
+  return { key: up.key, logoUrl: up.logoUrl };
 }
 
 /** Fetch an authenticated file and hand it to the browser as a download. */

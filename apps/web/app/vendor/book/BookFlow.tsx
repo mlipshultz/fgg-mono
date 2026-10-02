@@ -19,7 +19,6 @@ import {
 } from '@/lib/api';
 import {
   RATE_LABEL,
-  TABLE_SELLS,
   countdown,
   dayLabel,
   daysLabel,
@@ -308,6 +307,7 @@ export function BookFlow() {
         <div className={styles.body} style={{ gridTemplateColumns: '1fr' }}>
           <VendorInfoForm
             initial={hold.vendorInfo}
+            prefill={hold.prefill}
             user={user}
             busy={busy}
             error={error}
@@ -622,6 +622,7 @@ export function BookFlow() {
 
 function VendorInfoForm({
   initial,
+  prefill,
   user,
   busy,
   error,
@@ -630,6 +631,8 @@ function VendorInfoForm({
   onSubmit,
 }: {
   initial: VendorInfo | undefined;
+  /** From the vendor profile when nothing has been saved on this hold yet. */
+  prefill: HoldResponse['prefill'];
   user: { name: string; email: string } | null;
   busy: boolean;
   error: string | null;
@@ -637,11 +640,12 @@ function VendorInfoForm({
   onBack: () => void;
   onSubmit: (info: VendorInfo) => void;
 }) {
-  const [tableName, setTableName] = useState(initial?.tableName ?? '');
-  const [contactName, setContactName] = useState(initial?.contactName ?? user?.name ?? '');
-  const [phone, setPhone] = useState(initial?.phone ?? '');
-  const [email, setEmail] = useState(initial?.email ?? user?.email ?? '');
-  const [sells, setSells] = useState<string[]>(initial?.sells ?? []);
+  const seed = initial ?? prefill;
+  const [tableName, setTableName] = useState(seed?.tableName ?? '');
+  const [contactName, setContactName] = useState(seed?.contactName ?? user?.name ?? '');
+  const [phone, setPhone] = useState(seed?.phone ?? '');
+  const [email, setEmail] = useState(seed?.email ?? user?.email ?? '');
+  const [sellsDescription, setSellsDescription] = useState(seed?.sellsDescription ?? '');
   const [agree, setAgree] = useState(!!initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -653,7 +657,7 @@ function VendorInfoForm({
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'Add a phone number for show day.';
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()))
       errs.email = "Hmm, that email doesn't look right";
-    if (sells.length === 0) errs.sells = 'Pick at least one.';
+    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell shoppers what you’re bringing.';
     if (!agree) errs.agree = 'Please agree to the code of conduct.';
     setErrors(errs);
     if (Object.keys(errs).length) return;
@@ -662,7 +666,7 @@ function VendorInfoForm({
       contactName: contactName.trim(),
       phone: phone.trim(),
       email: email.trim().toLowerCase(),
-      sells,
+      sellsDescription: sellsDescription.trim().slice(0, 1000),
       codeOfConductAccepted: true,
     });
   };
@@ -709,22 +713,19 @@ function VendorInfoForm({
             autoComplete="email"
           />
         </Field>
-        <Field label="What do you sell?" error={errors.sells}>
-          <div className={v.chips} role="group" aria-label="What do you sell">
-            {TABLE_SELLS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={v.chip}
-                aria-pressed={sells.includes(s)}
-                onClick={() =>
-                  setSells((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))
-                }
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+        <Field
+          label="What are you bringing?"
+          hint="Shown on the event's vendor list. Prefilled from your profile; tweak it per show."
+          error={errors.sellsDescription}
+        >
+          <textarea
+            className={`${a.input} ${errors.sellsDescription ? a.invalid : ''}`}
+            rows={3}
+            value={sellsDescription}
+            onChange={(e) => setSellsDescription(e.target.value)}
+            placeholder="Mostly modern singles and a $1 bulk bin, some sealed ETBs…"
+            maxLength={1000}
+          />
         </Field>
         <label className={v.checkCard}>
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />

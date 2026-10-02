@@ -8,6 +8,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import type * as s3 from 'aws-cdk-lib/aws-s3';
 import type { Construct } from 'constructs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,8 @@ export interface ApiStackProps extends StackProps {
   table: dynamodb.ITableV2;
   /** e.g. https://d123.cloudfront.net (the media distribution). */
   mediaBaseUrl: string;
+  /** The media bucket, for presigned uploads (vendor logos under `vendors/`). */
+  mediaBucket: s3.IBucket;
   userPool: cognito.IUserPool;
   userPoolClient: cognito.IUserPoolClient;
   /** The web distribution URL; allowed as a CORS origin and used for Shopify return links. */
@@ -158,9 +161,12 @@ export class ApiStack extends Stack {
       WEB_ORIGINS: origins.join(','),
       SHOPIFY_SECRET_ID: shopifySecretName,
       WEB_URL: webUrl,
+      MEDIA_BUCKET: props.mediaBucket.bucketName,
     });
     table.grantReadWriteData(this.vendorFn);
     this.vendorFn.addToRolePolicy(secretRead);
+    // Presigned PUTs are signed with this role, so it needs the write it is delegating.
+    props.mediaBucket.grantPut(this.vendorFn, 'vendors/*');
     this.api.addRoutes({
       path: '/vendor/{proxy+}',
       methods: authed,
@@ -217,8 +223,15 @@ export class ApiStack extends Stack {
         mainFields: ['module', 'main'],
         sourceMap: true,
         minify: false,
-        // AWS SDK v3 ships in the Node 22 runtime; keep it out of the bundle.
-        externalModules: ['@aws-sdk/*'],
+        // The runtime's AWS SDK v3 covers the clients below. S3 + the request presigner are
+        // bundled so their @smithy internals match each other.
+        externalModules: [
+          '@aws-sdk/client-dynamodb',
+          '@aws-sdk/lib-dynamodb',
+          '@aws-sdk/client-sesv2',
+          '@aws-sdk/client-cognito-identity-provider',
+          '@aws-sdk/client-secrets-manager',
+        ],
         banner:
           "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
       },

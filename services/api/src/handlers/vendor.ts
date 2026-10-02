@@ -1,12 +1,15 @@
 import { ulid } from 'ulid';
 import {
   CancelRequestInput,
+  LogoUploadInput,
   QuoteInput,
   UpdateHoldInput,
+  VendorProfileInput,
   type CheckoutResponse,
   type Event,
   type FloorPlan,
   type HoldResponse,
+  type LogoUploadResponse,
   type Order,
   type PriceWindow,
   type Settings,
@@ -15,6 +18,7 @@ import {
   type VendorInfo,
   type VendorOrder,
   type VendorOrderList,
+  type VendorProfile,
   type Venue,
 } from '@fgg/types';
 import { claimsFrom, type Actor } from '../lib/auth.js';
@@ -36,15 +40,18 @@ import {
   getFloorPlan,
   getOrder,
   getSettings,
+  getVendor,
   getVendorForUser,
   listOrdersForOwner,
   listPriceWindows,
   listPublishedEvents,
+  updateVendor,
   type HoldItem,
 } from '../lib/db.js';
 import { receiptPdf, vendorPassIcs } from '../lib/documents.js';
 import { todayIso, toPublicEvents, venueFor } from '../lib/events.js';
 import { HttpError, Router, json, parseBody, type Req, type Res } from '../lib/http.js';
+import { mediaUrl, presignUpload } from '../lib/media.js';
 import { require as requireCan } from '../lib/permissions.js';
 import { nearbyText, resolveQuote } from '../lib/pricing.js';
 import { shopify } from '../lib/shopify.js';
@@ -87,7 +94,22 @@ async function eventCtx(idOrSlug: string, requireOpen = true): Promise<Ctx> {
   return { event: ev, venue, floorPlan, priceWindows, settings };
 }
 
-async function holdResponse(items: HoldItem[], ctx: Ctx): Promise<HoldResponse> {
+function profileView(v: Vendor): VendorProfile {
+  return { ...v, ...(v.logoKey ? { logoUrl: mediaUrl(v.logoKey) } : {}) };
+}
+
+/** Seed for the booking info step, from the vendor profile. */
+function prefillFrom(v: Vendor): NonNullable<HoldResponse['prefill']> {
+  return {
+    tableName: v.businessName,
+    contactName: v.contactName,
+    phone: v.phone,
+    email: v.email,
+    ...(v.sellsDescription ? { sellsDescription: v.sellsDescription } : {}),
+  };
+}
+
+async function holdResponse(items: HoldItem[], ctx: Ctx, vendor: Vendor): Promise<HoldResponse> {
   const table = ctx.floorPlan.tables.find((t) => t.id === items[0]!.tableId);
   const rowLabel = table ? `Row ${table.row} · Main Hall` : items[0]!.tableId;
   const nearby = table ? nearbyText(table, ctx.floorPlan) : '';
@@ -97,9 +119,15 @@ async function holdResponse(items: HoldItem[], ctx: Ctx): Promise<HoldResponse> 
     hold: toTableHold(items),
     quote: quoteFromHold(items, rowLabel, nearby),
     event: event!,
-    ...(vi ? { vendorInfo: vi } : {}),
+    ...(vi ? { vendorInfo: vi } : { prefill: prefillFrom(vendor) }),
   };
 }
+
+const LOGO_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
 
 function parseQuoteQuery(q: Record<string, string | undefined>) {
   return QuoteInput.parse({
@@ -125,6 +153,39 @@ async function vendorOrderView(order: Order): Promise<VendorOrder> {
 }
 
 const router = new Router()
+  // Profile: what the vendor's members can edit about the business, plus the brand logo.
+  .add('GET', '/vendor/profile', async (req) => {
+    const vendor = await vendorFor(claimsFrom(req));
+    return json(req, profileView(vendor), 200, { 'cache-control': 'no-store' });
+  })
+  .add('PATCH', '/vendor/profile', async (req) => {
+    const vendor = await vendorFor(claimsFrom(req));
+    const input = parseBody(req, VendorProfileInput);
+    if (input.logoKey !== undefined && !input.logoKey.startsWith(`vendors/${vendor.id}/`)) {
+      throw new HttpError(400, 'bad_logo_key', 'Logo key does not belong to this vendor');
+    }
+    const patch = Object.fromEntries(
+      Object.entries(input)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, k === 'email' && typeof v === 'string' ? v.toLowerCase() : v]),
+    ) as Parameters<typeof updateVendor>[1];
+    await updateVendor(vendor.id, patch);
+    const updated = await getVendor(vendor.id);
+    return json(req, profileView(updated ?? { ...vendor, ...patch }), 200, {
+      'cache-control': 'no-store',
+    });
+  })
+  .add('POST', '/vendor/profile/logo-upload', async (req) => {
+    const vendor = await vendorFor(claimsFrom(req));
+    const input = parseBody(req, LogoUploadInput);
+    const key = `vendors/${vendor.id}/logo-${ulid().toLowerCase()}.${LOGO_EXT[input.contentType]}`;
+    const body: LogoUploadResponse = {
+      uploadUrl: await presignUpload(key, input.contentType),
+      key,
+      logoUrl: mediaUrl(key),
+    };
+    return json(req, body, 201, { 'cache-control': 'no-store' });
+  })
   .add('GET', '/vendor/events/{id}/quote', async (req, { id }) => {
     const actor = claimsFrom(req);
     await vendorFor(actor);
@@ -146,14 +207,14 @@ const router = new Router()
       quote,
       holdMinutes: ctx.settings.holdMinutes,
     });
-    return json(req, await holdResponse(items, ctx), 201, { 'cache-control': 'no-store' });
+    return json(req, await holdResponse(items, ctx, vendor), 201, { 'cache-control': 'no-store' });
   })
   .add('GET', '/vendor/holds/{id}', async (req, { id }) => {
     const actor = claimsFrom(req);
     const vendor = await vendorFor(actor);
     const items = await loadHold(vendor.id, id!);
     const ctx = await eventCtx(items[0]!.eventId, false);
-    return json(req, await holdResponse(items, ctx), 200, { 'cache-control': 'no-store' });
+    return json(req, await holdResponse(items, ctx, vendor), 200, { 'cache-control': 'no-store' });
   })
   .add('PATCH', '/vendor/holds/{id}', async (req, { id }) => {
     const actor = claimsFrom(req);
@@ -163,7 +224,7 @@ const router = new Router()
       vendorInfo: input.vendorInfo,
     });
     const ctx = await eventCtx(items[0]!.eventId, false);
-    return json(req, await holdResponse(items, ctx), 200, { 'cache-control': 'no-store' });
+    return json(req, await holdResponse(items, ctx, vendor), 200, { 'cache-control': 'no-store' });
   })
   .add('DELETE', '/vendor/holds/{id}', async (req, { id }) => {
     const actor = claimsFrom(req);
@@ -357,7 +418,7 @@ const router = new Router()
           .at(-1)! >= today,
     );
     const body: VendorDashboard = {
-      vendor,
+      vendor: profileView(vendor),
       upcoming,
       history: views,
       paidThisYearCents: views

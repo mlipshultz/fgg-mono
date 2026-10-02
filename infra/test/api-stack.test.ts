@@ -3,6 +3,7 @@ import { App, Stack } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import { ApiStack } from '../lib/api-stack.js';
 import { stageConfig } from '../lib/stage.js';
 
@@ -12,6 +13,7 @@ describe('ApiStack', () => {
   const app = new App();
   const dataStack = new Stack(app, 'Data', { env });
   const table = dynamodb.TableV2.fromTableName(dataStack, 'Table', 'fgg-dev');
+  const mediaBucket = s3.Bucket.fromBucketName(dataStack, 'Media', 'fgg-media-dev-123456789012');
   const userPool = cognito.UserPool.fromUserPoolId(dataStack, 'Pool', 'us-east-1_abc123');
   const userPoolClient = cognito.UserPoolClient.fromUserPoolClientId(
     dataStack,
@@ -24,6 +26,7 @@ describe('ApiStack', () => {
       config: stageConfig('dev'),
       table,
       mediaBaseUrl: 'https://media.test',
+      mediaBucket,
       userPool,
       userPoolClient,
       webUrl: 'https://d123.cloudfront.net',
@@ -128,8 +131,21 @@ describe('ApiStack', () => {
         Variables: Match.objectLike({
           SHOPIFY_SECRET_ID: 'fgg/dev/shopify',
           WEB_URL: 'https://d123.cloudfront.net',
+          MEDIA_BUCKET: 'fgg-media-dev-123456789012',
         }),
       },
+    });
+    t.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: Match.arrayWith(['s3:PutObject']),
+            Resource: {
+              'Fn::Join': ['', Match.arrayWith([':s3:::fgg-media-dev-123456789012/vendors/*'])],
+            },
+          }),
+        ]),
+      }),
     });
   });
 

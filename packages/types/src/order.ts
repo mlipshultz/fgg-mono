@@ -66,10 +66,15 @@ export const VendorInfo = z.object({
   contactName: z.string().min(1).max(120),
   phone: z.string().min(7).max(30),
   email: z.string().email(),
-  sells: z.array(z.string()).min(1),
+  /** What they're bringing; prefilled from the vendor profile. */
+  sellsDescription: z.string().trim().min(1).max(1000),
   codeOfConductAccepted: z.literal(true),
 });
 export type VendorInfo = z.infer<typeof VendorInfo>;
+
+/** Stored orders from before the free-text field have category arrays instead. */
+export const StoredVendorInfo = VendorInfo.partial({ sellsDescription: true });
+export type StoredVendorInfo = z.infer<typeof StoredVendorInfo>;
 
 export const Order = z.object({
   id: Ulid,
@@ -85,7 +90,7 @@ export const Order = z.object({
   feeCents: Cents,
   taxCents: Cents,
   totalCents: Cents,
-  vendorInfo: VendorInfo.optional(),
+  vendorInfo: StoredVendorInfo.optional(),
   holdId: Ulid.optional(),
   shopifyDraftOrderId: z.string().optional(),
   shopifyOrderId: z.string().optional(),

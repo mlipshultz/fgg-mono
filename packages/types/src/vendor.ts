@@ -95,6 +95,8 @@ export const Vendor = z.object({
   sells: z.array(SellsCategory),
   sellsDescription: z.string().max(1000).default(''),
   socials: SocialHandles,
+  /** Brand image in the media bucket under `vendors/{id}/`. Resolved to a URL in API views. */
+  logoKey: z.string().max(200).optional(),
   pokeBucksPartner: z.boolean(),
   status: VendorStatus,
   shopifyCustomerId: z.string().optional(),
@@ -112,3 +114,33 @@ export const VendorMember = z.object({
   addedAt: IsoDateTime,
 });
 export type VendorMember = z.infer<typeof VendorMember>;
+
+/** PATCH /vendor/profile — the parts of a vendor its members can edit. */
+export const VendorProfileInput = z
+  .object({
+    businessName: z.string().trim().min(1).max(120),
+    contactName: z.string().trim().min(1).max(120),
+    email: Email,
+    phone: z.string().trim().min(7).max(30),
+    sellsDescription: z.string().trim().min(1).max(1000),
+    socials: SocialHandles,
+    /** Key returned by POST /vendor/profile/logo-upload once the browser has PUT the file. */
+    logoKey: z.string().max(200),
+  })
+  .partial();
+export type VendorProfileInput = z.infer<typeof VendorProfileInput>;
+
+export const LogoContentType = z.enum(['image/png', 'image/jpeg', 'image/webp']);
+export type LogoContentType = z.infer<typeof LogoContentType>;
+
+/** POST /vendor/profile/logo-upload */
+export const LogoUploadInput = z.object({ contentType: LogoContentType });
+export type LogoUploadInput = z.infer<typeof LogoUploadInput>;
+export const LogoUploadResponse = z.object({
+  /** Presigned S3 PUT; send the file with the same content-type. */
+  uploadUrl: z.string().url(),
+  key: z.string(),
+  /** Where it will be served from once uploaded and saved on the profile. */
+  logoUrl: z.string().url(),
+});
+export type LogoUploadResponse = z.infer<typeof LogoUploadResponse>;
