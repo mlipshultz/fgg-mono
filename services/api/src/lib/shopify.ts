@@ -1,9 +1,14 @@
 import { loadShopifyConfig } from './shopify-secret.js';
 
 /** What the booking flow needs from Shopify (docs/PLAN.md §3.5). GraphQL Admin API underneath. */
-export interface DraftOrderInput {
+export interface DraftOrderLine {
   title: string;
-  totalCents: number;
+  cents: number;
+}
+
+export interface DraftOrderInput {
+  /** One line per table (with its days in the title), plus fee/tax lines when non-zero. */
+  lineItems: DraftOrderLine[];
   email: string;
   /** Stored on the draft and copied to the order as note attributes. */
   attributes: Record<string, string>;
@@ -96,19 +101,17 @@ export class GraphqlShopifyClient implements ShopifyClient {
           ...(input.note ? { note: input.note } : {}),
           customAttributes: attrs,
           taxExempt: true,
-          lineItems: [
-            {
-              title: input.title,
-              originalUnitPrice: (input.totalCents / 100).toFixed(2),
-              quantity: 1,
-              taxable: false,
-              requiresShipping: false,
-              // Underscore-prefixed line properties are hidden from checkout, emails and the
-              // order status page; the order-level customAttributes above carry the real keys
-              // for the webhook (note_attributes).
-              customAttributes: attrs.map((a) => ({ key: `_${a.key}`, value: a.value })),
-            },
-          ],
+          lineItems: input.lineItems.map((li) => ({
+            title: li.title,
+            originalUnitPrice: (li.cents / 100).toFixed(2),
+            quantity: 1,
+            taxable: false,
+            requiresShipping: false,
+            // Underscore-prefixed line properties are hidden from checkout, emails and the
+            // order status page; the order-level customAttributes above carry the real keys
+            // for the webhook (note_attributes).
+            customAttributes: attrs.map((a) => ({ key: `_${a.key}`, value: a.value })),
+          })),
         },
       },
     );

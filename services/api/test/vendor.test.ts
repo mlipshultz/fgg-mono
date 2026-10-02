@@ -163,11 +163,10 @@ describe('vendor booking flow', () => {
     const co = CheckoutResponse.parse(checkout.body);
     expect(co.invoiceUrl).toContain('invoices/1');
     expect(shop.drafts[0]).toMatchObject({
-      totalCents: 20000,
       email: 'maya@cardcorner.com',
       attributes: { orderId: co.orderId, tableId: 'B2' },
+      lineItems: [{ title: 'Halloween Fest · Table B2 · Sat Oct 24 + Sun Oct 25', cents: 20000 }],
     });
-    expect(shop.drafts[0]!.title).toBe('Halloween Fest · Table B2 · Sat Oct 24 + Sun Oct 25');
     // Hold was extended for checkout.
     const holdItem = db.get(`EVENT#${EVENT_ID}`, 'HOLD#2026-10-24#B2')!;
     expect(new Date(holdItem.expiresAt).getTime()).toBeGreaterThan(Date.now() + 20 * 60_000);
@@ -260,9 +259,11 @@ describe('vendor booking flow', () => {
     await handler(authed('PATCH', `/vendor/holds/${hr.hold.id}`, { vendorInfo }));
     const co = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
     expect(co.status).toBe(201);
-    expect(shop.drafts[0]!.title).toBe(
-      'Halloween Fest · 2 tables (B1, B3) · Sat Oct 24 + Sun Oct 25',
-    );
+    // One Shopify line per table, so the checkout shows which days each table covers.
+    expect(shop.drafts[0]!.lineItems).toEqual([
+      { title: 'Halloween Fest · Table B1 · Sat Oct 24 + Sun Oct 25', cents: 40000 },
+      { title: 'Halloween Fest · Table B3 · Sun Oct 25', cents: 20000 },
+    ]);
     expect(shop.drafts[0]!.attributes.tableId).toBe('B1,B3');
     const paid = parse(
       await webhookHandler(

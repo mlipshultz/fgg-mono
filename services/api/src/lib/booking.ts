@@ -312,6 +312,13 @@ export function tablesLabel(order: Order): string {
     .join(', ');
 }
 
+/** "B2 (Sat Oct 24), C4 (Sat Oct 24 + Sun Oct 25)" — days spelled out per table. */
+export function tableDaysLabel(order: Order): string {
+  return tableLines(order)
+    .map((l) => `${l.tableId} (${[...l.dates].sort().map(shortDate).join(' + ')})`)
+    .join(', ');
+}
+
 /** Union of every booked day, sorted. */
 export function orderDates(order: Order): string[] {
   return [...new Set(tableLines(order).flatMap((l) => l.dates))].sort();

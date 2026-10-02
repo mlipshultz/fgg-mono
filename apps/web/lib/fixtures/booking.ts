@@ -204,6 +204,14 @@ export const paidOrderFixture: VendorOrder = VendorOrder.parse({
   lines: [
     {
       type: 'table',
+      tableId: 'B2',
+      dates: ['2026-10-24'],
+      rate: 'standard',
+      unitCents: 20000,
+      lineCents: 20000,
+    },
+    {
+      type: 'table',
       tableId: 'C4',
       dates: ['2026-10-24', '2026-10-25'],
       rate: 'standard',
@@ -211,10 +219,10 @@ export const paidOrderFixture: VendorOrder = VendorOrder.parse({
       lineCents: 40000,
     },
   ],
-  subtotalCents: 40000,
+  subtotalCents: 60000,
   feeCents: 0,
   taxCents: 0,
-  totalCents: 40000,
+  totalCents: 60000,
   vendorInfo: {
     tableName: "Maya's Card Corner",
     contactName: 'Maya Johnson',
@@ -300,7 +308,7 @@ export const vendorDashboardFixture: VendorDashboard = VendorDashboard.parse({
   vendor: vendorProfileFixture,
   upcoming: [paidOrderFixture],
   history: [paidOrderFixture, refundedOrderFixture],
-  paidThisYearCents: 50000,
+  paidThisYearCents: 70000,
   balanceDueCents: 0,
   events: fixtureEvents.slice(1),
   refundCutoffDays: 14,

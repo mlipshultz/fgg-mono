@@ -5,7 +5,7 @@ import type { VendorOrder } from '@fgg/types';
 import { Button } from '@/components/Button';
 import { PassCard } from '@/components/vendor/PassCard';
 import { downloadVendorFile, getVendorOrder } from '@/lib/api';
-import { tableLinesOf, tablesLabel } from '@/lib/booking';
+import { tableDaysSummary, tableLinesOf, tablesLabel } from '@/lib/booking';
 import styles from './done.module.css';
 
 const MAX_WAIT_MS = 2 * 60_000;
@@ -142,8 +142,15 @@ export function Done() {
         <div>
           <h1 className={styles.title}>You&apos;re booked!</h1>
           <p className={styles.lead}>
-            {many ? 'Tables' : 'Table'} {tables} at {order.event.name} {many ? 'are' : 'is'} yours.
-            Receipt sent to <b>{order.vendorInfo?.email}</b>.
+            {many ? 'Tables' : 'Table'}{' '}
+            {many
+              ? tableDaysSummary(
+                  order,
+                  order.event.days.map((d) => d.date),
+                )
+              : tables}{' '}
+            at {order.event.name} {many ? 'are' : 'is'} yours. Receipt sent to{' '}
+            <b>{order.vendorInfo?.email}</b>.
           </p>
         </div>
         <PassCard order={order} />

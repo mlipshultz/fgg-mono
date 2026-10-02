@@ -95,6 +95,31 @@ export function tablesLabel(order: Pick<Order, 'lines'>): string {
     .map((l) => l.tableId)
     .join(', ');
 }
+/**
+ * Tables with their days, only spelling days out per table when they differ:
+ * "B2, C4 · Sat + Sun" when every table has the same days, else "B2 · Sat, C4 · Sat + Sun".
+ */
+export function tableDaysSummary(order: Pick<Order, 'lines'>, eventDays?: IsoDate[]): string {
+  const lines = tableLinesOf(order);
+  if (!lines.length) return '—';
+  const key = (d: IsoDate[]) => [...d].sort().join();
+  const same = lines.every((l) => key(l.dates) === key(lines[0]!.dates));
+  const spelled = (d: IsoDate[]) => [...d].sort().map(dayOfWeek).join(' + ');
+  if (same) {
+    const days = eventDays
+      ? daysShort(eventDays, [...lines[0]!.dates].sort())
+      : spelled(lines[0]!.dates);
+    return `${lines.map((l) => l.tableId).join(', ')} · ${days}`;
+  }
+  // Days differ per table: spell each one out so "Sat" and "Sat + Sun" sit side by side.
+  return lines.map((l) => `${l.tableId} · ${spelled(l.dates)}`).join(', ');
+}
+
+/** Total table-days on an order (a table booked for two days counts twice). */
+export function tableDaysCount(order: Pick<Order, 'lines'>): number {
+  return tableLinesOf(order).reduce((n, l) => n + l.dates.length, 0);
+}
+
 /** Union of booked days, sorted. */
 export function orderDates(order: Pick<Order, 'lines'>): IsoDate[] {
   return [...new Set(tableLinesOf(order).flatMap((l) => l.dates))].sort();

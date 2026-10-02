@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { Event, Order, Venue } from '@fgg/types';
-import { orderDates, shortDate, tablesLabel } from './booking.js';
+import { orderDates, shortDate, tableLines, tablesLabel } from './booking.js';
 
 /** Naive local → floating time: the venue's own zone is implied by the location. */
 function icsDateTime(date: string, hhmm: string): string {
@@ -13,7 +13,9 @@ function icsEscape(s: string): string {
 
 /** One VEVENT per booked day, starting at load-in (or doors) and ending at close. */
 export function vendorPassIcs(order: Order, ev: Event, venue: Venue, now = new Date()): string {
-  const tables = tablesLabel(order);
+  const lines = tableLines(order);
+  const tablesOn = (date: string) =>
+    lines.filter((l) => l.dates.includes(date)).map((l) => l.tableId);
   const dates = orderDates(order);
   const stamp = now
     .toISOString()
@@ -29,7 +31,7 @@ export function vendorPassIcs(order: Order, ev: Event, venue: Venue, now = new D
       `DTSTAMP:${stamp}`,
       `DTSTART;TZID=${ev.timeZone}:${icsDateTime(date, start)}`,
       `DTEND;TZID=${ev.timeZone}:${icsDateTime(date, end)}`,
-      `SUMMARY:${icsEscape(`${ev.name} · Vendor ${order.lines.length > 1 ? 'tables' : 'table'} ${tables}`)}`,
+      `SUMMARY:${icsEscape(`${ev.name} · Vendor ${tablesOn(date).length > 1 ? 'tables' : 'table'} ${tablesOn(date).join(', ')}`)}`,
       `LOCATION:${icsEscape(`${venue.name}, ${venue.address}, ${venue.city}, ${venue.state}`)}`,
       `DESCRIPTION:${icsEscape(`Vendor pass ${order.passNumber ?? ''}. Load-in ${start}. Doors ${day?.opens ?? ''}.`)}`,
       'END:VEVENT',
@@ -84,8 +86,15 @@ export async function receiptPdf(order: Order, ev: Event, venue: Venue): Promise
   const rows: [string, string][] = [
     ['Event', ev.name],
     ['Venue', `${venue.name} · ${venue.city}, ${venue.state}`],
-    [order.lines.length > 1 ? 'Tables' : 'Table', tables ? `${tables} · Main Hall` : '—'],
-    ['Days', dates.map(shortDate).join(', ')],
+    ...(tableLines(order).length > 1
+      ? tableLines(order).map((l, i): [string, string] => [
+          i === 0 ? 'Tables' : '',
+          `${l.tableId} · ${[...l.dates].sort().map(shortDate).join(', ')}`,
+        ])
+      : [
+          ['Table', tables ? `${tables} · Main Hall` : '—'] as [string, string],
+          ['Days', dates.map(shortDate).join(', ')] as [string, string],
+        ]),
     [
       'Rate',
       line && line.type === 'table'
