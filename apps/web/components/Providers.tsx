@@ -19,7 +19,8 @@ export type AuthStatus = 'loading' | 'signed-out' | 'signed-in';
 interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
-  refresh: () => Promise<void>;
+  /** Re-read the session; `force` fetches fresh tokens (new roles) from Cognito. */
+  refresh: (force?: boolean) => Promise<void>;
   logOut: () => Promise<void>;
 }
 
@@ -51,8 +52,8 @@ export function Providers({ children }: { children: ReactNode }) {
   const [savedLoaded, setSavedLoaded] = useState(false);
   const loadedFor = useRef<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    const u = await currentUser();
+  const refresh = useCallback(async (force = false) => {
+    const u = await currentUser(force);
     setUser(u);
     setStatus(u ? 'signed-in' : 'signed-out');
   }, []);
