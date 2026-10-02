@@ -1,5 +1,6 @@
 import type { PublicEvent, PublicSettings } from '@fgg/types';
 import { Button } from '@/components/Button';
+import { VendorCta } from '@/components/vendor/VendorCta';
 import { monthAbbr, parseIsoDate, shortDateLabel } from '@/lib/dates';
 import styles from './Hero.module.css';
 
@@ -29,9 +30,7 @@ export function Hero({ events, settings }: { events: PublicEvent[]; settings: Pu
         <Button href="/#events" variant="primary" size="lg">
           See Upcoming Events
         </Button>
-        <Button href="/vendor/book" variant="secondary" size="lg">
-          Become a Vendor
-        </Button>
+        <VendorCta variant="secondary" size="lg" />
       </div>
       <div className={styles.chips}>
         {events.map((ev) => (

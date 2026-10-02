@@ -42,7 +42,7 @@ export function Footer({ settings }: { settings?: PublicSettings }) {
         <b>Account</b>
         <Link href="/login">Log In</Link>
         <Link href="/signup">Attendee Sign Up</Link>
-        <Link href="/signup?vendor=1">Vendor Sign Up</Link>
+        <Link href="/vendor/apply">Vendor Sign Up</Link>
       </div>
       <div className={styles.legal}>
         © {new Date().getFullYear()} Feel Good Gaming LLC. All artwork and characters are original.

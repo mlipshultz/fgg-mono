@@ -1,4 +1,5 @@
 import { Button } from '@/components/Button';
+import { VendorCta } from '@/components/vendor/VendorCta';
 import ui from '@/components/ui.module.css';
 import styles from './Sections.module.css';
 
@@ -49,9 +50,7 @@ export function AccountsTeaser() {
           <li>First dibs when new shows open</li>
         </ul>
         <span className={styles.phoneOnly}>Book tables, track payments, get receipts.</span>
-        <Button href="/signup?vendor=1" variant="dark" size="md" className={styles.accountCta}>
-          Create a vendor account
-        </Button>
+        <VendorCta variant="dark" size="md" className={styles.accountCta} />
       </div>
 
       <div className={styles.syncPill}>

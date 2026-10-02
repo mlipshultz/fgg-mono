@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
@@ -14,7 +14,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function LoginForm() {
   const q = useQuery();
   const router = useRouter();
-  const { refresh } = useAuth();
+  const { refresh, status } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -22,6 +22,11 @@ export function LoginForm() {
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const next = safeNext(q, '/dashboard');
+
+  // Already signed in: there is nothing to do here.
+  useEffect(() => {
+    if (status === 'signed-in') router.replace(next);
+  }, [status, next, router]);
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();

@@ -1,9 +1,10 @@
 'use client';
 
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
+import { useAuth } from '@/components/Providers';
 import { AuthCard, Field, GoogleGlyph, authStyles as styles } from '@/components/auth/AuthCard';
 import {
   friendlyAuthError,
@@ -21,6 +22,14 @@ type Errors = Partial<Record<'name' | 'email' | 'year' | 'password' | 'confirm' 
 
 export function SignupForm() {
   const router = useRouter();
+  const { status } = useAuth();
+
+  // Already signed in: skip to the dashboard (or the vendor application when that was the goal).
+  useEffect(() => {
+    if (status !== 'signed-in') return;
+    const vendor = new URLSearchParams(window.location.search).get('vendor') === '1';
+    router.replace(vendor ? '/vendor/apply' : '/dashboard');
+  }, [status, router]);
   const thisYear = new Date().getFullYear();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
