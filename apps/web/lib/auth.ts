@@ -69,12 +69,16 @@ function rolesFromClaim(claim: unknown): Role[] {
   return list.map(String).filter((r): r is Role => ROLE_SET.has(r));
 }
 
-/** The signed-in user from the ID token, or null. Never throws. */
-export async function currentUser(): Promise<AuthUser | null> {
+/**
+ * The signed-in user from the ID token, or null. Never throws. `forceRefresh` trades the
+ * refresh token for new tokens, which is how a role granted since sign-in (vendor approval)
+ * reaches the client without signing out.
+ */
+export async function currentUser(forceRefresh = false): Promise<AuthUser | null> {
   if (!hasAuth) return null;
   try {
     configureAmplify();
-    const session = await fetchAuthSession();
+    const session = await fetchAuthSession(forceRefresh ? { forceRefresh: true } : undefined);
     const payload = session.tokens?.idToken?.payload;
     if (!payload?.sub) return null;
     const email = typeof payload.email === 'string' ? payload.email : '';
