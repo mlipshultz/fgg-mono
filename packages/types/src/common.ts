@@ -4,8 +4,13 @@ import { z } from 'zod';
 export const Ulid = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, 'ULID expected');
 export type Ulid = z.infer<typeof Ulid>;
 
-/** Cognito subject (UUID). The key for everything a user owns. */
-export const CognitoSub = z.string().uuid();
+/**
+ * Cognito subject. UUID-shaped, but Cognito does not set the RFC 4122 variant bits (federated
+ * users get e.g. `...-7095-69b9-...`), so `z.uuid()` rejects real subs. Shape check only.
+ */
+export const CognitoSub = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Cognito sub expected');
 export type CognitoSub = z.infer<typeof CognitoSub>;
 
 /** Calendar date in the event's time zone, YYYY-MM-DD. */
