@@ -1,0 +1,149 @@
+/* Shared vendor-flow pieces: step pills, chips, info cards (mocks 4a/4b/1l/1m). */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  max-width: 420px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.step {
+  flex: 1;
+  padding: 6px 0;
+  text-align: center;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  background: var(--color-white);
+  white-space: nowrap;
+}
+.stepActive {
+  background: var(--color-ink);
+  color: var(--color-white);
+}
+.stepDone {
+  background: var(--color-aqua);
+}
+
+.tag {
+  margin-left: 6px;
+  background: var(--color-aqua);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 6px 12px;
+  background: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+  color: var(--color-ink);
+  cursor: pointer;
+  min-height: 32px;
+}
+.chip[aria-pressed='true'] {
+  background: var(--color-yellow);
+}
+.chipPink[aria-pressed='true'] {
+  background: var(--color-pink);
+}
+
+.checkCard {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-tile);
+  padding: 12px 14px;
+  background: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.checkCard input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--color-aqua);
+}
+.checkCard a {
+  font-weight: var(--font-weight-extrabold);
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 2px 9px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  white-space: nowrap;
+  background: var(--color-white);
+}
+.paid {
+  background: var(--color-aqua);
+}
+.pending {
+  background: var(--color-yellow);
+}
+.refunded,
+.cancelled {
+  background: var(--color-closed);
+}
+.conflict {
+  background: var(--color-pink);
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.footerNav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-12);
+}
+.back {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 14px;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.back:hover {
+  color: var(--color-pink-text);
+}

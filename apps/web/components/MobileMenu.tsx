@@ -78,12 +78,31 @@ export function MobileMenu({ links }: { links: NavLink[] }) {
                 </Link>
               </li>
             )}
-            {status === 'signed-in' && isStaff(user) && (
+            {status === 'signed-in' && user?.roles.includes('vendor') && (
               <li>
-                <Link href="/admin/users" onClick={() => setOpen(false)}>
-                  Admin
+                <Link href="/vendor" onClick={() => setOpen(false)}>
+                  Vendor Dashboard
                 </Link>
               </li>
+            )}
+            {status === 'signed-in' && isStaff(user) && (
+              <>
+                <li>
+                  <Link href="/admin/vendor-applications" onClick={() => setOpen(false)}>
+                    Admin · Applications
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/admin/orders" onClick={() => setOpen(false)}>
+                    Admin · Orders
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/admin/users" onClick={() => setOpen(false)}>
+                    Admin · Users
+                  </Link>
+                </li>
+              </>
             )}
           </ul>
           <div className={styles.actions}>

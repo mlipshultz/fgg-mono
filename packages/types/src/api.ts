@@ -3,6 +3,9 @@ import { Activity, Partner } from './content.js';
 import { EventDay, VendorTableStatus } from './event.js';
 import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
 import { Me, Role } from './user.js';
+import { Vendor, VendorApplication, VendorApprovalMode } from './vendor.js';
+import { FloorPlan, Venue } from './venue.js';
+import { Order, TableHold, TableRate, VendorInfo } from './order.js';
 
 /** Every error response from the API has this shape. */
 export const ApiError = z.object({
@@ -238,3 +241,143 @@ export type AdminUserList = z.infer<typeof AdminUserList>;
 /** PUT /admin/users/{sub}/roles — superadmin only. */
 export const SetRolesInput = z.object({ roles: z.array(Role).min(1) });
 export type SetRolesInput = z.infer<typeof SetRolesInput>;
+
+// ---------------------------------------------------------------------------
+// Vendor application (attendee → vendor_applicant → vendor).
+// ---------------------------------------------------------------------------
+
+/** GET /me/vendor-application — the caller's standing as a vendor. */
+export const VendorStanding = z.object({
+  application: VendorApplication.nullable(),
+  vendor: Vendor.nullable(),
+  /** Calendly scheduling link shown on the pending screen (Settings). */
+  calendlyUrl: z.string().url().optional(),
+  approvalMode: VendorApprovalMode,
+});
+export type VendorStanding = z.infer<typeof VendorStanding>;
+
+export const ReviewInput = z.object({ notes: z.string().max(2000).optional() });
+export type ReviewInput = z.infer<typeof ReviewInput>;
+
+/** GET /admin/vendor-applications?status=&cursor= */
+export const VendorApplicationList = Paginated(VendorApplication);
+export type VendorApplicationList = z.infer<typeof VendorApplicationList>;
+
+// ---------------------------------------------------------------------------
+// Vendor booking: floor plan → quote → hold → info → checkout → order.
+// ---------------------------------------------------------------------------
+
+/** GET /public/events/{idOrSlug}/floorplan */
+export const EventFloorPlan = z.object({
+  event: PublicEvent,
+  venue: Venue,
+  floorPlan: FloorPlan,
+  availability: EventAvailability,
+});
+export type EventFloorPlan = z.infer<typeof EventFloorPlan>;
+
+export const QuoteInput = z.object({
+  tableId: z.string().regex(/^[A-Z]{1,2}\d{1,3}$/),
+  dates: z.array(IsoDate).min(1),
+  rate: TableRate,
+});
+export type QuoteInput = z.infer<typeof QuoteInput>;
+
+/** Price resolved server-side (base rate, price window, table override). Stored on the hold. */
+export const Quote = QuoteInput.extend({
+  unitCents: z.number().int().nonnegative(),
+  amountCents: z.number().int().nonnegative(),
+  feeCents: z.number().int().nonnegative(),
+  taxCents: z.number().int().nonnegative(),
+  totalCents: z.number().int().nonnegative(),
+  pricingInputs: z.object({
+    priceWindowId: Ulid.optional(),
+    priceWindowKind: z.string().optional(),
+    tableOverrideCents: z.number().int().optional(),
+    premiumDeltaCents: z.number().int().optional(),
+  }),
+  /** "Row B · Main Hall", "Right by the stage, next to the Art Station." */
+  rowLabel: z.string(),
+  nearby: z.string(),
+});
+export type Quote = z.infer<typeof Quote>;
+
+/** POST /vendor/events/{id}/holds, GET/PATCH /vendor/holds/{id} */
+export const HoldResponse = z.object({
+  hold: TableHold,
+  quote: Quote,
+  event: PublicEvent,
+  vendorInfo: VendorInfo.optional(),
+});
+export type HoldResponse = z.infer<typeof HoldResponse>;
+
+export const UpdateHoldInput = z.object({ vendorInfo: VendorInfo });
+export type UpdateHoldInput = z.infer<typeof UpdateHoldInput>;
+
+/** POST /vendor/holds/{id}/checkout → send the browser to invoiceUrl. */
+export const CheckoutResponse = z.object({
+  orderId: Ulid,
+  invoiceUrl: z.string().url(),
+  /** Hold is extended to this instant while the vendor is on Shopify. */
+  holdExpiresAt: IsoDateTime,
+});
+export type CheckoutResponse = z.infer<typeof CheckoutResponse>;
+
+/** An order with the event denormalized for dashboards, passes and receipts. */
+export const VendorOrder = Order.extend({
+  event: PublicEvent.pick({
+    id: true,
+    slug: true,
+    name: true,
+    startDate: true,
+    endDate: true,
+    days: true,
+    timeZone: true,
+    venue: true,
+    posterUrl: true,
+  }),
+  /** "Sat Oct 24 · 8:30am" when the event defines a load-in time. */
+  loadInLabel: z.string().optional(),
+  cancelRequestedAt: IsoDateTime.optional(),
+});
+export type VendorOrder = z.infer<typeof VendorOrder>;
+
+export const VendorOrderList = z.object({ orders: z.array(VendorOrder) });
+export type VendorOrderList = z.infer<typeof VendorOrderList>;
+
+export const CancelRequestInput = z.object({ reason: z.string().max(1000).optional() });
+export type CancelRequestInput = z.infer<typeof CancelRequestInput>;
+
+/** GET /vendor/dashboard (mock 1m). */
+export const VendorDashboard = z.object({
+  vendor: Vendor,
+  upcoming: z.array(VendorOrder),
+  history: z.array(VendorOrder),
+  paidThisYearCents: z.number().int().nonnegative(),
+  balanceDueCents: z.number().int().nonnegative(),
+  /** Other events for "Quick register". */
+  events: z.array(PublicEvent),
+  refundCutoffDays: z.number().int().nonnegative(),
+});
+export type VendorDashboard = z.infer<typeof VendorDashboard>;
+
+// ---------------------------------------------------------------------------
+// Admin orders.
+// ---------------------------------------------------------------------------
+
+/** GET /admin/orders?eventId=&status=&cursor= */
+export const AdminOrderList = Paginated(VendorOrder);
+export type AdminOrderList = z.infer<typeof AdminOrderList>;
+
+export const RefundInput = z.object({ reason: z.string().max(1000).optional() });
+export type RefundInput = z.infer<typeof RefundInput>;
+
+/** POST /admin/orders/comp — staff assign a table without payment (source: manual, $0). */
+export const CompOrderInput = z.object({
+  eventId: Ulid,
+  vendorId: Ulid,
+  tableId: z.string().regex(/^[A-Z]{1,2}\d{1,3}$/),
+  dates: z.array(IsoDate).min(1),
+  note: z.string().max(500).optional(),
+});
+export type CompOrderInput = z.infer<typeof CompOrderInput>;

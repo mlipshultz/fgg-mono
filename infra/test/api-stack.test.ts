@@ -111,6 +111,27 @@ describe('ApiStack', () => {
     });
   });
 
+  it('adds the vendor routes behind the authorizer and the Shopify webhook route without it', () => {
+    for (const m of ['GET', 'POST', 'PATCH', 'DELETE']) {
+      t.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+        RouteKey: `${m} /vendor/{proxy+}`,
+        AuthorizationType: 'JWT',
+      });
+    }
+    t.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+      RouteKey: 'POST /webhooks/shopify',
+      AuthorizationType: 'NONE',
+    });
+    t.hasResourceProperties('AWS::Lambda::Function', {
+      Environment: {
+        Variables: Match.objectLike({
+          SHOPIFY_SECRET_ID: 'fgg/dev/shopify',
+          WEB_URL: 'http://localhost:3000',
+        }),
+      },
+    });
+  });
+
   it('configures the Lambda runtime and environment', () => {
     t.hasResourceProperties('AWS::Lambda::Function', {
       Runtime: 'nodejs22.x',

@@ -1,5 +1,5 @@
 import type { PublicEvent } from '@fgg/types';
-import { Button } from '@/components/Button';
+import { BookCta } from '@/components/vendor/BookCta';
 import ui from '@/components/ui.module.css';
 import { dayRange, fullDateLabel, monthAbbr, stubColor, year } from '@/lib/dates';
 import styles from './EventCard.module.css';
@@ -64,11 +64,7 @@ export function EventCard({ ev, index }: { ev: PublicEvent; index: number }) {
               <span className={`${ui.pill} ${ui.pillSoon}`}>Coming Soon</span>
             )}
           </span>
-          {ev.vendorStatus === 'open' && (
-            <Button href={`/vendor/book?event=${ev.slug}`} variant="dark" size="sm">
-              Book &amp; Pay Now
-            </Button>
-          )}
+          {ev.vendorStatus === 'open' && <BookCta slug={ev.slug} />}
           {ev.vendorStatus === 'closed' && <WaitlistButton eventId={ev.id} kind="waitlist" />}
           {ev.vendorStatus === 'coming_soon' && <WaitlistButton eventId={ev.id} kind="notify_me" />}
         </div>

@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
-import { BookPlaceholder } from './BookPlaceholder';
+import { VendorGate } from '@/components/vendor/VendorGate';
+import { BookFlow } from './BookFlow';
 
 export const metadata: Metadata = { title: 'Book a table' };
 
 export default function VendorBookPage() {
-  return <BookPlaceholder />;
+  return (
+    <VendorGate>
+      <BookFlow />
+    </VendorGate>
+  );
 }

@@ -28,7 +28,11 @@ describe('AuthStack', () => {
   it('uses a public SRP client with no secret', () => {
     t.hasResourceProperties('AWS::Cognito::UserPoolClient', {
       GenerateSecret: false,
-      ExplicitAuthFlows: Match.arrayWith(['ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH']),
+      ExplicitAuthFlows: Match.arrayWith([
+        'ALLOW_ADMIN_USER_PASSWORD_AUTH',
+        'ALLOW_USER_SRP_AUTH',
+        'ALLOW_REFRESH_TOKEN_AUTH',
+      ]),
     });
   });
 

@@ -305,7 +305,20 @@ display-name editing UI, Google redirect URI registration in Google Cloud (Matt'
   with the placeholder level curve and badge catalog.
 - Permission layer and admin scaffolding (staff-only routes, user list, role assignment).
 
-### Phase 3: Vendor booking (6–8 days)
+### Phase 3: Vendor booking (6–8 days) — **built 2026-10-01** on branch `phase-3/vendor-booking`
+
+Shopify: the API is the Shopify app. `GET /shopify/install` → OAuth → `/shopify/callback` stores
+the Admin token in `fgg/{stage}/shopify`; `POST /admin/shopify/register-webhooks` (superadmin)
+subscribes `orders/paid` and `refunds/create` to `/webhooks/shopify`. Dev uses the development
+store `fgg-dev.myshopify.com` (Grow plan preview, test gateway). Draft orders are created with the
+GraphQL Admin API; the paid webhook finalizes tables, pass number and order in one transaction and
+refunds on conflict. Orders live at `ORDER#id/META` with an `EVENT#id/ORDER#id` pointer and a
+`SHOPIFYORDER#id` reverse lookup. A vendor's new hold replaces their previous hold for that event.
+Verified on dev: application → approve → quote → hold → vendor info → checkout produced a draft
+order whose invoice renders in Shopify checkout with our attributes; the test payment itself was
+left to Matt (auto mode blocks transactions), after which the paid webhook path is confirmed.
+Ops: `infra/scripts/dev-token.sh` mints an ID token via the IAM-gated admin auth flow.
+Not built: SES emails, PokéBucks toggle endpoint, QR on the vendor pass (Phase 5), tests in web.
 
 - Vendor application form, Calendly pending screen, review queue in admin, approval that creates
   the `VENDOR#` record, adds the applicant as its first member, moves the Cognito group and emails.

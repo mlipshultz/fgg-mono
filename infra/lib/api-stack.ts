@@ -35,6 +35,8 @@ export class ApiStack extends Stack {
   readonly publicFn: NodejsFunction;
   readonly accountFn: NodejsFunction;
   readonly shopifyFn: NodejsFunction;
+  readonly vendorFn: NodejsFunction;
+  readonly webhookFn: NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -120,6 +122,11 @@ export class ApiStack extends Stack {
       WEB_ORIGINS: origins.join(','),
       SHOPIFY_SECRET_ID: shopifySecretName,
     });
+    const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${shopifySecretName}-*`;
+    const secretRead = new iam.PolicyStatement({
+      actions: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],
+      resources: [secretArn],
+    });
     this.shopifyFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [
@@ -127,9 +134,7 @@ export class ApiStack extends Stack {
           'secretsmanager:PutSecretValue',
           'secretsmanager:DescribeSecret',
         ],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${shopifySecretName}-*`,
-        ],
+        resources: [secretArn],
       }),
     );
     const shopifyIntegration = new HttpLambdaIntegration('ShopifyIntegration', this.shopifyFn);
@@ -141,7 +146,47 @@ export class ApiStack extends Stack {
       });
     }
 
+    // Vendor booking (holds, checkout, orders, dashboard) — JWT required; the handler checks the
+    // vendor role. Needs the Shopify secret to create draft orders.
+    this.vendorFn = this.lambda('VendorFn', 'handlers/vendor.ts', {
+      TABLE_NAME: table.tableName,
+      MEDIA_BASE_URL: props.mediaBaseUrl,
+      STAGE: config.stage,
+      WEB_ORIGINS: origins.join(','),
+      SHOPIFY_SECRET_ID: shopifySecretName,
+      WEB_URL: config.webOrigins[0] ?? '',
+    });
+    table.grantReadWriteData(this.vendorFn);
+    this.vendorFn.addToRolePolicy(secretRead);
+    this.api.addRoutes({
+      path: '/vendor/{proxy+}',
+      methods: authed,
+      integration: new HttpLambdaIntegration('VendorIntegration', this.vendorFn),
+      authorizer,
+    });
+
+    // Shopify webhooks (orders/paid, refunds/create): HMAC-verified in code, no JWT.
+    this.webhookFn = this.lambda('WebhookFn', 'handlers/webhooks.ts', {
+      TABLE_NAME: table.tableName,
+      MEDIA_BASE_URL: props.mediaBaseUrl,
+      STAGE: config.stage,
+      WEB_ORIGINS: origins.join(','),
+      SHOPIFY_SECRET_ID: shopifySecretName,
+    });
+    table.grantReadWriteData(this.webhookFn);
+    this.webhookFn.addToRolePolicy(secretRead);
+    this.api.addRoutes({
+      path: '/webhooks/shopify',
+      methods: [apigw.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('WebhookIntegration', this.webhookFn),
+    });
+
+    // Account fn now also approves vendors (groups) and refunds/registers webhooks (Shopify secret).
+    this.accountFn.addEnvironment('SHOPIFY_SECRET_ID', shopifySecretName);
+    this.accountFn.addToRolePolicy(secretRead);
+
     new CfnOutput(this, 'ApiUrl', { value: this.api.apiEndpoint });
+    new CfnOutput(this, 'ShopifyWebhookUrl', { value: `${this.api.apiEndpoint}/webhooks/shopify` });
     new CfnOutput(this, 'ShopifyInstallUrl', { value: `${this.api.apiEndpoint}/shopify/install` });
     new CfnOutput(this, 'ShopifyCallbackUrl', {
       value: `${this.api.apiEndpoint}/shopify/callback`,
