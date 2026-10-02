@@ -157,6 +157,154 @@
   background: var(--status-closed);
 }
 
+/* Table availability proposal */
+.sub {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin: var(--space-24) 0 var(--space-10);
+}
+.cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-20);
+  align-items: flex-start;
+}
+.cellWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-bold);
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.cellLabel {
+  white-space: nowrap;
+}
+/* Same box as the real map cell (book.module.css .table) */
+.cell {
+  position: relative;
+  width: 46px;
+  height: 36px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 8px;
+  background: var(--color-white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.cellId {
+  position: relative;
+  z-index: 1;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  color: var(--color-ink);
+  background: var(--color-white);
+  border-radius: 999px;
+  padding: 1px 5px;
+}
+.taken {
+  background: var(--color-closed);
+  opacity: 0.55;
+}
+.taken .cellId {
+  background: transparent;
+}
+.picked {
+  background: var(--color-pink);
+  box-shadow: 3px 3px 0 var(--color-ink);
+}
+.picked .cellId {
+  background: transparent;
+}
+/* One colour + one direction per day. Stripes are 3px on, 5px off. */
+.sat {
+  background-image: repeating-linear-gradient(45deg, var(--color-aqua) 0 3px, transparent 3px 8px);
+}
+.sun {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-yellow) 0 3px,
+    transparent 3px 8px
+  );
+}
+.fri {
+  background-image: repeating-linear-gradient(0deg, var(--color-pink) 0 3px, transparent 3px 8px);
+}
+/* Two-day combos on a three-day event: layer both patterns. */
+.sunAlso {
+  background-image:
+    repeating-linear-gradient(45deg, var(--color-aqua) 0 3px, transparent 3px 8px),
+    repeating-linear-gradient(-45deg, var(--color-yellow) 0 3px, transparent 3px 8px);
+}
+.satAlso {
+  background-image:
+    repeating-linear-gradient(0deg, var(--color-pink) 0 3px, transparent 3px 8px),
+    repeating-linear-gradient(45deg, var(--color-aqua) 0 3px, transparent 3px 8px);
+}
+/* Alternative: solid tints, no lines. */
+.satTint {
+  background: color-mix(in srgb, var(--color-aqua) 45%, white);
+}
+.sunTint {
+  background: color-mix(in srgb, var(--color-yellow) 55%, white);
+}
+.satTint .cellId,
+.sunTint .cellId {
+  background: transparent;
+}
+.chip {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 8px 14px;
+  background: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+}
+.chipOn {
+  background: var(--color-ink);
+  color: var(--color-white);
+}
+.chipSat {
+  background-image: repeating-linear-gradient(45deg, var(--color-aqua) 0 3px, transparent 3px 8px);
+}
+.chipSun {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-yellow) 0 3px,
+    transparent 3px 8px
+  );
+}
+.chipSat,
+.chipSun {
+  background-color: var(--color-white);
+}
+.mapRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px;
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-card-sm);
+  width: fit-content;
+}
+.rowLabel {
+  width: 18px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
 @media (max-width: 767px) {
   .hero {
     font-size: var(--type-hero-font-size-phone);
