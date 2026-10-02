@@ -11,7 +11,7 @@ import v from '@/components/vendor/vendor.module.css';
 import { bookHref } from '@/components/vendor/BookCta';
 import { downloadVendorFile, getVendorDashboard, requestCancel } from '@/lib/api';
 import { initials } from '@/lib/auth';
-import { fmtCents } from '@/lib/booking';
+import { fmtCents, orderDates, tableLinesOf, tablesLabel } from '@/lib/booking';
 import { daysUntil, fullDateLabel, shortDateLabel, year } from '@/lib/dates';
 import { ProfileCard } from './ProfileCard';
 import styles from './vendor.module.css';
@@ -32,16 +32,20 @@ const STATUS_CLASS: Record<VendorOrder['status'], string | undefined> = {
 };
 
 function tableOf(o: VendorOrder): string {
-  const l = o.lines[0];
-  return l?.type === 'table' ? l.tableId : '—';
+  return tablesLabel(o) || '—';
+}
+function tablesWord(o: VendorOrder): string {
+  return tableLinesOf(o).length === 1 ? 'Table' : 'Tables';
 }
 function datesOf(o: VendorOrder): string[] {
-  const l = o.lines[0];
-  return l?.type === 'table' ? l.dates : [];
+  return orderDates(o);
+}
+function passesOf(o: VendorOrder): number {
+  return 2 * Math.max(1, tableLinesOf(o).length);
 }
 function rateOf(o: VendorOrder): string {
-  const l = o.lines[0];
-  return l?.type === 'table' && l.rate === 'poke_bucks' ? ' · PokéBucks' : '';
+  const l = tableLinesOf(o)[0];
+  return l?.rate === 'poke_bucks' ? ' · PokéBucks' : '';
 }
 
 export function VendorDashboardView() {
@@ -61,7 +65,7 @@ export function VendorDashboardView() {
   }, []);
 
   const download = (o: VendorOrder, kind: 'pass.ics' | 'receipt.pdf') => {
-    const base = `${o.event.slug}-table-${tableOf(o)}`;
+    const base = `${o.event.slug}-table-${tableOf(o).replace(/, /g, '-')}`;
     void downloadVendorFile(
       o.id,
       kind,
@@ -74,8 +78,8 @@ export function VendorDashboardView() {
     const days = daysUntil(o.event.startDate);
     const msg =
       days >= cutoff
-        ? `Request a cancellation for Table ${tableOf(o)} at ${o.event.name}? You're ${days} days out, so the refund is in full once staff approve it.`
-        : `Request a cancellation for Table ${tableOf(o)} at ${o.event.name}? The show is in ${days} days, inside the ${cutoff}-day refund window, so staff decide the refund.`;
+        ? `Request a cancellation for ${tablesWord(o)} ${tableOf(o)} at ${o.event.name}? You're ${days} days out, so the refund is in full once staff approve it.`
+        : `Request a cancellation for ${tablesWord(o)} ${tableOf(o)} at ${o.event.name}? The show is in ${days} days, inside the ${cutoff}-day refund window, so staff decide the refund.`;
     if (!window.confirm(msg)) return;
     setBusyId(o.id);
     try {
@@ -188,15 +192,15 @@ export function VendorDashboardView() {
               <div>
                 <div className={styles.showName}>{o.event.name}</div>
                 <div className={styles.showMeta}>
-                  {shortDateLabel(o.event.startDate, o.event.endDate)} · Table {tableOf(o)}, Main
-                  Hall
+                  {shortDateLabel(o.event.startDate, o.event.endDate)} · {tablesWord(o)}{' '}
+                  {tableOf(o)}, Main Hall
                   {o.loadInLabel ? ` · Load-in ${o.loadInLabel}` : ''}
                 </div>
                 <div className={styles.pills}>
                   <span className={`${v.statusPill} ${STATUS_CLASS[o.status]}`}>
                     {STATUS_LABEL[o.status]}
                   </span>
-                  <span className={v.statusPill}>2 vendor passes</span>
+                  <span className={v.statusPill}>{passesOf(o)} vendor passes</span>
                   <span className={v.statusPill}>
                     {datesOf(o).length} {datesOf(o).length === 1 ? 'day' : 'days'}
                   </span>

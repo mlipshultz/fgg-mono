@@ -322,6 +322,13 @@ Ops: `infra/scripts/dev-token.sh` mints an ID token via the IAM-gated admin auth
 `vendors/{id}/`, resized in the browser) prefills the booking info step; "what you sell" is free
 text everywhere (application, profile, per-order); `GET /public/events/{id}/vendors` powers the
 public `/events/{slug}/` "who's vending" page, fetched at runtime so it needs no rebuild.
+Multi-table picker (same day): a vendor books up to 10 tables in one order. The map is a cart
+(tap to add/remove); every table defaults to all event days and days are adjusted per table in
+the panel. Per-day availability is drawn with stripes (one colour + line direction per day: aqua
+"/" Sat, yellow "\\" Sun, pink "—" for a third day), plain = open every day, grey = taken; the
+day chips above the map filter by dimming and double as the legend. `QuoteInput`/`Quote`,
+`TableHold` and the hold items are per table (`lines`/`tables`); orders already carried a list of
+lines, so passes, receipts and the public vendor list just iterate them.
 Not built: SES emails, PokéBucks toggle endpoint, QR on the vendor pass (Phase 5), tests in web.
 
 - Vendor application form, Calendly pending screen, review queue in admin, approval that creates

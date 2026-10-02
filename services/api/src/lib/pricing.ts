@@ -4,6 +4,8 @@ import type {
   FloorTable,
   PriceWindow,
   Quote,
+  QuoteLine,
+  QuoteLineInput,
   Settings,
   TableRate,
 } from '@fgg/types';
@@ -13,8 +15,8 @@ export interface QuoteArgs {
   event: Event;
   floorPlan: FloorPlan;
   priceWindows?: PriceWindow[];
-  tableId: string;
-  dates: string[];
+  /** The cart: each table with the days wanted for it. */
+  lines: QuoteLineInput[];
   rate: TableRate;
   settings: Settings;
   now?: Date;
@@ -48,12 +50,11 @@ export function activeWindow(windows: PriceWindow[], now: Date): PriceWindow | u
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
 }
 
-/**
- * Resolve what a table costs right now (docs/PLAN.md §3.4 "Pricing resolution"). The result is
- * stored on the hold and never recomputed, so a window closing mid-checkout changes nothing.
- */
-export function resolveQuote(args: QuoteArgs): Quote {
-  const { event, floorPlan, tableId, rate, settings } = args;
+/** Price one table for the given days. Shared by quotes and the hold's per-table pricing. */
+export function priceLine(
+  args: Pick<QuoteArgs, 'event' | 'floorPlan' | 'priceWindows' | 'rate' | 'now'> & QuoteLineInput,
+): QuoteLine {
+  const { event, floorPlan, tableId, rate } = args;
   const now = args.now ?? new Date();
   const table = floorPlan.tables.find((t) => t.id === tableId);
   if (!table)
@@ -63,7 +64,7 @@ export function resolveQuote(args: QuoteArgs): Quote {
   for (const d of dates) {
     if (!eventDates.has(d)) throw new HttpError(400, 'bad_date', `${d} is not a day of this event`);
   }
-  if (!dates.length) throw new HttpError(400, 'bad_date', 'Pick at least one day');
+  if (!dates.length) throw new HttpError(400, 'bad_date', `Pick at least one day for ${tableId}`);
 
   const win = activeWindow(args.priceWindows ?? [], now);
   let unit = win
@@ -77,18 +78,11 @@ export function resolveQuote(args: QuoteArgs): Quote {
   else if (table.premiumDeltaCents !== undefined) unit += table.premiumDeltaCents;
   unit = Math.max(0, unit);
 
-  const amount = unit * dates.length;
-  const fee = Math.round((amount * settings.processingFeePct) / 100);
-  const tax = Math.round((amount * settings.taxPct) / 100);
   return {
     tableId,
     dates,
-    rate,
     unitCents: unit,
-    amountCents: amount,
-    feeCents: fee,
-    taxCents: tax,
-    totalCents: amount + fee + tax,
+    lineCents: unit * dates.length,
     pricingInputs: {
       ...(win ? { priceWindowId: win.id, priceWindowKind: win.kind } : {}),
       ...(table.priceOverrideCents !== undefined
@@ -100,6 +94,33 @@ export function resolveQuote(args: QuoteArgs): Quote {
     },
     rowLabel: `Row ${table.row} · Main Hall`,
     nearby: nearbyText(table, floorPlan),
+  };
+}
+
+/**
+ * Resolve what the cart costs right now (docs/PLAN.md §3.4 "Pricing resolution"). The result is
+ * stored on the hold and never recomputed, so a window closing mid-checkout changes nothing.
+ * Fee and tax apply to the subtotal across all tables.
+ */
+export function resolveQuote(args: QuoteArgs): Quote {
+  const { settings } = args;
+  const seen = new Set<string>();
+  const lines = args.lines.map((l) => {
+    if (seen.has(l.tableId))
+      throw new HttpError(400, 'duplicate_table', `Table ${l.tableId} is in the cart twice`);
+    seen.add(l.tableId);
+    return priceLine({ ...args, ...l });
+  });
+  const subtotal = lines.reduce((n, l) => n + l.lineCents, 0);
+  const fee = Math.round((subtotal * settings.processingFeePct) / 100);
+  const tax = Math.round((subtotal * settings.taxPct) / 100);
+  return {
+    rate: args.rate,
+    lines,
+    subtotalCents: subtotal,
+    feeCents: fee,
+    taxCents: tax,
+    totalCents: subtotal + fee + tax,
   };
 }
 

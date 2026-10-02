@@ -180,14 +180,18 @@ export interface HoldItem {
   heldBy: string;
   tableId: string;
   date: string;
+  /** All days held for this table (same on every day-item of the table). */
   dates: string[];
   rate: 'standard' | 'poke_bucks';
+  /** Per table. */
   unitCents: number;
   amountCents: number;
+  pricingInputs: Record<string, unknown>;
+  /** Whole hold (every table), repeated on each item. */
+  subtotalCents: number;
   feeCents: number;
   taxCents: number;
   totalCents: number;
-  pricingInputs: Record<string, unknown>;
   vendorInfo?: Record<string, unknown>;
   expiresAt: string;
   ttl: number;

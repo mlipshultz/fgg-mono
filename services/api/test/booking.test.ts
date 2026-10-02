@@ -16,7 +16,15 @@ const VENDOR = '01HZX3V9K7Q2M4N8P6R5T1W0YD';
 const OTHER = '01HZX3V9K7Q2M4N8P6R5T1W0YE';
 const SUB = '2f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d';
 const quote = (tableId = 'A1', dates = ['2026-10-24', '2026-10-25']) =>
-  resolveQuote({ event, floorPlan, settings: DEFAULT_SETTINGS, tableId, dates, rate: 'standard' });
+  resolveQuote({
+    event,
+    floorPlan,
+    settings: DEFAULT_SETTINGS,
+    lines: [{ tableId, dates }],
+    rate: 'standard',
+  });
+const cart = (lines: { tableId: string; dates: string[] }[]) =>
+  resolveQuote({ event, floorPlan, settings: DEFAULT_SETTINGS, lines, rate: 'standard' });
 
 beforeEach(() => db.reset());
 
@@ -74,6 +82,40 @@ describe('holds', () => {
     const holds = db.all().filter((i) => String(i.SK).startsWith('HOLD#'));
     expect(holds).toHaveLength(1);
     expect(holds[0]!.holdId).toBe(second[0]!.holdId);
+  });
+
+  it('holds several tables at once and fails the whole cart if any day is taken', async () => {
+    const items = await booking.createHold({
+      event,
+      vendorId: VENDOR,
+      heldBy: SUB,
+      quote: cart([
+        { tableId: 'A1', dates: ['2026-10-24', '2026-10-25'] },
+        { tableId: 'A2', dates: ['2026-10-25'] },
+      ]),
+      holdMinutes: 10,
+    });
+    expect(items).toHaveLength(3);
+    const hold = booking.toTableHold(items);
+    expect(hold.tables.map((t) => [t.tableId, t.dates.length, t.amountCents])).toEqual([
+      ['A1', 2, 40000],
+      ['A2', 1, 20000],
+    ]);
+    expect(hold.subtotalCents).toBe(60000);
+    // Another vendor can't take A2 on Sunday, nor A3+A1 as a cart.
+    await expect(
+      booking.createHold({
+        event,
+        vendorId: OTHER,
+        heldBy: 'x',
+        quote: cart([
+          { tableId: 'A3', dates: ['2026-10-24'] },
+          { tableId: 'A1', dates: ['2026-10-24'] },
+        ]),
+        holdMinutes: 10,
+      }),
+    ).rejects.toMatchObject({ status: 409, code: 'table_unavailable' });
+    expect(db.get(`EVENT#${EVENT_ID}`, 'HOLD#2026-10-24#A3')).toBeUndefined();
   });
 
   it('refuses to hold a booked table', async () => {

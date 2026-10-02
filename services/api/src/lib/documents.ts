@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { Event, Order, Venue } from '@fgg/types';
-import { shortDate } from './booking.js';
+import { orderDates, shortDate, tablesLabel } from './booking.js';
 
 /** Naive local → floating time: the venue's own zone is implied by the location. */
 function icsDateTime(date: string, hhmm: string): string {
@@ -13,8 +13,8 @@ function icsEscape(s: string): string {
 
 /** One VEVENT per booked day, starting at load-in (or doors) and ending at close. */
 export function vendorPassIcs(order: Order, ev: Event, venue: Venue, now = new Date()): string {
-  const line = order.lines.find((l) => l.type === 'table');
-  const dates = line && line.type === 'table' ? line.dates : [];
+  const tables = tablesLabel(order);
+  const dates = orderDates(order);
   const stamp = now
     .toISOString()
     .replace(/[-:]/g, '')
@@ -29,7 +29,7 @@ export function vendorPassIcs(order: Order, ev: Event, venue: Venue, now = new D
       `DTSTAMP:${stamp}`,
       `DTSTART;TZID=${ev.timeZone}:${icsDateTime(date, start)}`,
       `DTEND;TZID=${ev.timeZone}:${icsDateTime(date, end)}`,
-      `SUMMARY:${icsEscape(`${ev.name} · Vendor table ${line && line.type === 'table' ? line.tableId : ''}`)}`,
+      `SUMMARY:${icsEscape(`${ev.name} · Vendor ${order.lines.length > 1 ? 'tables' : 'table'} ${tables}`)}`,
       `LOCATION:${icsEscape(`${venue.name}, ${venue.address}, ${venue.city}, ${venue.state}`)}`,
       `DESCRIPTION:${icsEscape(`Vendor pass ${order.passNumber ?? ''}. Load-in ${start}. Doors ${day?.opens ?? ''}.`)}`,
       'END:VEVENT',
@@ -58,7 +58,8 @@ export async function receiptPdf(order: Order, ev: Event, venue: Venue): Promise
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const reg = await doc.embedFont(StandardFonts.Helvetica);
   const line = order.lines.find((l) => l.type === 'table');
-  const dates = line && line.type === 'table' ? line.dates : [];
+  const dates = orderDates(order);
+  const tables = tablesLabel(order);
 
   page.drawRectangle({ x: 36, y: 36, width: 540, height: 720, borderColor: INK, borderWidth: 2 });
   page.drawRectangle({
@@ -83,7 +84,7 @@ export async function receiptPdf(order: Order, ev: Event, venue: Venue): Promise
   const rows: [string, string][] = [
     ['Event', ev.name],
     ['Venue', `${venue.name} · ${venue.city}, ${venue.state}`],
-    ['Table', line && line.type === 'table' ? `${line.tableId} · Main Hall` : '—'],
+    [order.lines.length > 1 ? 'Tables' : 'Table', tables ? `${tables} · Main Hall` : '—'],
     ['Days', dates.map(shortDate).join(', ')],
     [
       'Rate',

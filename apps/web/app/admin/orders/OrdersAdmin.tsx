@@ -15,7 +15,7 @@ import {
   hasApi,
 } from '@/lib/api';
 import { isSuperAdmin } from '@/lib/auth';
-import { daysLabel, fmtCents } from '@/lib/booking';
+import { daysLabel, fmtCents, orderDates, tableLinesOf, tablesLabel } from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import styles from '@/components/admin/admin.module.css';
 
@@ -36,8 +36,10 @@ const STATUS_CLASS: Record<OrderStatus, string | undefined> = {
 };
 
 function tableOf(o: VendorOrder) {
-  const l = o.lines[0];
-  return l?.type === 'table' ? l : null;
+  const lines = tableLinesOf(o);
+  return lines.length
+    ? { tableId: tablesLabel(o), dates: orderDates(o), rate: lines[0]!.rate }
+    : null;
 }
 
 export function OrdersAdmin() {

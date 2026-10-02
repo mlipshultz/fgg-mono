@@ -1,12 +1,12 @@
 import type { VendorOrder } from '@fgg/types';
-import { daysLabel, fmtCents } from '@/lib/booking';
+import { daysLabel, fmtCents, orderDates, tableLinesOf, tablesLabel } from '@/lib/booking';
 import styles from '@/app/vendor/orders/done/done.module.css';
 
 /** VENDOR PASS card from mock 1l step 4. */
 export function PassCard({ order, large = false }: { order: VendorOrder; large?: boolean }) {
-  const line = order.lines[0];
-  const tableId = line?.type === 'table' ? line.tableId : '—';
-  const dates = line?.type === 'table' ? line.dates : [];
+  const tableId = tablesLabel(order) || '—';
+  const dates = orderDates(order);
+  const many = tableLinesOf(order).length > 1;
   return (
     <div className={`${styles.pass} ${large ? styles.passLarge : ''}`}>
       <div className={styles.passHead}>
@@ -19,7 +19,7 @@ export function PassCard({ order, large = false }: { order: VendorOrder; large?:
           <b>{order.event.name}</b>
         </div>
         <div>
-          <div className={styles.passLabel}>Table</div>
+          <div className={styles.passLabel}>{many ? 'Tables' : 'Table'}</div>
           <b>{tableId} · Main Hall</b>
         </div>
         <div>

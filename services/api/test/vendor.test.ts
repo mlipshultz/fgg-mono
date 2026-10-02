@@ -121,9 +121,8 @@ describe('vendor booking flow', () => {
   it('quotes, holds, adds info, checks out to a draft order, and a paid webhook books the table', async () => {
     const quote = parse(
       await handler(
-        authed('GET', `/vendor/events/${EVENT_ID}/quote`, undefined, {
-          tableId: 'B2',
-          dates: '2026-10-24,2026-10-25',
+        authed('POST', `/vendor/events/${EVENT_ID}/quote`, {
+          lines: [{ tableId: 'B2', dates: ['2026-10-24', '2026-10-25'] }],
           rate: 'poke_bucks',
         }),
       ),
@@ -134,16 +133,15 @@ describe('vendor booking flow', () => {
     const held = parse(
       await handler(
         authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
-          tableId: 'B2',
-          dates: ['2026-10-24', '2026-10-25'],
+          lines: [{ tableId: 'B2', dates: ['2026-10-24', '2026-10-25'] }],
           rate: 'poke_bucks',
         }),
       ),
     );
     expect(held.status).toBe(201);
     const hr = HoldResponse.parse(held.body);
-    expect(hr.quote.rowLabel).toBe('Row B · Main Hall');
-    expect(hr.hold.dates).toHaveLength(2);
+    expect(hr.quote.lines[0]!.rowLabel).toBe('Row B · Main Hall');
+    expect(hr.hold.tables[0]!.dates).toHaveLength(2);
     // Nothing saved yet, so the info step is seeded from the vendor profile.
     expect(hr.vendorInfo).toBeUndefined();
     expect(hr.prefill).toMatchObject({ tableName: "Maya's Card Corner", phone: '4105550100' });
@@ -243,13 +241,57 @@ describe('vendor booking flow', () => {
     expect(EventVendorList.parse(who.body).vendors).toEqual([]);
   });
 
+  it('books two tables with different days in one order', async () => {
+    const held = parse(
+      await handler(
+        authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
+          lines: [
+            { tableId: 'B1', dates: ['2026-10-24', '2026-10-25'] },
+            { tableId: 'B3', dates: ['2026-10-25'] },
+          ],
+          rate: 'standard',
+        }),
+      ),
+    );
+    expect(held.status).toBe(201);
+    const hr = HoldResponse.parse(held.body);
+    expect(hr.hold.tables.map((t) => t.tableId)).toEqual(['B1', 'B3']);
+    expect(hr.quote.totalCents).toBe(60000);
+    await handler(authed('PATCH', `/vendor/holds/${hr.hold.id}`, { vendorInfo }));
+    const co = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
+    expect(co.status).toBe(201);
+    expect(shop.drafts[0]!.title).toBe(
+      'Halloween Fest · 2 tables (B1, B3) · Sat Oct 24 + Sun Oct 25',
+    );
+    expect(shop.drafts[0]!.attributes.tableId).toBe('B1,B3');
+    const paid = parse(
+      await webhookHandler(
+        webhook('orders/paid', {
+          id: 778,
+          name: '#1002',
+          note_attributes: [{ name: 'orderId', value: co.body.orderId }],
+        }),
+      ),
+    );
+    expect(paid.status).toBe(200);
+    expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#B1')?.orderId).toBe(co.body.orderId);
+    expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-25#B3')?.orderId).toBe(co.body.orderId);
+    expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#B3')).toBeUndefined();
+    const vo = VendorOrder.parse(
+      parse(await handler(authed('GET', `/vendor/orders/${co.body.orderId}`))).body,
+    );
+    expect(vo.lines).toHaveLength(2);
+    expect(vo.loadInLabel).toBe('Sat Oct 24 · 9am');
+    const who = parse(await publicHandler(baseReq('GET', `/public/events/${EVENT_ID}/vendors`)));
+    expect(EventVendorList.parse(who.body).vendors.map((v) => v.tableId)).toEqual(['B1', 'B3']);
+  });
+
   it('rejects anyone without a vendor and expired holds', async () => {
     db.items.delete(`VENDOR#${VENDOR}\u0000MEMBER#${SUB}`);
     const res = parse(
       await handler(
         authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
-          tableId: 'A1',
-          dates: ['2026-10-24'],
+          lines: [{ tableId: 'A1', dates: ['2026-10-24'] }],
           rate: 'standard',
         }),
       ),
@@ -262,8 +304,7 @@ describe('vendor booking flow', () => {
     const held = parse(
       await handler(
         authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
-          tableId: 'A1',
-          dates: ['2026-10-24'],
+          lines: [{ tableId: 'A1', dates: ['2026-10-24'] }],
           rate: 'standard',
         }),
       ),
@@ -305,8 +346,7 @@ describe('vendor profile', () => {
     const held = parse(
       await handler(
         authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
-          tableId: 'B3',
-          dates: ['2026-10-24'],
+          lines: [{ tableId: 'B3', dates: ['2026-10-24'] }],
           rate: 'standard',
         }),
       ),
@@ -364,8 +404,7 @@ describe('webhooks', () => {
     const held = parse(
       await handler(
         authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
-          tableId: 'A1',
-          dates: ['2026-10-24'],
+          lines: [{ tableId: 'A1', dates: ['2026-10-24'] }],
           rate: 'standard',
         }),
       ),

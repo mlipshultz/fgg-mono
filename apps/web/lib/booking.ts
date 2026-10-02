@@ -1,4 +1,4 @@
-import type { EventAvailability, FloorPlan, FloorTable, IsoDate } from '@fgg/types';
+import type { EventAvailability, FloorPlan, FloorTable, IsoDate, Order } from '@fgg/types';
 import { dayOfWeek, parseIsoDate } from './dates';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -30,14 +30,74 @@ export function fmtTime(hhmm: string): string {
   return m ? `${hour}:${String(m).padStart(2, '0')}${suffix}` : `${hour}${suffix}`;
 }
 
-/** Table ids unavailable on ANY of the selected dates. */
-export function unavailableFor(availability: EventAvailability, dates: IsoDate[]): Set<string> {
-  const out = new Set<string>();
+/** For every table on the plan, the event days it can still be booked on. */
+export function openDaysByTable(
+  plan: FloorPlan,
+  availability: EventAvailability,
+): Map<string, Set<IsoDate>> {
+  const out = new Map<string, Set<IsoDate>>(plan.tables.map((t) => [t.id, new Set<IsoDate>()]));
   for (const day of availability.days) {
-    if (!dates.includes(day.date)) continue;
-    for (const id of day.unavailable) out.add(id);
+    const taken = new Set(day.unavailable);
+    for (const t of plan.tables) if (!taken.has(t.id)) out.get(t.id)!.add(day.date);
   }
   return out;
+}
+
+/** One colour and line direction per event day (the last N of this list, so a two-day event is
+ *  aqua "/" + yellow "\\" and a three-day event adds pink "—" for its first day). */
+export const DAY_MARKS = [
+  { color: 'var(--color-pink)', angle: '0deg', name: 'pink' },
+  { color: 'var(--color-aqua)', angle: '45deg', name: 'aqua' },
+  { color: 'var(--color-yellow)', angle: '-45deg', name: 'yellow' },
+] as const;
+
+export function dayMark(eventDays: IsoDate[], date: IsoDate) {
+  const i = eventDays.indexOf(date);
+  const offset = Math.max(0, DAY_MARKS.length - eventDays.length);
+  return DAY_MARKS[Math.min(DAY_MARKS.length - 1, offset + Math.max(0, i))]!;
+}
+
+/** CSS background-image layering one stripe pattern per open day; undefined when open every day. */
+export function stripesFor(
+  eventDays: IsoDate[],
+  openDays: ReadonlySet<IsoDate>,
+): string | undefined {
+  if (openDays.size === 0 || openDays.size === eventDays.length) return undefined;
+  return eventDays
+    .filter((d) => openDays.has(d))
+    .map((d) => {
+      const m = dayMark(eventDays, d);
+      return `repeating-linear-gradient(${m.angle}, ${m.color} 0 3px, transparent 3px 8px)`;
+    })
+    .join(', ');
+}
+
+/** A single day's stripe, for filter chips and legends. */
+export function stripeFor(eventDays: IsoDate[], date: IsoDate): string {
+  const m = dayMark(eventDays, date);
+  return `repeating-linear-gradient(${m.angle}, ${m.color} 0 3px, transparent 3px 8px)`;
+}
+
+/** "Sat" / "Sat + Sun" / "All days" */
+export function daysShort(eventDays: IsoDate[], dates: IsoDate[]): string {
+  if (dates.length === eventDays.length)
+    return eventDays.length === 1 ? dayLabel(dates[0]!) : 'All days';
+  return dates.map((d) => dayOfWeek(d)).join(' + ');
+}
+
+/** Every table line of an order. */
+export function tableLinesOf(order: Pick<Order, 'lines'>) {
+  return order.lines.flatMap((l) => (l.type === 'table' ? [l] : []));
+}
+/** "B7" or "B7, B8" */
+export function tablesLabel(order: Pick<Order, 'lines'>): string {
+  return tableLinesOf(order)
+    .map((l) => l.tableId)
+    .join(', ');
+}
+/** Union of booked days, sorted. */
+export function orderDates(order: Pick<Order, 'lines'>): IsoDate[] {
+  return [...new Set(tableLinesOf(order).flatMap((l) => l.dates))].sort();
 }
 
 export function tableById(plan: FloorPlan, id: string): FloorTable | undefined {

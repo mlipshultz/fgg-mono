@@ -1,13 +1,15 @@
 'use client';
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  EventFloorPlan,
-  HoldResponse,
-  IsoDate,
-  TableRate,
-  VendorInfo,
-  VendorInfoInput,
+import {
+  MAX_TABLES_PER_ORDER,
+  type EventFloorPlan,
+  type HoldResponse,
+  type IsoDate,
+  type Quote,
+  type TableRate,
+  type VendorInfo,
+  type VendorInfoInput,
 } from '@fgg/types';
 import { Button } from '@/components/Button';
 import { Field, authStyles as a } from '@/components/auth/AuthCard';
@@ -29,12 +31,13 @@ import {
   countdown,
   dayLabel,
   daysLabel,
+  daysShort,
   fmtCents,
-  nearbyText,
+  openDaysByTable,
+  stripeFor,
   tableById,
-  unavailableFor,
 } from '@/lib/booking';
-import { shortDateLabel } from '@/lib/dates';
+import { dayOfWeek, shortDateLabel } from '@/lib/dates';
 import { FloorPlanMap } from './FloorPlanMap';
 import styles from './book.module.css';
 
@@ -51,15 +54,22 @@ function useCountdown(expiresAt: string | undefined) {
   return expiresAt ? countdown(expiresAt, now) : null;
 }
 
+interface CartLine {
+  tableId: string;
+  dates: IsoDate[];
+}
+const byTable = (a: CartLine, b: CartLine) =>
+  a.tableId.localeCompare(b.tableId, 'en', { numeric: true });
+
 export function BookFlow() {
   const { user } = useAuth();
   const [slug, setSlug] = useState<string | null>(null);
   const [data, setData] = useState<EventFloorPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [dates, setDates] = useState<IsoDate[]>([]);
-  const [picked, setPicked] = useState<string | null>(null);
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [filterDay, setFilterDay] = useState<IsoDate | null>(null);
   const [rate, setRate] = useState<TableRate>('standard');
-  const [quoteNearby, setQuoteNearby] = useState<string | null>(null);
+  const [quote, setQuote] = useState<Quote | null>(null);
   const [hold, setHold] = useState<HoldResponse | null>(null);
   const [step, setStep] = useState<Step>(1);
   const [busy, setBusy] = useState(false);
@@ -80,7 +90,6 @@ export function BookFlow() {
       .then(async (d) => {
         if (!alive) return;
         setData(d);
-        setDates(d.event.days.map((x) => x.date));
         try {
           const saved = sessionStorage.getItem(HOLD_KEY);
           if (saved) {
@@ -90,8 +99,7 @@ export function BookFlow() {
               if (!alive) return;
               if (new Date(h.hold.expiresAt).getTime() > Date.now()) {
                 setHold(h);
-                setDates(h.hold.dates);
-                setPicked(h.hold.tableId);
+                setCart(h.hold.tables.map((t) => ({ tableId: t.tableId, dates: t.dates })));
                 setRate(h.hold.rate);
                 setStep(h.vendorInfo ? 3 : 2);
               } else sessionStorage.removeItem(HOLD_KEY);
@@ -121,52 +129,109 @@ export function BookFlow() {
     return () => clearInterval(id);
   }, [slug, step]);
 
-  const unavailable = useMemo(
-    () => (data ? unavailableFor(data.availability, dates) : new Set<string>()),
-    [data, dates],
+  const eventDays = useMemo(() => (data ? data.event.days.map((d) => d.date) : []), [data]);
+  const openDays = useMemo(
+    () => (data ? openDaysByTable(data.floorPlan, data.availability) : new Map()),
+    [data],
   );
-  useEffect(() => {
-    if (picked && unavailable.has(picked) && !hold) setPicked(null);
-  }, [picked, unavailable, hold]);
 
-  const table = data && picked ? tableById(data.floorPlan, picked) : undefined;
+  // If availability moves under the cart, drop the days (or tables) that went away.
+  useEffect(() => {
+    if (hold || !data) return;
+    setCart((cur) => {
+      let changed = false;
+      const next = cur.flatMap((l) => {
+        const open = openDays.get(l.tableId) ?? new Set<IsoDate>();
+        const dates = l.dates.filter((d) => open.has(d));
+        if (dates.length === l.dates.length) return [l];
+        changed = true;
+        return dates.length ? [{ ...l, dates }] : [];
+      });
+      return changed ? next : cur;
+    });
+  }, [openDays, hold, data]);
+
+  // Server quote for exact prices (overrides / windows); a local estimate fills in meanwhile.
+  useEffect(() => {
+    if (!data || hold || cart.length === 0) {
+      setQuote(null);
+      return;
+    }
+    const seq = ++quoteSeq.current;
+    const t = setTimeout(() => {
+      getQuote(data.event.id, { lines: cart, rate })
+        .then((q) => {
+          if (seq === quoteSeq.current) setQuote(q);
+        })
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [data, cart, rate, hold]);
+
   const unit = data
     ? rate === 'poke_bucks'
       ? data.event.pokeBucksRateCents
       : data.event.tableRateCents
     : 0;
-  const unitShown = hold?.quote.unitCents ?? unit;
-  const total = hold?.quote.totalCents ?? unitShown * dates.length;
-  const nearby = quoteNearby ?? (data && table ? nearbyText(data.floorPlan, table) : '');
-
-  // Server quote for the nearby text + exact price (overrides / windows).
-  useEffect(() => {
-    if (!data || !picked || hold || dates.length === 0) return;
-    const seq = ++quoteSeq.current;
-    getQuote(data.event.id, { tableId: picked, dates, rate })
-      .then((q) => {
-        if (seq === quoteSeq.current) setQuoteNearby(q.nearby);
-      })
-      .catch(() => {});
-  }, [data, picked, dates, rate, hold]);
+  const served = hold?.quote ?? quote;
+  const priced =
+    served &&
+    served.rate === rate &&
+    served.lines.length === cart.length &&
+    cart.every((l) =>
+      served.lines.some(
+        (x) => x.tableId === l.tableId && x.dates.join() === [...l.dates].sort().join(),
+      ),
+    )
+      ? served
+      : null;
+  const lineCents = (l: CartLine) =>
+    priced?.lines.find((x) => x.tableId === l.tableId)?.lineCents ?? unit * l.dates.length;
+  const lineUnit = (l: CartLine) =>
+    priced?.lines.find((x) => x.tableId === l.tableId)?.unitCents ?? unit;
+  const subtotal = priced?.subtotalCents ?? cart.reduce((n, l) => n + lineCents(l), 0);
+  const total = priced?.totalCents ?? subtotal;
 
   const cd = useCountdown(hold?.hold.expiresAt);
   useEffect(() => {
     if (cd?.expired && hold && step !== 3) setExpired(true);
   }, [cd?.expired, hold, step]);
 
-  const toggleDate = (d: IsoDate) =>
-    setDates((cur) => {
-      if (cur.includes(d)) return cur.length > 1 ? cur.filter((x) => x !== d) : cur;
-      return data!.event.days.map((x) => x.date).filter((x) => x === d || cur.includes(x));
+  const toggleTable = (id: string) => {
+    if (hold) return;
+    setCart((cur) => {
+      if (cur.some((l) => l.tableId === id)) return cur.filter((l) => l.tableId !== id);
+      if (cur.length >= MAX_TABLES_PER_ORDER) {
+        setError(`You can book up to ${MAX_TABLES_PER_ORDER} tables in one order.`);
+        return cur;
+      }
+      const open = openDays.get(id) ?? new Set<IsoDate>();
+      const dates = eventDays.filter((d) => open.has(d));
+      if (!dates.length) return cur;
+      setError(null);
+      return [...cur, { tableId: id, dates }].sort(byTable);
     });
+  };
+  const toggleLineDay = (id: string, d: IsoDate) =>
+    setCart((cur) =>
+      cur.map((l) => {
+        if (l.tableId !== id) return l;
+        const has = l.dates.includes(d);
+        if (has && l.dates.length === 1) return l;
+        const dates = has
+          ? l.dates.filter((x) => x !== d)
+          : eventDays.filter((x) => x === d || l.dates.includes(x));
+        return { ...l, dates };
+      }),
+    );
+  const removeLine = (id: string) => setCart((cur) => cur.filter((l) => l.tableId !== id));
 
   const doHold = async () => {
-    if (!data || !picked) return;
+    if (!data || cart.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      const h = await createHold(data.event.id, { tableId: picked, dates, rate });
+      const h = await createHold(data.event.id, { lines: cart, rate });
       setHold(h);
       sessionStorage.setItem(
         HOLD_KEY,
@@ -176,13 +241,12 @@ export function BookFlow() {
       window.scrollTo({ top: 0 });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'table_unavailable') {
-        setError(`Someone just grabbed ${picked}. Pick another table.`);
+        setError(`${e.message}. The map is refreshed; check your cart and try again.`);
         if (slug)
           getEventFloorPlan(slug)
             .then((d) => setData(d))
             .catch(() => {});
-        setPicked(null);
-      } else setError(e instanceof Error ? e.message : 'Could not hold that table');
+      } else setError(e instanceof Error ? e.message : 'Could not hold those tables');
     } finally {
       setBusy(false);
     }
@@ -198,7 +262,7 @@ export function BookFlow() {
     }
     sessionStorage.removeItem(HOLD_KEY);
     setHold(null);
-    setQuoteNearby(null);
+    setQuote(null);
     setExpired(false);
     setStep(1);
     if (slug)
@@ -236,6 +300,9 @@ export function BookFlow() {
     }
   };
 
+  const cartLabel = cart.map((l) => l.tableId).join(', ');
+  const tablesWord = cart.length === 1 ? 'table' : 'tables';
+
   if (expired) {
     return (
       <main className={styles.page}>
@@ -243,8 +310,8 @@ export function BookFlow() {
           <span className={styles.eyebrow}>Time&apos;s up</span>
           <h1 className={styles.stepTitle}>Your hold expired</h1>
           <p className={a.lead}>
-            We held {hold?.hold.tableId} for 10 minutes. It&apos;s back on the map now, so pick it
-            again (or a neighbor) and we&apos;ll hold it fresh.
+            We held {cartLabel || 'your tables'} for 10 minutes. They&apos;re back on the map now,
+            so pick again and we&apos;ll hold them fresh.
           </p>
           <div>
             <Button type="button" variant="primary" size="md" onClick={() => void chooseAnother()}>
@@ -285,7 +352,10 @@ export function BookFlow() {
   const ev = data.event;
   const eyebrow = `${ev.name} · ${shortDateLabel(ev.startDate, ev.endDate)} · ${ev.venue.name}`;
   const totalTables = data.floorPlan.tables.length;
-  const availCount = data.floorPlan.tables.filter((t) => !unavailable.has(t.id)).length;
+  const availCount = data.floorPlan.tables.filter(
+    (t) => (openDays.get(t.id)?.size ?? 0) > 0,
+  ).length;
+  const multiDay = eventDays.length > 1;
 
   const topbar = (
     <div className={styles.topbar}>
@@ -328,6 +398,7 @@ export function BookFlow() {
 
   if (step === 3 && hold) {
     const q = hold.quote;
+    const allDates = [...new Set(q.lines.flatMap((l) => l.dates))].sort();
     return (
       <main className={styles.page}>
         {topbar}
@@ -344,20 +415,24 @@ export function BookFlow() {
                 )}
                 <div>
                   <div className={styles.summaryTitle}>
-                    {ev.name} · Table {q.tableId}
+                    {ev.name} · {q.lines.length === 1 ? 'Table' : 'Tables'}{' '}
+                    {q.lines.map((l) => l.tableId).join(', ')}
                   </div>
                   <div className={styles.summarySub}>
-                    {daysLabel(q.dates)} · {ev.venue.name}
+                    {daysLabel(allDates)} · {ev.venue.name}
                   </div>
                 </div>
               </div>
-              <div className={styles.line}>
-                <span>
-                  {RATE_LABEL[q.rate]} table × {q.dates.length}{' '}
-                  {q.dates.length === 1 ? 'day' : 'days'}
-                </span>
-                <span>{fmtCents(q.amountCents)}</span>
-              </div>
+              {q.lines.map((l) => (
+                <div className={styles.line} key={l.tableId}>
+                  <span>
+                    Table {l.tableId} · {RATE_LABEL[q.rate]} × {l.dates.length}{' '}
+                    {l.dates.length === 1 ? 'day' : 'days'}
+                    {multiDay ? ` (${daysShort(eventDays, l.dates)})` : ''}
+                  </span>
+                  <span>{fmtCents(l.lineCents)}</span>
+                </div>
+              ))}
               {q.feeCents > 0 && (
                 <div className={`${styles.line} ${styles.lineMuted}`}>
                   <span>Processing fee</span>
@@ -398,7 +473,7 @@ export function BookFlow() {
                 ← Back
               </button>
               <button type="button" className={v.back} onClick={() => void chooseAnother()}>
-                Choose a different table
+                Change tables
               </button>
             </div>
           </div>
@@ -408,24 +483,75 @@ export function BookFlow() {
   }
 
   // Step 1
-  const panelBody = (
-    <>
-      <div className={styles.selRow}>
-        <span className={`${styles.selTile} ${picked ? '' : styles.selTileEmpty}`}>
-          {picked ?? '—'}
-        </span>
-        <div>
-          <div className={styles.selName}>{picked ? `Table ${picked}` : 'Pick a table'}</div>
-          <div className={styles.selSub}>
-            {table ? `Row ${table.row} · Main Hall` : 'Tap any white table on the map'}
-          </div>
-        </div>
-      </div>
-      {picked && (
-        <div className={styles.nearby}>
-          <b>Nearby:</b> {nearby}
+  const cartList = (
+    <div className={styles.cart}>
+      {cart.length === 0 && (
+        <div className={styles.cartEmpty}>
+          Tap any open table on the map. Add as many as you need.
         </div>
       )}
+      {cart.map((l) => {
+        const t = tableById(data.floorPlan, l.tableId);
+        const open = openDays.get(l.tableId) ?? new Set<IsoDate>();
+        return (
+          <div className={styles.cartLine} key={l.tableId}>
+            <span className={styles.cartTile}>{l.tableId}</span>
+            <div className={styles.cartBody}>
+              <span className={styles.cartRow}>
+                {t ? `Row ${t.row}` : 'Main Hall'} · {fmtCents(lineUnit(l))}/day
+              </span>
+              {multiDay && (
+                <div className={styles.cartDays} role="group" aria-label={`Days for ${l.tableId}`}>
+                  {eventDays.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={styles.cartDay}
+                      aria-pressed={l.dates.includes(d)}
+                      disabled={!!hold || !open.has(d)}
+                      title={open.has(d) ? dayLabel(d) : `${dayLabel(d)} · taken`}
+                      onClick={() => toggleLineDay(l.tableId, d)}
+                    >
+                      {dayOfWeek(d)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className={styles.cartRight}>
+              <span className={styles.cartPrice}>{fmtCents(lineCents(l))}</span>
+              {!hold && (
+                <button
+                  type="button"
+                  className={styles.cartRemove}
+                  onClick={() => removeLine(l.tableId)}
+                  aria-label={`Remove ${l.tableId}`}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const panelBody = (
+    <>
+      <div>
+        <div className={styles.selName}>
+          {cart.length ? `${cart.length} ${tablesWord} picked` : 'Pick your tables'}
+        </div>
+        <div className={styles.selSub}>
+          {cart.length
+            ? multiDay
+              ? 'Adjust days per table below.'
+              : 'Add more from the map, or continue.'
+            : 'Every table is 8ft with 2 chairs and 2 vendor passes.'}
+        </div>
+      </div>
+      {cartList}
       <div className={styles.rates}>
         <span className={styles.rateLabel}>Your rate</span>
         <button
@@ -459,11 +585,23 @@ export function BookFlow() {
       </div>
       <div className={styles.lines}>
         <div className={styles.line}>
-          <span>{picked ? `Table ${picked}` : 'Table'}</span>
           <span>
-            {fmtCents(unitShown)} × {dates.length} {dates.length === 1 ? 'day' : 'days'}
+            {cart.length} {tablesWord} · {cart.reduce((n, l) => n + l.dates.length, 0)} table-days
           </span>
+          <span>{fmtCents(subtotal)}</span>
         </div>
+        {priced && priced.feeCents > 0 && (
+          <div className={`${styles.line} ${styles.lineMuted}`}>
+            <span>Processing fee</span>
+            <span>{fmtCents(priced.feeCents)}</span>
+          </div>
+        )}
+        {priced && priced.taxCents > 0 && (
+          <div className={`${styles.line} ${styles.lineMuted}`}>
+            <span>Tax</span>
+            <span>{fmtCents(priced.taxCents)}</span>
+          </div>
+        )}
         <div className={styles.total}>
           <span>Total</span>
           <span>{fmtCents(total)}</span>
@@ -478,10 +616,10 @@ export function BookFlow() {
         <>
           {countdownChip}
           <Button type="button" variant="primary" size="lg" block onClick={() => setStep(2)}>
-            Continue with {hold.hold.tableId} →
+            Continue with {cartLabel} →
           </Button>
           <button type="button" className={v.back} onClick={() => void chooseAnother()}>
-            Choose a different table
+            Change tables
           </button>
         </>
       ) : (
@@ -490,14 +628,18 @@ export function BookFlow() {
           variant="primary"
           size="lg"
           block
-          disabled={!picked || busy}
+          disabled={cart.length === 0 || busy}
           onClick={() => void doHold()}
         >
-          {busy ? 'Holding…' : picked ? `Hold ${picked} & continue →` : 'Pick a table to continue'}
+          {busy
+            ? 'Holding…'
+            : cart.length
+              ? `Hold ${cart.length === 1 ? cartLabel : `${cart.length} tables`} & continue →`
+              : 'Pick a table to continue'}
         </Button>
       )}
       <span className={styles.holdNote}>
-        We hold your table for 10 minutes while you finish checkout.
+        We hold your tables for 10 minutes while you finish checkout.
       </span>
     </>
   );
@@ -510,50 +652,62 @@ export function BookFlow() {
           <div className={styles.headRow}>
             <div>
               <span className={styles.eyebrow}>{eyebrow}</span>
-              <h1 className={styles.h2}>Pick your table</h1>
+              <h1 className={styles.h2}>Pick your tables</h1>
             </div>
             <span className={styles.avail}>
               {availCount} of {totalTables} available
             </span>
           </div>
-          <div className={styles.days} role="group" aria-label="Which days">
-            <span>Days</span>
-            {ev.days.map((d) => (
-              <button
-                key={d.date}
-                type="button"
-                className={styles.dayChip}
-                aria-pressed={dates.includes(d.date)}
-                onClick={() => toggleDate(d.date)}
-                disabled={!!hold}
-              >
-                {dayLabel(d.date)}
-              </button>
-            ))}
-            {ev.days.length > 1 && (
+          {multiDay && (
+            <div className={styles.days} role="group" aria-label="Show tables open on">
+              <span>Open on</span>
               <button
                 type="button"
                 className={styles.dayChip}
-                aria-pressed={dates.length === ev.days.length}
-                onClick={() => setDates(ev.days.map((d) => d.date))}
-                disabled={!!hold}
+                aria-pressed={filterDay === null}
+                onClick={() => setFilterDay(null)}
               >
-                {ev.days.length === 2 ? 'Both days' : 'All days'}
+                All days
               </button>
-            )}
-          </div>
+              {eventDays.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={`${styles.dayChip} ${styles.dayChipMark}`}
+                  style={{ backgroundImage: stripeFor(eventDays, d) }}
+                  aria-pressed={filterDay === d}
+                  onClick={() => setFilterDay((cur) => (cur === d ? null : d))}
+                >
+                  <span>{dayLabel(d)}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <FloorPlanMap
             plan={data.floorPlan}
-            unavailable={unavailable}
-            picked={picked}
-            onPick={(id) => !hold && setPicked(id)}
+            eventDays={eventDays}
+            openDays={openDays}
+            picked={new Set(cart.map((l) => l.tableId))}
+            filterDay={filterDay}
+            disabled={!!hold}
+            onToggle={toggleTable}
           />
           <div className={styles.legend}>
             <span>
-              <span className={styles.swatch} /> Available
+              <span className={styles.swatch} /> Open all days
             </span>
+            {multiDay &&
+              eventDays.map((d) => (
+                <span key={d}>
+                  <span
+                    className={`${styles.swatch} ${styles.swatchStripe}`}
+                    style={{ backgroundImage: stripeFor(eventDays, d) }}
+                  />{' '}
+                  {dayOfWeek(d)} only
+                </span>
+              ))}
             <span>
-              <span className={`${styles.swatch} ${styles.swatchPick}`} /> Your pick
+              <span className={`${styles.swatch} ${styles.swatchPick}`} /> In your cart
             </span>
             <span>
               <span className={`${styles.swatch} ${styles.swatchTaken}`} /> Taken
@@ -563,20 +717,20 @@ export function BookFlow() {
             </span>
           </div>
         </div>
-        <aside className={styles.panel} aria-label="Your selection">
+        <aside className={styles.panel} aria-label="Your tables">
           {panelBody}
         </aside>
       </div>
-      <div className={styles.sheet} role="dialog" aria-label="Your selection">
+      <div className={styles.sheet} role="dialog" aria-label="Your tables">
         <span className={styles.grab} aria-hidden="true" />
         <div className={styles.sheetSel}>
-          <span className={styles.sheetTile}>{picked ?? '—'}</span>
+          <span className={styles.sheetTile}>{cart.length || '—'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className={styles.sheetName}>
-              {picked && table ? `Table ${picked} · Row ${table.row}` : 'Pick a table'}
+              {cart.length ? `${cart.length} ${tablesWord} · ${cartLabel}` : 'Pick your tables'}
             </div>
             <div className={styles.sheetSub}>
-              {picked ? nearby : 'Tap any white table on the map.'}
+              {cart.length ? `${fmtCents(total)} total` : 'Tap any open table on the map.'}
             </div>
           </div>
         </div>
@@ -607,7 +761,7 @@ export function BookFlow() {
         )}
         {hold ? (
           <Button type="button" variant="primary" size="md" block onClick={() => setStep(2)}>
-            Continue with {hold.hold.tableId} · {fmtCents(total)} →
+            Continue · {fmtCents(total)} →
           </Button>
         ) : (
           <Button
@@ -615,10 +769,12 @@ export function BookFlow() {
             variant="primary"
             size="md"
             block
-            disabled={!picked || busy}
+            disabled={cart.length === 0 || busy}
             onClick={() => void doHold()}
           >
-            {picked ? `Hold ${picked} · ${fmtCents(total)} →` : 'Pick a table'}
+            {cart.length
+              ? `Hold ${cart.length} ${tablesWord} · ${fmtCents(total)} →`
+              : 'Pick a table'}
           </Button>
         )}
       </div>

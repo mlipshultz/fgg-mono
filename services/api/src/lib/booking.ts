@@ -2,6 +2,7 @@ import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { ulid } from 'ulid';
 import type {
   Event,
+  HeldTable,
   Order,
   OrderHistoryEntry,
   OrderStatus,
@@ -65,6 +66,21 @@ export interface CreateHoldArgs {
   now?: Date;
 }
 
+/** One entry per table (items are per table-day), in table order. */
+export function heldTables(items: HoldItem[]): HeldTable[] {
+  const byTable = new Map<string, HoldItem>();
+  for (const it of items) if (!byTable.has(it.tableId)) byTable.set(it.tableId, it);
+  return [...byTable.values()]
+    .sort((a, b) => a.tableId.localeCompare(b.tableId, 'en', { numeric: true }))
+    .map((h) => ({
+      tableId: h.tableId,
+      dates: [...h.dates].sort(),
+      unitCents: h.unitCents,
+      amountCents: h.amountCents,
+      pricingInputs: h.pricingInputs as HeldTable['pricingInputs'],
+    }));
+}
+
 /** Hold items → the public TableHold shape. */
 export function toTableHold(items: HoldItem[]): TableHold {
   const h = items[0]!;
@@ -73,39 +89,41 @@ export function toTableHold(items: HoldItem[]): TableHold {
     eventId: h.eventId,
     vendorId: h.vendorId,
     heldBy: h.heldBy,
-    tableId: h.tableId,
-    dates: [...h.dates].sort(),
     rate: h.rate,
-    unitCents: h.unitCents,
-    amountCents: h.amountCents,
-    pricingInputs: h.pricingInputs as TableHold['pricingInputs'],
+    tables: heldTables(items),
+    subtotalCents: h.subtotalCents,
     expiresAt: h.expiresAt,
     createdAt: h.createdAt,
   };
 }
 
-/** Rebuild the stored quote (fee/tax/total travel with the hold). */
-export function quoteFromHold(items: HoldItem[], rowLabel: string, nearby: string): Quote {
+/** Rebuild the stored quote (prices, fee, tax and total travel with the hold). */
+export function quoteFromHold(
+  items: HoldItem[],
+  describe: (tableId: string) => { rowLabel: string; nearby: string },
+): Quote {
   const h = items[0]!;
   return {
-    tableId: h.tableId,
-    dates: [...h.dates].sort(),
     rate: h.rate,
-    unitCents: h.unitCents,
-    amountCents: h.amountCents,
+    lines: heldTables(items).map((t) => ({
+      tableId: t.tableId,
+      dates: t.dates,
+      unitCents: t.unitCents,
+      lineCents: t.amountCents,
+      pricingInputs: t.pricingInputs,
+      ...describe(t.tableId),
+    })),
+    subtotalCents: h.subtotalCents,
     feeCents: h.feeCents,
     taxCents: h.taxCents,
     totalCents: h.totalCents,
-    pricingInputs: h.pricingInputs as Quote['pricingInputs'],
-    rowLabel,
-    nearby,
   };
 }
 
 /**
- * Race-safe hold (docs/PLAN.md §3.4): one HOLD item per day, all-or-nothing, each conditioned
- * on no live hold and no booked table for that day. Expired holds are removed first so a stale
- * item (TTL lags) never blocks a real vendor.
+ * Race-safe hold (docs/PLAN.md §3.4): one HOLD item per table-day, all-or-nothing, each
+ * conditioned on no live hold and no booked table for that day. Expired holds are removed first
+ * so a stale item (TTL lags) never blocks a real vendor. The whole cart succeeds or fails.
  */
 export async function createHold(args: CreateHoldArgs): Promise<HoldItem[]> {
   const now = args.now ?? new Date();
@@ -114,36 +132,40 @@ export async function createHold(args: CreateHoldArgs): Promise<HoldItem[]> {
   for (const prev of await listVendorHolds(args.vendorId, event.id)) {
     await deleteItem({ PK: prev.PK, SK: prev.SK });
   }
-  // Clear expired holds on the requested table/days (best effort).
+  // Clear expired holds on the requested table-days (best effort).
+  const wanted = new Set(quote.lines.flatMap((l) => l.dates.map((d) => `${l.tableId}#${d}`)));
   const stale = (await listHolds(event.id)).filter(
-    (h) => h.tableId === quote.tableId && quote.dates.includes(h.date) && isExpired(h, now),
+    (h) => wanted.has(`${h.tableId}#${h.date}`) && isExpired(h, now),
   );
   for (const s of stale) await deleteItem({ PK: s.PK, SK: s.SK });
 
   const holdId = ulid();
   const expiresAt = new Date(now.getTime() + args.holdMinutes * 60_000).toISOString();
-  const items: HoldItem[] = quote.dates.map((date) => ({
-    ...keys.hold(event.id, date, quote.tableId),
-    GSI1PK: `VENDOR#${args.vendorId}`,
-    GSI1SK: `HOLD#${holdId}`,
-    holdId,
-    eventId: event.id,
-    vendorId: args.vendorId,
-    heldBy: args.heldBy,
-    tableId: quote.tableId,
-    date,
-    dates: quote.dates,
-    rate: quote.rate,
-    unitCents: quote.unitCents,
-    amountCents: quote.amountCents,
-    feeCents: quote.feeCents,
-    taxCents: quote.taxCents,
-    totalCents: quote.totalCents,
-    pricingInputs: quote.pricingInputs,
-    expiresAt,
-    ttl: epoch(expiresAt),
-    createdAt: now.toISOString(),
-  }));
+  const items: HoldItem[] = quote.lines.flatMap((line) =>
+    line.dates.map((date) => ({
+      ...keys.hold(event.id, date, line.tableId),
+      GSI1PK: `VENDOR#${args.vendorId}`,
+      GSI1SK: `HOLD#${holdId}`,
+      holdId,
+      eventId: event.id,
+      vendorId: args.vendorId,
+      heldBy: args.heldBy,
+      tableId: line.tableId,
+      date,
+      dates: line.dates,
+      rate: quote.rate,
+      unitCents: line.unitCents,
+      amountCents: line.lineCents,
+      pricingInputs: line.pricingInputs,
+      subtotalCents: quote.subtotalCents,
+      feeCents: quote.feeCents,
+      taxCents: quote.taxCents,
+      totalCents: quote.totalCents,
+      expiresAt,
+      ttl: epoch(expiresAt),
+      createdAt: now.toISOString(),
+    })),
+  );
   try {
     await ddb.send(
       new TransactWriteCommand({
@@ -163,10 +185,13 @@ export async function createHold(args: CreateHoldArgs): Promise<HoldItem[]> {
     );
   } catch (e) {
     if (isConditionalFailure(e)) {
+      const ids = quote.lines.map((l) => l.tableId);
       throw new HttpError(
         409,
         'table_unavailable',
-        `Table ${quote.tableId} is no longer available on one of those days`,
+        ids.length === 1
+          ? `Table ${ids[0]} is no longer available on one of those days`
+          : `One of ${ids.join(', ')} is no longer available on a selected day`,
       );
     }
     throw e;
@@ -273,9 +298,23 @@ export async function nextPassNumber(ev: Event): Promise<string> {
   return `${eventCode(ev)}-${String(seq).padStart(3, '0')}`;
 }
 
-function tableLine(order: Order): { tableId: string; dates: string[] } | undefined {
-  const line = order.lines.find((l) => l.type === 'table');
-  return line && line.type === 'table' ? { tableId: line.tableId, dates: line.dates } : undefined;
+/** Every table line on an order (a vendor can book several tables at once). */
+export function tableLines(order: Order): { tableId: string; dates: string[] }[] {
+  return order.lines.flatMap((l) =>
+    l.type === 'table' ? [{ tableId: l.tableId, dates: l.dates }] : [],
+  );
+}
+
+/** "B7" or "B7, B8" */
+export function tablesLabel(order: Order): string {
+  return tableLines(order)
+    .map((l) => l.tableId)
+    .join(', ');
+}
+
+/** Union of every booked day, sorted. */
+export function orderDates(order: Order): string[] {
+  return [...new Set(tableLines(order).flatMap((l) => l.dates))].sort();
 }
 
 export interface PaidArgs {
@@ -296,8 +335,8 @@ export class TableTakenError extends Error {}
 
 export async function finalizePaidOrder(args: PaidArgs): Promise<Order> {
   const { order, event } = args;
-  const line = tableLine(order);
-  if (!line) throw new Error(`order ${order.id} has no table line`);
+  const lines = tableLines(order);
+  if (!lines.length) throw new Error(`order ${order.id} has no table line`);
   const paidAt = nowIso();
   const passNumber = order.passNumber ?? (await nextPassNumber(event));
   const paid: Order = {
@@ -312,24 +351,28 @@ export async function finalizePaidOrder(args: PaidArgs): Promise<Order> {
     await ddb.send(
       new TransactWriteCommand({
         TransactItems: [
-          ...line.dates.map((date) => ({
-            Put: {
-              TableName: TABLE,
-              Item: {
-                ...keys.bookedTable(event.id, date, line.tableId),
-                tableId: line.tableId,
-                date,
-                orderId: order.id,
-                vendorId: order.ownerId,
-                bookedAt: paidAt,
+          ...lines.flatMap((line) =>
+            line.dates.map((date) => ({
+              Put: {
+                TableName: TABLE,
+                Item: {
+                  ...keys.bookedTable(event.id, date, line.tableId),
+                  tableId: line.tableId,
+                  date,
+                  orderId: order.id,
+                  vendorId: order.ownerId,
+                  bookedAt: paidAt,
+                },
+                ConditionExpression: 'attribute_not_exists(PK) OR orderId = :oid',
+                ExpressionAttributeValues: { ':oid': order.id },
               },
-              ConditionExpression: 'attribute_not_exists(PK) OR orderId = :oid',
-              ExpressionAttributeValues: { ':oid': order.id },
-            },
-          })),
-          ...line.dates.map((date) => ({
-            Delete: { TableName: TABLE, Key: keys.hold(event.id, date, line.tableId) },
-          })),
+            })),
+          ),
+          ...lines.flatMap((line) =>
+            line.dates.map((date) => ({
+              Delete: { TableName: TABLE, Key: keys.hold(event.id, date, line.tableId) },
+            })),
+          ),
           { Put: { TableName: TABLE, Item: { ...keys.orderIndex(paid, args.startsAt), ...paid } } },
           {
             Put: {
@@ -357,7 +400,8 @@ export async function finalizePaidOrder(args: PaidArgs): Promise<Order> {
       }),
     );
   } catch (e) {
-    if (isConditionalFailure(e)) throw new TableTakenError(`table ${line.tableId} already booked`);
+    if (isConditionalFailure(e))
+      throw new TableTakenError(`one of ${tablesLabel(order)} is already booked`);
     throw e;
   }
   await history(order.id, 'paid', args.by, order.status, args.shopifyOrderName);
@@ -373,7 +417,7 @@ export async function closeOrder(
   by: OrderHistoryEntry['by'],
   note?: string,
 ): Promise<Order> {
-  const line = tableLine(order);
+  const lines = tableLines(order);
   const at = nowIso();
   const next: Order = {
     ...order,
@@ -382,15 +426,17 @@ export async function closeOrder(
     ...(status === 'refunded' ? { refundedAt: at } : {}),
   };
   const frees =
-    line && order.status === 'paid'
-      ? line.dates.map((date) => ({
-          Delete: {
-            TableName: TABLE,
-            Key: keys.bookedTable(event.id, date, line.tableId),
-            ConditionExpression: 'attribute_not_exists(PK) OR orderId = :oid',
-            ExpressionAttributeValues: { ':oid': order.id },
-          },
-        }))
+    order.status === 'paid'
+      ? lines.flatMap((line) =>
+          line.dates.map((date) => ({
+            Delete: {
+              TableName: TABLE,
+              Key: keys.bookedTable(event.id, date, line.tableId),
+              ConditionExpression: 'attribute_not_exists(PK) OR orderId = :oid',
+              ExpressionAttributeValues: { ':oid': order.id },
+            },
+          })),
+        )
       : [];
   await ddb.send(
     new TransactWriteCommand({
@@ -440,8 +486,8 @@ export function loadInLabel(ev: Event, dates: string[]): string | undefined {
 
 export function toVendorOrder(order: Order, ev: Event, venue: Venue): VendorOrder {
   const pe: PublicEvent = toPublicEvent(ev, venue);
-  const line = tableLine(order);
-  const label = line ? loadInLabel(ev, line.dates) : undefined;
+  const dates = orderDates(order);
+  const label = dates.length ? loadInLabel(ev, dates) : undefined;
   return {
     ...order,
     event: {
