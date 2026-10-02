@@ -236,6 +236,34 @@
   background: var(--color-pink);
   box-shadow: 3px 3px 0 var(--color-ink);
 }
+/* Already booked by this vendor (paid). */
+.tableMine {
+  background: var(--color-ink);
+  color: var(--color-white);
+}
+.tableMine:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.mine {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--color-ink);
+  color: var(--color-white);
+  border-radius: var(--radius-tile);
+  padding: 12px 14px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+}
+.mine b {
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-aqua);
+}
 /* Open on some days only: stripes come from inline background-image (one per open day). */
 .tablePartial {
   background-color: var(--color-white);
@@ -410,6 +438,9 @@
 }
 .swatchPick {
   background: var(--color-pink);
+}
+.legend .swatchMine {
+  background: var(--color-ink);
 }
 .swatchTaken {
   background: var(--color-closed);
