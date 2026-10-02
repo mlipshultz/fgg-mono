@@ -1,21 +1,49 @@
 import {
+  AdminOrderList,
   AdminUserList,
   AdminUserRow,
+  type CancelRequestInput,
+  CheckoutResponse,
+  type CompOrderInput,
   type ContactSubmissionInput,
   Dashboard,
   EventAvailability,
+  EventFloorPlan,
   GalleryPage,
+  HoldResponse,
   HomeContent,
   Me,
+  Quote,
+  type QuoteInput,
+  type ReviewInput,
   type Role,
   SavedEventIds,
   type SubscribeInput,
   type UpdateMeInput,
+  VendorApplication,
+  type VendorApplicationInput,
+  VendorApplicationList,
+  type VendorApplicationStatus,
+  VendorDashboard,
+  type VendorInfo,
+  VendorOrder,
+  VendorOrderList,
+  VendorStanding,
   type WaitlistInput,
 } from '@fgg/types';
 import { homeFixture } from './fixtures/home';
 import { galleryFixture } from './fixtures/gallery';
 import { adminUsersFixture, dashboardFixture } from './fixtures/dashboard';
+import {
+  adminOrdersFixture,
+  applicationsFixture,
+  floorPlanResponseFixture,
+  holdFixture,
+  paidOrderFixture,
+  quoteFixture,
+  standingFixture,
+  vendorDashboardFixture,
+} from './fixtures/booking';
 import { getIdToken } from './auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ?? '';
@@ -202,4 +230,284 @@ export async function adminSetRoles(sub: string, roles: Role[]): Promise<AdminUs
       body: JSON.stringify({ roles }),
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Vendor application + booking (Phase 3). Fixtures when there is no API.
+// ---------------------------------------------------------------------------
+
+/** Public: floor plan + live availability for the picker. */
+export async function getEventFloorPlan(idOrSlug: string): Promise<EventFloorPlan> {
+  if (!hasApi) return fake(localize(floorPlanResponseFixture), 300);
+  return EventFloorPlan.parse(
+    await request<unknown>(`/public/events/${encodeURIComponent(idOrSlug)}/floorplan`),
+  );
+}
+
+export async function getVendorStanding(): Promise<VendorStanding> {
+  if (!hasApi) return fake(standingFixture);
+  return VendorStanding.parse(await authedRequest<unknown>('/me/vendor-application'));
+}
+
+export async function submitVendorApplication(
+  input: VendorApplicationInput,
+): Promise<VendorApplication> {
+  if (!hasApi) return fake({ ...applicationsFixture[0]!, ...input, status: 'submitted' as const });
+  return VendorApplication.parse(
+    await authedRequest<unknown>('/me/vendor-application', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function getQuote(eventId: string, input: QuoteInput): Promise<Quote> {
+  if (!hasApi) return fake(quoteFixture(input.tableId, input.dates, input.rate), 200);
+  const params = new URLSearchParams({
+    tableId: input.tableId,
+    dates: input.dates.join(','),
+    rate: input.rate,
+  });
+  return Quote.parse(
+    await authedRequest<unknown>(`/vendor/events/${encodeURIComponent(eventId)}/quote?${params}`),
+  );
+}
+
+export async function createHold(eventId: string, input: QuoteInput): Promise<HoldResponse> {
+  if (!hasApi) return fake(localize(holdFixture(input.tableId, input.dates, input.rate)));
+  return HoldResponse.parse(
+    await authedRequest<unknown>(`/vendor/events/${encodeURIComponent(eventId)}/holds`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function getHold(holdId: string): Promise<HoldResponse> {
+  if (!hasApi) return fake(localize(holdFixture('C4', ['2026-10-24', '2026-10-25'], 'standard')));
+  return HoldResponse.parse(
+    await authedRequest<unknown>(`/vendor/holds/${encodeURIComponent(holdId)}`),
+  );
+}
+
+export async function updateHold(holdId: string, vendorInfo: VendorInfo): Promise<HoldResponse> {
+  if (!hasApi) {
+    const h = localize(holdFixture('C4', ['2026-10-24', '2026-10-25'], 'standard'));
+    return fake({ ...h, vendorInfo });
+  }
+  return HoldResponse.parse(
+    await authedRequest<unknown>(`/vendor/holds/${encodeURIComponent(holdId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ vendorInfo }),
+    }),
+  );
+}
+
+export async function releaseHold(holdId: string): Promise<void> {
+  if (!hasApi) return fake(undefined, 150);
+  await authedRequest(`/vendor/holds/${encodeURIComponent(holdId)}`, { method: 'DELETE' });
+}
+
+export async function checkout(holdId: string): Promise<CheckoutResponse> {
+  if (!hasApi) {
+    return fake({
+      orderId: paidOrderFixture.id,
+      invoiceUrl: `${window.location.origin}/vendor/orders/done/?id=${paidOrderFixture.id}&preview=1`,
+      holdExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    });
+  }
+  return CheckoutResponse.parse(
+    await authedRequest<unknown>(`/vendor/holds/${encodeURIComponent(holdId)}/checkout`, {
+      method: 'POST',
+    }),
+  );
+}
+
+export async function listVendorOrders(): Promise<VendorOrderList> {
+  if (!hasApi) return fake(localize({ orders: vendorDashboardFixture.history }));
+  return VendorOrderList.parse(await authedRequest<unknown>('/vendor/orders'));
+}
+
+export async function getVendorOrder(orderId: string): Promise<VendorOrder> {
+  if (!hasApi) {
+    const found = vendorDashboardFixture.history.find((o) => o.id === orderId);
+    return fake(localize(found ?? paidOrderFixture), 300);
+  }
+  return VendorOrder.parse(
+    await authedRequest<unknown>(`/vendor/orders/${encodeURIComponent(orderId)}`),
+  );
+}
+
+export async function requestCancel(
+  orderId: string,
+  input: CancelRequestInput,
+): Promise<VendorOrder> {
+  if (!hasApi) {
+    return fake({
+      ...localize(paidOrderFixture),
+      id: orderId,
+      cancelRequestedAt: new Date().toISOString(),
+    });
+  }
+  return VendorOrder.parse(
+    await authedRequest<unknown>(`/vendor/orders/${encodeURIComponent(orderId)}/cancel-request`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function getVendorDashboard(): Promise<VendorDashboard> {
+  if (!hasApi) return fake(localize(vendorDashboardFixture));
+  return VendorDashboard.parse(await authedRequest<unknown>('/vendor/dashboard'));
+}
+
+/** Fetch an authenticated file and hand it to the browser as a download. */
+export async function downloadVendorFile(
+  orderId: string,
+  kind: 'pass.ics' | 'receipt.pdf',
+  filename: string,
+): Promise<void> {
+  if (!hasApi) {
+    const body =
+      kind === 'pass.ics'
+        ? 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//FGG//fixture//EN\r\nEND:VCALENDAR\r\n'
+        : '%PDF-1.4 fixture';
+    const type = kind === 'pass.ics' ? 'text/calendar' : 'application/pdf';
+    triggerDownload(new Blob([body], { type }), filename);
+    return;
+  }
+  const token = await getIdToken();
+  if (!token) throw new ApiError('Please log in', 401, 'unauthorized');
+  const res = await fetch(`${API_URL}/vendor/orders/${encodeURIComponent(orderId)}/${kind}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new ApiError(`Download failed (${res.status})`, res.status);
+  triggerDownload(await res.blob(), filename);
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Admin: applications and orders.
+
+export async function adminListApplications(q?: {
+  status?: VendorApplicationStatus;
+  cursor?: string;
+}): Promise<VendorApplicationList> {
+  if (!hasApi) {
+    const items = q?.status
+      ? applicationsFixture.filter((a) => a.status === q.status)
+      : applicationsFixture;
+    return fake({ items });
+  }
+  const params = new URLSearchParams();
+  if (q?.status) params.set('status', q.status);
+  if (q?.cursor) params.set('cursor', q.cursor);
+  const qs = params.toString();
+  return VendorApplicationList.parse(
+    await authedRequest<unknown>(`/admin/vendor-applications${qs ? `?${qs}` : ''}`),
+  );
+}
+
+async function reviewApplication(
+  id: string,
+  action: 'call-scheduled' | 'approve' | 'reject',
+  input: ReviewInput,
+): Promise<VendorApplication> {
+  if (!hasApi) {
+    const app = applicationsFixture.find((a) => a.id === id) ?? applicationsFixture[0]!;
+    const status =
+      action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'call_scheduled';
+    return fake({ ...app, status, ...(input.notes ? { reviewNotes: input.notes } : {}) });
+  }
+  return VendorApplication.parse(
+    await authedRequest<unknown>(`/admin/vendor-applications/${encodeURIComponent(id)}/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+export const adminCallScheduled = (id: string) => reviewApplication(id, 'call-scheduled', {});
+export const adminApprove = (id: string, input: ReviewInput) =>
+  reviewApplication(id, 'approve', input);
+export const adminReject = (id: string, input: ReviewInput) =>
+  reviewApplication(id, 'reject', input);
+
+export async function adminListOrders(q?: {
+  eventId?: string;
+  status?: string;
+  cursor?: string;
+}): Promise<AdminOrderList> {
+  if (!hasApi) {
+    let items = adminOrdersFixture.items;
+    if (q?.eventId) items = items.filter((o) => o.eventId === q.eventId);
+    if (q?.status) items = items.filter((o) => o.status === q.status);
+    return fake(localize({ items }));
+  }
+  const params = new URLSearchParams();
+  if (q?.eventId) params.set('eventId', q.eventId);
+  if (q?.status) params.set('status', q.status);
+  if (q?.cursor) params.set('cursor', q.cursor);
+  const qs = params.toString();
+  return AdminOrderList.parse(await authedRequest<unknown>(`/admin/orders${qs ? `?${qs}` : ''}`));
+}
+
+export async function adminRefund(orderId: string, reason?: string): Promise<VendorOrder> {
+  if (!hasApi) {
+    const o = adminOrdersFixture.items.find((x) => x.id === orderId) ?? paidOrderFixture;
+    return fake(
+      localize({ ...o, status: 'refunded' as const, refundedAt: new Date().toISOString() }),
+    );
+  }
+  return VendorOrder.parse(
+    await authedRequest<unknown>(`/admin/orders/${encodeURIComponent(orderId)}/refund`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
+  );
+}
+
+export async function adminComp(input: CompOrderInput): Promise<VendorOrder> {
+  if (!hasApi) {
+    return fake(
+      localize({
+        ...paidOrderFixture,
+        id: `${paidOrderFixture.id.slice(0, 24)}99`,
+        source: 'manual' as const,
+        totalCents: 0,
+        subtotalCents: 0,
+        lines: [
+          {
+            type: 'table' as const,
+            tableId: input.tableId,
+            dates: input.dates,
+            rate: 'standard' as const,
+            unitCents: 0,
+            lineCents: 0,
+          },
+        ],
+        passNumber: 'HF26-099',
+      }),
+    );
+  }
+  return VendorOrder.parse(
+    await authedRequest<unknown>('/admin/orders/comp', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function adminRegisterWebhooks(): Promise<unknown> {
+  if (!hasApi) return fake({ registered: ['ORDERS_PAID', 'REFUNDS_CREATE'], skipped: [] });
+  return authedRequest<unknown>('/admin/shopify/register-webhooks', { method: 'POST' });
 }

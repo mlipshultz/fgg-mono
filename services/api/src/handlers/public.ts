@@ -5,6 +5,7 @@ import {
   SubscribeInput,
   WaitlistInput,
   type Event,
+  type EventFloorPlan,
   type GalleryPage,
   type HomeContent,
   type PublicGalleryItem,
@@ -13,6 +14,7 @@ import {
 import {
   getEvent,
   getEventBySlug,
+  getFloorPlan,
   getSettingsItem,
   keys,
   listActivities,
@@ -168,6 +170,23 @@ export const router = new Router()
     const all = await listPublishedEvents();
     const events = await toPublicEvents(all.filter((e) => e.endsAt.slice(0, 10) >= today));
     return json(req, { events }, 200, { 'cache-control': 'public, max-age=60' });
+  })
+  .add('GET', '/public/events/{id}/floorplan', async (req, { id }) => {
+    const ev = await resolveEvent(id!);
+    const [venue, floorPlan, availability] = await Promise.all([
+      venueFor(ev.venueId),
+      getFloorPlan(ev.venueId),
+      loadAvailability(ev),
+    ]);
+    if (!venue) throw new HttpError(500, 'venue_missing', 'Venue missing');
+    if (!floorPlan) throw new HttpError(404, 'no_floor_plan', 'This venue has no floor plan yet');
+    const body: EventFloorPlan = {
+      event: toPublicEvent(ev, venue, availability.tablesLeft),
+      venue,
+      floorPlan,
+      availability,
+    };
+    return json(req, body, 200, { 'cache-control': 'no-store' });
   })
   .add('GET', '/public/events/{id}/availability', async (req, { id }) => {
     const ev = await resolveEvent(id!);

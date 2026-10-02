@@ -153,7 +153,8 @@ export class AuthStack extends Stack {
     this.userPoolClient = this.userPool.addClient('AppClient', {
       userPoolClientName: `fgg-${config.stage}-app`,
       generateSecret: false,
-      authFlows: { userSrp: true },
+      // adminUserPassword is IAM-gated (AdminInitiateAuth) and only used by ops scripts.
+      authFlows: { userSrp: true, adminUserPassword: true },
       preventUserExistenceErrors: true,
       oAuth: {
         flows: { authorizationCodeGrant: true },

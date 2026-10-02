@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './Providers';
 import { initials, isStaff } from '@/lib/auth';
+
+const isVendor = (u: { roles: string[] } | null) => !!u && u.roles.includes('vendor');
 import headerStyles from './Header.module.css';
 import styles from './UserMenu.module.css';
 
@@ -68,15 +70,43 @@ export function UserMenu() {
           >
             My Dashboard
           </Link>
-          {isStaff(user) && (
+          {isVendor(user) && (
             <Link
-              href="/admin/users"
+              href="/vendor"
               className={styles.item}
               role="menuitem"
               onClick={() => setOpen(false)}
             >
-              Admin
+              Vendor dashboard
             </Link>
+          )}
+          {isStaff(user) && (
+            <>
+              <Link
+                href="/admin/vendor-applications"
+                className={styles.item}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+              >
+                Admin · Applications
+              </Link>
+              <Link
+                href="/admin/orders"
+                className={styles.item}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+              >
+                Admin · Orders
+              </Link>
+              <Link
+                href="/admin/users"
+                className={styles.item}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+              >
+                Admin · Users
+              </Link>
+            </>
           )}
           <button
             type="button"

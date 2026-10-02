@@ -1,22 +1,32 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { monotonicFactory } from 'ulid';
 import {
+  BatchGetCommand,
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
   QueryCommand,
+  TransactWriteCommand,
   UpdateCommand,
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import type {
-  Activity,
-  Event,
-  FloorPlan,
-  GalleryItem,
-  Partner,
-  Role,
-  User,
-  Venue,
+import {
+  Settings,
+  type Activity,
+  type Event,
+  type FloorPlan,
+  type GalleryItem,
+  type Order,
+  type OrderHistoryEntry,
+  type Partner,
+  type PriceWindow,
+  type Role,
+  type User,
+  type Vendor,
+  type VendorApplication,
+  type VendorMember,
+  type Venue,
 } from '@fgg/types';
 
 /** Single table (docs/PLAN.md §3.4). Name from TABLE_NAME. */
@@ -92,6 +102,58 @@ export const keys = {
     PK: `USER#${sub}`,
     SK: `SAVED#${eventId}`,
   }),
+  // Phase 3
+  vendorApplication: (sub: string): Keys => ({ PK: `USER#${sub}`, SK: 'VENDORAPP' }),
+  vendorApplicationIndex: (
+    a: Pick<VendorApplication, 'userId' | 'status' | 'createdAt'>,
+  ): Keys => ({
+    ...keys.vendorApplication(a.userId),
+    GSI1PK: `VENDORAPPS#${a.status}`,
+    GSI1SK: a.createdAt,
+  }),
+  vendor: (id: string): Keys => ({ PK: `VENDOR#${id}`, SK: 'META' }),
+  vendorIndex: (v: Pick<Vendor, 'id' | 'status' | 'businessName'>): Keys => ({
+    ...keys.vendor(v.id),
+    GSI1PK: `VENDORS#${v.status}`,
+    GSI1SK: v.businessName.toLowerCase(),
+  }),
+  vendorMember: (vendorId: string, sub: string): Keys => ({
+    PK: `VENDOR#${vendorId}`,
+    SK: `MEMBER#${sub}`,
+    GSI1PK: `USER#${sub}`,
+    GSI1SK: `VENDOR#${vendorId}`,
+  }),
+  priceWindow: (eventId: string, kind: string, startsAt: string): Keys => ({
+    PK: `EVENT#${eventId}`,
+    SK: `PRICE#${kind}#${startsAt}`,
+  }),
+  /** Canonical order item. Owner lookups via GSI1, status views via GSI2. */
+  order: (id: string): Keys => ({ PK: `ORDER#${id}`, SK: 'META' }),
+  orderIndex: (
+    o: Pick<Order, 'id' | 'ownerId' | 'status' | 'createdAt'>,
+    startsAt: string,
+  ): Keys => ({
+    ...keys.order(o.id),
+    GSI1PK: `OWNER#${o.ownerId}`,
+    GSI1SK: `ORDER#${startsAt}#${o.id}`,
+    GSI2PK: `ORDERS#${o.status}`,
+    GSI2SK: `${o.createdAt}#${o.id}`,
+  }),
+  /** Pointer under the event so admin can list an event's orders without an index. */
+  eventOrder: (eventId: string, orderId: string): Keys => ({
+    PK: `EVENT#${eventId}`,
+    SK: `ORDER#${orderId}`,
+  }),
+  orderHistory: (orderId: string, at: string, id: string): Keys => ({
+    PK: `ORDER#${orderId}`,
+    SK: `HIST#${at}#${id}`,
+  }),
+  /** Reverse lookup from Shopify's order id to ours (refund webhooks). */
+  shopifyOrder: (shopifyOrderId: string): Keys => ({
+    PK: `SHOPIFYORDER#${shopifyOrderId}`,
+    SK: 'ORDER',
+  }),
+  counter: (eventId: string): Keys => ({ PK: `EVENT#${eventId}`, SK: 'COUNTER' }),
 };
 
 export const USER_SHARDS = 10;
@@ -110,18 +172,37 @@ export function pad(n: number, width = 4): string {
 export type StoredGalleryItem = GalleryItem & { eventName: string; eventLabel: string };
 
 export interface HoldItem {
+  PK: string;
   SK: string;
   holdId: string;
+  eventId: string;
+  vendorId: string;
+  heldBy: string;
   tableId: string;
   date: string;
+  dates: string[];
+  rate: 'standard' | 'poke_bucks';
+  unitCents: number;
+  amountCents: number;
+  feeCents: number;
+  taxCents: number;
+  totalCents: number;
+  pricingInputs: Record<string, unknown>;
+  vendorInfo?: Record<string, unknown>;
   expiresAt: string;
+  ttl: number;
+  createdAt: string;
+  GSI1PK?: string;
+  GSI1SK?: string;
 }
 
 export interface BookedTableItem {
+  PK: string;
   SK: string;
   tableId: string;
   date: string;
   orderId: string;
+  vendorId: string;
 }
 
 type Item = Record<string, unknown>;
@@ -448,6 +529,244 @@ export async function listUsers(
     }
   }
   return shard < USER_SHARDS ? { users, next: { shard, ...(key ? { key } : {}) } } : { users };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: vendors, applications, orders, holds, pricing
+// ---------------------------------------------------------------------------
+
+export { TransactWriteCommand };
+
+export async function getSettings(): Promise<Settings> {
+  const item = await getSettingsItem();
+  const { PK: _pk, SK: _sk, ...rest } = (item ?? {}) as Record<string, unknown>;
+  return Settings.parse(rest);
+}
+
+export async function getVendorApplication(sub: string): Promise<VendorApplication | undefined> {
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE, Key: keys.vendorApplication(sub) }),
+  );
+  return res.Item ? (stripKeys(res.Item) as VendorApplication) : undefined;
+}
+
+export async function putVendorApplication(a: VendorApplication): Promise<void> {
+  await putItem({ ...keys.vendorApplicationIndex(a), ...a });
+}
+
+export interface AppPage {
+  items: VendorApplication[];
+  lastKey?: Record<string, unknown>;
+}
+
+export async function listVendorApplications(
+  status: VendorApplication['status'],
+  limit: number,
+  cursor?: Record<string, unknown>,
+): Promise<AppPage> {
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE,
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk',
+      ExpressionAttributeValues: { ':pk': `VENDORAPPS#${status}` },
+      Limit: limit,
+      ScanIndexForward: true,
+      ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+    }),
+  );
+  return {
+    items: (res.Items ?? []).map((i) => stripKeys(i) as VendorApplication),
+    ...(res.LastEvaluatedKey ? { lastKey: res.LastEvaluatedKey } : {}),
+  };
+}
+
+export async function getVendor(id: string): Promise<Vendor | undefined> {
+  const res = await ddb.send(new GetCommand({ TableName: TABLE, Key: keys.vendor(id) }));
+  return res.Item ? (stripKeys(res.Item) as Vendor) : undefined;
+}
+
+export async function putVendor(v: Vendor): Promise<void> {
+  await putItem({ ...keys.vendorIndex(v), ...v });
+}
+
+export async function putVendorMember(m: VendorMember): Promise<void> {
+  await putItem({ ...keys.vendorMember(m.vendorId, m.userId), ...m });
+}
+
+/** The vendor a user belongs to (one at launch), via GSI1 USER#sub → VENDOR#id. */
+export async function getVendorForUser(sub: string): Promise<Vendor | undefined> {
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE,
+      IndexName: 'GSI1',
+      KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `USER#${sub}`, ':sk': 'VENDOR#' },
+      Limit: 1,
+    }),
+  );
+  const m = res.Items?.[0] as VendorMember | undefined;
+  return m ? getVendor(m.vendorId) : undefined;
+}
+
+export async function updateVendor(
+  id: string,
+  patch: Partial<Pick<Vendor, 'pokeBucksPartner' | 'status' | 'shopifyCustomerId'>>,
+): Promise<void> {
+  const sets: string[] = ['#u = :u'];
+  const names: Record<string, string> = { '#u': 'updatedAt' };
+  const values: Record<string, unknown> = { ':u': new Date().toISOString() };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    sets.push(`#${k} = :${k}`);
+    names[`#${k}`] = k;
+    values[`:${k}`] = v;
+  }
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE,
+      Key: keys.vendor(id),
+      UpdateExpression: `SET ${sets.join(', ')}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    }),
+  );
+}
+
+export const listPriceWindows = (eventId: string) =>
+  listEventPrefix<PriceWindow>(eventId, 'PRICE#');
+
+export async function getOrder(id: string): Promise<Order | undefined> {
+  const res = await ddb.send(new GetCommand({ TableName: TABLE, Key: keys.order(id) }));
+  return res.Item ? (stripKeys(res.Item) as Order) : undefined;
+}
+
+export async function getOrderByShopifyId(shopifyOrderId: string): Promise<Order | undefined> {
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE, Key: keys.shopifyOrder(shopifyOrderId) }),
+  );
+  const orderId = res.Item?.orderId as string | undefined;
+  return orderId ? getOrder(orderId) : undefined;
+}
+
+/** Orders owned by a vendor (GSI1), newest event first. */
+export async function listOrdersForOwner(ownerId: string): Promise<Order[]> {
+  const items = await queryAll({
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `OWNER#${ownerId}`, ':sk': 'ORDER#' },
+    ScanIndexForward: false,
+  });
+  return items.map((i) => stripKeys(i) as Order);
+}
+
+export interface OrderPage {
+  items: Order[];
+  lastKey?: Record<string, unknown>;
+}
+
+export async function listOrdersByStatus(
+  status: Order['status'],
+  limit: number,
+  cursor?: Record<string, unknown>,
+): Promise<OrderPage> {
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE,
+      IndexName: 'GSI2',
+      KeyConditionExpression: 'GSI2PK = :pk',
+      ExpressionAttributeValues: { ':pk': `ORDERS#${status}` },
+      Limit: limit,
+      ScanIndexForward: false,
+      ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+    }),
+  );
+  return {
+    items: (res.Items ?? []).map((i) => stripKeys(i) as Order),
+    ...(res.LastEvaluatedKey ? { lastKey: res.LastEvaluatedKey } : {}),
+  };
+}
+
+/** Orders for one event via the EVENT#id/ORDER# pointers, then a batch get. */
+export async function listOrdersForEvent(
+  eventId: string,
+  limit: number,
+  cursor?: Record<string, unknown>,
+): Promise<OrderPage> {
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: { ':pk': `EVENT#${eventId}`, ':sk': 'ORDER#' },
+      Limit: limit,
+      ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+    }),
+  );
+  const ids = (res.Items ?? []).map((i) => String(i.orderId));
+  const orders = await batchGetOrders(ids);
+  return { items: orders, ...(res.LastEvaluatedKey ? { lastKey: res.LastEvaluatedKey } : {}) };
+}
+
+export async function batchGetOrders(ids: string[]): Promise<Order[]> {
+  const out: Order[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    if (!chunk.length) continue;
+    const res = await ddb.send(
+      new BatchGetCommand({
+        RequestItems: { [TABLE]: { Keys: chunk.map((id) => keys.order(id)) } },
+      }),
+    );
+    for (const it of res.Responses?.[TABLE] ?? []) out.push(stripKeys(it) as Order);
+  }
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  return out.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+}
+
+/** Monotonic so two history rows written in the same millisecond keep their order. */
+const historyId = monotonicFactory();
+
+export async function putOrderHistory(h: OrderHistoryEntry): Promise<void> {
+  await putItem({ ...keys.orderHistory(h.orderId, h.at, historyId()), ...h });
+}
+
+/** Hold items for one hold id, scoped to the vendor (GSI1 VENDOR#id / HOLD#holdId). */
+export async function getHoldItems(vendorId: string, holdId: string): Promise<HoldItem[]> {
+  const items = await queryAll({
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'GSI1PK = :pk AND GSI1SK = :sk',
+    ExpressionAttributeValues: { ':pk': `VENDOR#${vendorId}`, ':sk': `HOLD#${holdId}` },
+  });
+  return items as unknown as HoldItem[];
+}
+
+/** All active hold items a vendor has on an event. */
+export async function listVendorHolds(vendorId: string, eventId: string): Promise<HoldItem[]> {
+  const items = await queryAll({
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `VENDOR#${vendorId}`, ':sk': 'HOLD#' },
+  });
+  return (items as unknown as HoldItem[]).filter((h) => h.eventId === eventId);
+}
+
+export async function deleteItem(key: Keys): Promise<void> {
+  await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { PK: key.PK, SK: key.SK } }));
+}
+
+/** Drop the table's key attributes from a stored item. */
+export function stripKeys<T>(item: Record<string, unknown>): T {
+  const {
+    PK: _pk,
+    SK: _sk,
+    GSI1PK: _a,
+    GSI1SK: _b,
+    GSI2PK: _c,
+    GSI2SK: _d,
+    ttl: _t,
+    ...rest
+  } = item;
+  return rest as T;
 }
 
 export type { Role };
