@@ -103,7 +103,10 @@ export class GraphqlShopifyClient implements ShopifyClient {
               quantity: 1,
               taxable: false,
               requiresShipping: false,
-              customAttributes: attrs,
+              // Underscore-prefixed line properties are hidden from checkout, emails and the
+              // order status page; the order-level customAttributes above carry the real keys
+              // for the webhook (note_attributes).
+              customAttributes: attrs.map((a) => ({ key: `_${a.key}`, value: a.value })),
             },
           ],
         },
