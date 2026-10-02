@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { Button } from './Button';
 import { MobileMenu, type NavLink } from './MobileMenu';
 import { UserMenu } from './UserMenu';
 import styles from './Header.module.css';
@@ -29,12 +28,6 @@ export function Header() {
       </nav>
       <div className={styles.right}>
         <UserMenu />
-        <Button href="/#events" variant="yellow" size="md" className={styles.eventsDesktop}>
-          Upcoming Events
-        </Button>
-        <Button href="/#events" variant="yellow" size="sm" className={styles.eventsPhone}>
-          Events
-        </Button>
         <MobileMenu links={NAV_LINKS} />
       </div>
     </header>

@@ -8,7 +8,6 @@ import { useAuth } from '@/components/Providers';
 import { authStyles } from '@/components/auth/AuthCard';
 import ui from '@/components/ui.module.css';
 import v from '@/components/vendor/vendor.module.css';
-import { bookHref } from '@/components/vendor/BookCta';
 import { downloadVendorFile, getVendorDashboard, requestCancel } from '@/lib/api';
 import { initials } from '@/lib/auth';
 import {
@@ -18,7 +17,7 @@ import {
   tableLinesOf,
   tablesLabel,
 } from '@/lib/booking';
-import { daysUntil, fullDateLabel, shortDateLabel, year } from '@/lib/dates';
+import { daysUntil, shortDateLabel, year } from '@/lib/dates';
 import { ProfileCard } from './ProfileCard';
 import styles from './vendor.module.css';
 
@@ -52,7 +51,7 @@ function rateOf(o: VendorOrder): string {
 }
 
 export function VendorDashboardView() {
-  const { user, status } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<VendorDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -132,7 +131,7 @@ export function VendorDashboardView() {
     );
   }
 
-  const { vendor, upcoming, history, events } = data;
+  const { vendor, upcoming, history } = data;
   const next = upcoming[0];
   const nextIn = next ? daysUntil(next.event.startDate) : null;
   const thisYear = new Date().getFullYear();
@@ -144,8 +143,6 @@ export function VendorDashboardView() {
         : nextIn === 1
           ? 'Your next show is tomorrow'
           : `Your next show is in ${nextIn} days`;
-  const bookedIds = new Set(upcoming.map((o) => o.eventId));
-  const quick = events.filter((e) => !bookedIds.has(e.id)).slice(0, 4);
 
   return (
     <main className={styles.page}>
@@ -166,127 +163,70 @@ export function VendorDashboardView() {
           <span className={ui.eyebrow}>{vendor.businessName}</span>
           <h1 className={styles.h2}>{headline}</h1>
         </div>
-        <div className={`${styles.poke} ${vendor.pokeBucksPartner ? styles.pokeOn : ''}`}>
-          <span className={styles.pokeDollar} aria-hidden="true">
-            $
-          </span>
-          <span>
-            PokéBucks partner: <b>{vendor.pokeBucksPartner ? 'On' : 'Off'}</b>.{' '}
-            {vendor.pokeBucksPartner
-              ? 'Pick the $100 rate when you book.'
-              : 'Turn it on to book tables for $100.'}
-          </span>
-          <a href="/vendor/code-of-conduct" className={styles.pokeLink}>
-            Learn more →
-          </a>
-        </div>
       </div>
 
       <div className={styles.grid}>
-        <div className={`${styles.card} ${styles.cardAqua}`}>
-          <span className={styles.cardTitle}>Upcoming booked shows</span>
-          {upcoming.map((o) => (
-            <div className={styles.show} key={o.id}>
-              {o.event.posterUrl ? (
-                <img src={o.event.posterUrl} alt="" className={styles.thumb} />
-              ) : (
-                <span className={styles.thumb} />
-              )}
-              <div>
-                <div className={styles.showName}>{o.event.name}</div>
-                <div className={styles.showMeta}>
-                  {shortDateLabel(o.event.startDate, o.event.endDate)} · {tablesWord(o)}{' '}
-                  {tableDaysSummary(
-                    o,
-                    o.event.days.map((d) => d.date),
-                  )}
-                  {o.loadInLabel ? ` · Load-in ${o.loadInLabel}` : ''}
-                </div>
-                <div className={styles.pills}>
-                  <span className={`${v.statusPill} ${STATUS_CLASS[o.status]}`}>
-                    {STATUS_LABEL[o.status]}
-                  </span>
-                  <span className={v.statusPill}>{passesOf(o)} vendor passes</span>
-                  <span className={v.statusPill}>
-                    {tableDaysCount(o)} {tableDaysCount(o) === 1 ? 'table-day' : 'table-days'}
-                  </span>
-                  {o.cancelRequestedAt && (
-                    <span className={`${v.statusPill} ${v.pending}`}>Cancellation requested</span>
-                  )}
-                </div>
-              </div>
-              <div className={styles.showLinks}>
-                <Link href={`/vendor/orders/pass?id=${o.id}`} className={styles.primaryLink}>
-                  View pass
-                </Link>
-                <button type="button" onClick={() => download(o, 'receipt.pdf')}>
-                  Receipt
-                </button>
-                {!o.cancelRequestedAt && (
-                  <button type="button" onClick={() => void cancel(o)} disabled={busyId === o.id}>
-                    {busyId === o.id ? 'Sending…' : 'Request cancellation'}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-          <Link href="/#events" className={styles.dashed}>
-            <span>
-              {upcoming.length === 0
-                ? 'Nothing booked yet. Grab a table for the next show →'
-                : upcoming.length === 1
-                  ? "That's your only upcoming show. Grab a table for the next one →"
-                  : 'Add another show →'}
-            </span>
-          </Link>
-          <span className={styles.cardSub}>Quick register</span>
-          <div className={styles.quick}>
-            {quick.map((e) => (
-              <div className={styles.mini} key={e.id}>
-                <div className={styles.miniHead}>
-                  <span className={styles.miniName}>{e.name}</span>
-                  {e.vendorStatus === 'open' && (
-                    <span className={`${ui.pill} ${ui.pillOpen}`}>Open</span>
-                  )}
-                  {e.vendorStatus === 'closed' && (
-                    <span className={`${ui.pill} ${ui.pillClosed}`}>Closed</span>
-                  )}
-                  {e.vendorStatus === 'coming_soon' && (
-                    <span className={`${ui.pill} ${ui.pillSoon}`}>Coming soon</span>
-                  )}
-                </div>
-                <span className={styles.miniMeta}>
-                  {fullDateLabel(e.startDate, e.endDate, year(e.startDate) !== thisYear)} ·{' '}
-                  {e.venue.city}, {e.venue.state}
-                </span>
-                {e.vendorStatus === 'open' && (
-                  <Link href={bookHref(e.slug, status, user?.roles)} className={styles.miniLink}>
-                    Book a table →
-                  </Link>
-                )}
-                {e.vendorStatus === 'closed' && (
-                  <a href={`/#event-${e.slug}`} className={styles.miniLink}>
-                    Join waitlist →
-                  </a>
-                )}
-                {e.vendorStatus === 'coming_soon' && (
-                  <a href={`/#event-${e.slug}`} className={styles.miniLink}>
-                    Notify me →
-                  </a>
-                )}
-              </div>
-            ))}
-            {quick.length === 0 && (
-              <span className={styles.miniMeta}>No other shows open right now.</span>
-            )}
-          </div>
-        </div>
-
         <div className={styles.col}>
           <ProfileCard
             profile={vendor}
             onChange={(p) => setData((cur) => (cur ? { ...cur, vendor: p } : cur))}
           />
+          <div className={`${styles.card} ${styles.cardAqua}`}>
+            <span className={styles.cardTitle}>Upcoming booked shows</span>
+            {upcoming.length === 0 && (
+              <Link href="/#events" className={styles.dashed}>
+                <span>Nothing booked yet. Grab a table for the next show →</span>
+              </Link>
+            )}
+            {upcoming.map((o) => (
+              <div className={styles.show} key={o.id}>
+                {o.event.posterUrl ? (
+                  <img src={o.event.posterUrl} alt="" className={styles.thumb} />
+                ) : (
+                  <span className={styles.thumb} />
+                )}
+                <div>
+                  <div className={styles.showName}>{o.event.name}</div>
+                  <div className={styles.showMeta}>
+                    {shortDateLabel(o.event.startDate, o.event.endDate)} · {tablesWord(o)}{' '}
+                    {tableDaysSummary(
+                      o,
+                      o.event.days.map((d) => d.date),
+                    )}
+                    {o.loadInLabel ? ` · Load-in ${o.loadInLabel}` : ''}
+                  </div>
+                  <div className={styles.pills}>
+                    <span className={`${v.statusPill} ${STATUS_CLASS[o.status]}`}>
+                      {STATUS_LABEL[o.status]}
+                    </span>
+                    <span className={v.statusPill}>{passesOf(o)} vendor passes</span>
+                    <span className={v.statusPill}>
+                      {tableDaysCount(o)} {tableDaysCount(o) === 1 ? 'table-day' : 'table-days'}
+                    </span>
+                    {o.cancelRequestedAt && (
+                      <span className={`${v.statusPill} ${v.pending}`}>Cancellation requested</span>
+                    )}
+                  </div>
+                </div>
+                <div className={styles.showLinks}>
+                  <Link href={`/vendor/orders/pass?id=${o.id}`} className={styles.primaryLink}>
+                    View pass
+                  </Link>
+                  <button type="button" onClick={() => download(o, 'receipt.pdf')}>
+                    Receipt
+                  </button>
+                  {!o.cancelRequestedAt && (
+                    <button type="button" onClick={() => void cancel(o)} disabled={busyId === o.id}>
+                      {busyId === o.id ? 'Sending…' : 'Request cancellation'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.col}>
           <div className={styles.card}>
             <span className={styles.cardTitle}>Payments</span>
             <div className={styles.payRow}>
@@ -301,16 +241,6 @@ export function VendorDashboardView() {
               <span>Payments</span>
               <span>via Shopify</span>
             </div>
-          </div>
-          <div className={styles.tips}>
-            <span className={styles.tipsTitle}>Vendor tips</span>
-            <span className={styles.tipsText}>
-              Kids-eye-level displays sell 2× better. Bring a $1–5 bulk bin — it&apos;s what the
-              PokéBucks crowd is looking for.
-            </span>
-            <a href="/vendor/code-of-conduct" className={styles.tipsLink}>
-              Read the vendor guide →
-            </a>
           </div>
           <div className={styles.appNote}>
             <span aria-hidden="true" />
