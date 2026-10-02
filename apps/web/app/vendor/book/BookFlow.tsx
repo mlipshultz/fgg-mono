@@ -1,6 +1,7 @@
 'use client';
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   MAX_TABLES_PER_ORDER,
   type EventFloorPlan,
@@ -63,6 +64,7 @@ const byTable = (a: CartLine, b: CartLine) =>
 
 export function BookFlow() {
   const { user } = useAuth();
+  const router = useRouter();
   const [slug, setSlug] = useState<string | null>(null);
   const [data, setData] = useState<EventFloorPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +84,8 @@ export function BookFlow() {
     const s = q.get('event');
     setSlug(s);
     if (!s) {
-      setError('No event selected. Pick a show from the events list.');
+      // No show chosen: the dashboard's quick-register list is the place to pick one.
+      router.replace('/vendor');
       return;
     }
     let alive = true;
