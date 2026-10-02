@@ -2,7 +2,10 @@
 
 import { useEffect, useId, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from './Button';
+import { useAuth } from './Providers';
+import { isStaff } from '@/lib/auth';
 import styles from './MobileMenu.module.css';
 
 export interface NavLink {
@@ -13,6 +16,8 @@ export interface NavLink {
 export function MobileMenu({ links }: { links: NavLink[] }) {
   const [open, setOpen] = useState(false);
   const id = useId();
+  const { status, user, logOut } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
@@ -66,20 +71,55 @@ export function MobileMenu({ links }: { links: NavLink[] }) {
                 </Link>
               </li>
             ))}
+            {status === 'signed-in' && (
+              <li>
+                <Link href="/dashboard" onClick={() => setOpen(false)}>
+                  My Dashboard
+                </Link>
+              </li>
+            )}
+            {status === 'signed-in' && isStaff(user) && (
+              <li>
+                <Link href="/admin/users" onClick={() => setOpen(false)}>
+                  Admin
+                </Link>
+              </li>
+            )}
           </ul>
           <div className={styles.actions}>
+            {status === 'signed-in' && user && (
+              <span className={styles.who}>
+                Logged in as <b>{user.name}</b>
+              </span>
+            )}
             <Button href="/#events" variant="yellow" size="lg" block onClick={() => setOpen(false)}>
               Upcoming Events
             </Button>
-            <Button
-              href="/login"
-              variant="secondary"
-              size="md"
-              block
-              onClick={() => setOpen(false)}
-            >
-              Log In
-            </Button>
+            {status === 'signed-in' ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                block
+                onClick={async () => {
+                  setOpen(false);
+                  await logOut();
+                  router.push('/');
+                }}
+              >
+                Log out
+              </Button>
+            ) : (
+              <Button
+                href="/login"
+                variant="secondary"
+                size="md"
+                block
+                onClick={() => setOpen(false)}
+              >
+                Log In
+              </Button>
+            )}
           </div>
         </div>
       )}

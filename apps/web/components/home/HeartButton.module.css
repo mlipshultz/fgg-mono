@@ -1,0 +1,53 @@
+.heart {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 50%;
+  background: var(--color-white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  color: var(--color-ink);
+  transition:
+    transform var(--motion-press) ease-out,
+    box-shadow var(--motion-press) ease-out;
+}
+.heart:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--color-ink);
+  color: var(--color-pink-text);
+}
+.heart:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+.heart svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.saved {
+  background: var(--color-pink);
+}
+.saved svg path {
+  fill: var(--color-pink-text);
+  stroke: var(--color-pink-text);
+}
+.sm {
+  width: 32px;
+  height: 32px;
+}
+.sm svg {
+  width: 16px;
+  height: 16px;
+}
+@media (max-width: 767px) {
+  .heart {
+    width: var(--layout-tap-target);
+    height: var(--layout-tap-target);
+  }
+}

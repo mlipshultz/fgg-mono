@@ -1,7 +1,10 @@
 import { CfnOutput, Duration, Stack, type StackProps } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import type * as cognito from 'aws-cdk-lib/aws-cognito';
 import type * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -19,6 +22,8 @@ export interface ApiStackProps extends StackProps {
   table: dynamodb.ITableV2;
   /** e.g. https://d123.cloudfront.net (the media distribution). */
   mediaBaseUrl: string;
+  userPool: cognito.IUserPool;
+  userPoolClient: cognito.IUserPoolClient;
 }
 
 /**
@@ -28,10 +33,11 @@ export interface ApiStackProps extends StackProps {
 export class ApiStack extends Stack {
   readonly api: apigw.HttpApi;
   readonly publicFn: NodejsFunction;
+  readonly accountFn: NodejsFunction;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
-    const { config, table } = props;
+    const { config, table, userPool, userPoolClient } = props;
 
     const origins = config.isProd
       ? config.webOrigins
@@ -44,6 +50,9 @@ export class ApiStack extends Stack {
         allowMethods: [
           apigw.CorsHttpMethod.GET,
           apigw.CorsHttpMethod.POST,
+          apigw.CorsHttpMethod.PUT,
+          apigw.CorsHttpMethod.PATCH,
+          apigw.CorsHttpMethod.DELETE,
           apigw.CorsHttpMethod.OPTIONS,
         ],
         allowHeaders: ['content-type', 'authorization'],
@@ -64,6 +73,43 @@ export class ApiStack extends Stack {
       methods: [apigw.HttpMethod.GET, apigw.HttpMethod.POST],
       integration: new HttpLambdaIntegration('PublicIntegration', this.publicFn),
     });
+
+    // Authenticated routes: API Gateway validates the Cognito ID token; handlers read claims.
+    const authorizer = new HttpJwtAuthorizer(
+      'CognitoJwt',
+      `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`,
+      { jwtAudience: [userPoolClient.userPoolClientId] },
+    );
+    this.accountFn = this.lambda('AccountFn', 'handlers/account.ts', {
+      TABLE_NAME: table.tableName,
+      MEDIA_BASE_URL: props.mediaBaseUrl,
+      STAGE: config.stage,
+      WEB_ORIGINS: origins.join(','),
+      USER_POOL_ID: userPool.userPoolId,
+    });
+    table.grantReadWriteData(this.accountFn);
+    this.accountFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'cognito-idp:AdminAddUserToGroup',
+          'cognito-idp:AdminRemoveUserFromGroup',
+          'cognito-idp:AdminListGroupsForUser',
+          'cognito-idp:AdminGetUser',
+        ],
+        resources: [userPool.userPoolArn],
+      }),
+    );
+    const accountIntegration = new HttpLambdaIntegration('AccountIntegration', this.accountFn);
+    const authed = [
+      apigw.HttpMethod.GET,
+      apigw.HttpMethod.POST,
+      apigw.HttpMethod.PUT,
+      apigw.HttpMethod.PATCH,
+      apigw.HttpMethod.DELETE,
+    ];
+    for (const p of ['/me', '/me/{proxy+}', '/admin/{proxy+}']) {
+      this.api.addRoutes({ path: p, methods: authed, integration: accountIntegration, authorizer });
+    }
 
     new CfnOutput(this, 'ApiUrl', { value: this.api.apiEndpoint });
   }

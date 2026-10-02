@@ -288,7 +288,17 @@ email via SES and the Supabase seed are deferred until an SES identity and the s
 - Contact form (§5.6) and gallery with lightbox (§5.7).
 - Seed script that pulls events and gallery from the live Supabase project into dev.
 
-### Phase 2: Accounts (3–4 days)
+### Phase 2: Accounts (3–4 days) — **built 2026-10-01** on branch `phase-2/accounts`
+
+Deployed to dev: `Fgg-dev-Auth` recreated (pool `us-east-1_cHtHWz1Ml`) with pre-signup (13+ gate)
+and post-confirmation (user record + `attendee` group) triggers and the Google identity provider
+from Secrets Manager `fgg/google-sso`; `Fgg-dev-Api` recreated with a JWT authorizer and the
+account Lambda (`/me/*`, `/admin/*`). `birthdate` is optional at the pool level because Google can't
+supply it; the trigger and client enforce the gate. Admin role changes go through Cognito groups and
+`/me` writes token roles back to the stored record. Web: login, signup, verify, forgot/reset, Google
+callback, dashboard (2c), admin users, header user menu, hearts on event cards, legal placeholders.
+Verified end to end on dev with a real sign-up, login, save/unsave and the admin page. Not built:
+display-name editing UI, Google redirect URI registration in Google Cloud (Matt's action).
 
 - Sign up / in / reset with Cognito (email + Google), 13+ age gate at sign-up.
 - Attendee dashboard (§5.5) reading XP, badges and saved events from the API. `packages/game`

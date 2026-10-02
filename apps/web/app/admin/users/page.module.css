@@ -1,0 +1,182 @@
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 40px 90px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-20);
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+}
+.title {
+  margin: 4px 0 0;
+  font-family: var(--type-h2-font-family);
+  font-weight: var(--type-h2-font-weight);
+  font-size: 36px;
+  line-height: 1.05;
+}
+.search {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+}
+.input {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 10px 16px;
+  min-width: 280px;
+  background: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+}
+.input::placeholder {
+  color: var(--color-placeholder);
+}
+.error {
+  border: var(--border-width) solid var(--color-pink-text);
+  border-radius: var(--radius-tile);
+  background: var(--color-white);
+  padding: 10px 14px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-bold);
+  font-size: 13px;
+  color: var(--color-pink-text);
+}
+.tableWrap {
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-aqua);
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+}
+.table th {
+  text-align: left;
+  padding: 14px 18px;
+  font-size: 11px;
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  border-bottom: var(--border-width) solid var(--border-color);
+}
+.table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-line);
+  vertical-align: middle;
+}
+.table tr:last-child td {
+  border-bottom: 0;
+}
+.name {
+  display: block;
+  font-weight: var(--font-weight-extrabold);
+}
+.email {
+  display: block;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.roleChip,
+.chip {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: var(--font-weight-extrabold);
+  background: var(--color-white);
+  white-space: nowrap;
+}
+.chip {
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--color-ink);
+}
+.chip[aria-pressed='true'] {
+  background: var(--color-pink);
+}
+.role_vendor {
+  background: var(--color-aqua);
+}
+.role_vendor_applicant {
+  background: var(--color-dash);
+}
+.role_staff {
+  background: var(--color-yellow);
+}
+.role_superadmin {
+  background: var(--color-ink);
+  color: var(--color-white);
+}
+.vendorId {
+  font-size: 11px;
+  color: var(--color-muted);
+  align-self: center;
+}
+.since {
+  white-space: nowrap;
+  color: var(--color-muted);
+}
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.actions > * + * {
+  margin-left: 6px;
+}
+.emptyRow {
+  text-align: center;
+  color: var(--color-muted);
+  padding: 32px !important;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+}
+.muted {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+@media (max-width: 767px) {
+  .page {
+    padding: 20px 18px 60px;
+  }
+  .input {
+    min-width: 0;
+    flex: 1;
+  }
+  .search {
+    width: 100%;
+  }
+  .table th,
+  .table td {
+    padding: 12px;
+  }
+}

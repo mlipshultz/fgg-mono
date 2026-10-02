@@ -15,7 +15,7 @@ function corsHeaders(req: Req): Record<string, string> {
   if (!origin || !ORIGINS.includes(origin)) return {};
   return {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'access-control-allow-headers': 'content-type,authorization',
     vary: 'Origin',
   };
@@ -94,7 +94,7 @@ interface Route {
 export class Router {
   private routes: Route[] = [];
 
-  add(method: 'GET' | 'POST', path: string, handler: Handler): this {
+  add(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: Handler): this {
     const names: string[] = [];
     const source = path
       .split('/')

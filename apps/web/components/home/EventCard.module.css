@@ -81,6 +81,12 @@
   font-size: var(--type-card-title-font-size);
   line-height: var(--type-card-title-line-height);
 }
+.titleTools {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-10);
+  flex: none;
+}
 .tile {
   flex: none;
   width: var(--layout-mini-cal-tile);

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Fredoka, Nunito } from 'next/font/google';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { Providers } from '@/components/Providers';
 import { getHomeContent } from '@/lib/api';
 import './globals.css';
 
@@ -31,9 +32,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en" className={`${fredoka.variable} ${nunito.variable}`}>
       <body>
-        <Header />
-        {children}
-        <Footer settings={settings} />
+        <Providers>
+          <Header />
+          {children}
+          <Footer settings={settings} />
+        </Providers>
       </body>
     </html>
   );

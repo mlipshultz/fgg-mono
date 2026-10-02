@@ -32,7 +32,7 @@ export function stageConfig(stage: Stage): StageConfig {
     removalPolicy: isProd ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
     webOrigins: isProd
       ? ['https://feelgoodgaming.com', 'https://www.feelgoodgaming.com']
-      : ['http://localhost:3000'],
+      : ['http://localhost:3000', 'http://127.0.0.1:3000'],
     cognitoDomainPrefix: `feelgoodgaming-${stage}`,
     githubRepo: 'mlipshultz/fgg-mono',
     githubSubjects: ['repo:mlipshultz/fgg-mono:*', 'repo:mlipshultz@8192110/fgg-mono@1398552177:*'],

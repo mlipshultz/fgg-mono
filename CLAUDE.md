@@ -29,3 +29,13 @@ spec is `docs/handoff/README.md` and the canvas `docs/handoff/FGG Site.dc.html`.
 - Styling: CSS modules + token variables. No Tailwind. Sticker look = 2px ink border + hard offset
   shadow, only on interactive and hero elements.
 - Changes land via PR to `main`; CI must pass. `main` auto-deploys dev; prod is a manual dispatch.
+
+## Gotchas
+
+- Cognito cannot change a user pool's attribute schema after creation (CloudFormation fails with
+  "Invalid AttributeDataType"). Get the schema right before prod exists; in dev, destroy and recreate
+  `Fgg-dev-Auth` (and `Fgg-dev-Api`, which imports the pool) instead of updating.
+- The Google identity provider must be able to map every required pool attribute, so keep `birthdate`
+  optional at the pool level; the 13+ gate lives in the pre-signup trigger and the client.
+- `S3BucketOrigin.withOriginAccessControl` writes a bucket policy that references the distribution, so a
+  bucket and its CloudFront distribution must live in the same stack.

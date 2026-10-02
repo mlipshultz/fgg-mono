@@ -78,6 +78,16 @@
   text-decoration: none;
   border-bottom: var(--border-width) dashed var(--border-dash-color);
 }
+.who {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+  color: var(--color-muted);
+  text-align: center;
+}
+.who b {
+  color: var(--color-ink);
+}
 .actions {
   margin-top: auto;
   display: flex;
