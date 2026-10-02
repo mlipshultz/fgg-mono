@@ -34,8 +34,6 @@ export function ApplyForm() {
   const [checking, setChecking] = useState(true);
   const [eventSlug, setEventSlug] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [instagram, setInstagram] = useState('');
   const [tiktok, setTiktok] = useState('');
@@ -50,10 +48,6 @@ export function ApplyForm() {
 
   useEffect(() => {
     setEventSlug(new URLSearchParams(window.location.search).get('event'));
-    if (user) {
-      setContactName((c) => c || user.name);
-      setEmail((e) => e || user.email);
-    }
     const preview = !hasApi && new URLSearchParams(window.location.search).get('preview') === '1';
     if (preview) {
       setChecking(false);
@@ -80,9 +74,6 @@ export function ApplyForm() {
     ev.preventDefault();
     const errs: Record<string, string> = {};
     if (!businessName.trim()) errs.businessName = 'Tell us your business or table name.';
-    if (!contactName.trim()) errs.contactName = 'Who should we talk to?';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()))
-      errs.email = "Hmm, that email doesn't look right";
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'Add a phone number we can reach you at.';
     if (!sellsDescription.trim()) errs.sellsDescription = 'Tell us what you plan to bring.';
     if (pokeBucks === null) errs.pokeBucks = 'Let us know either way.';
@@ -101,8 +92,6 @@ export function ApplyForm() {
         : `https://${website.trim()}`;
     const input: VendorApplicationInput = {
       businessName: businessName.trim(),
-      contactName: contactName.trim(),
-      email: email.trim().toLowerCase(),
       phone: phone.trim(),
       sellsDescription: sellsDescription.trim().slice(0, 1000),
       socials,
@@ -148,33 +137,18 @@ export function ApplyForm() {
             autoComplete="organization"
           />
         </Field>
-        <div className={a.two}>
-          <Field label="Contact name" error={errors.contactName}>
-            <input
-              className={`${a.input} ${errors.contactName ? a.invalid : ''}`}
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              autoComplete="name"
-            />
-          </Field>
-          <Field label="Phone" error={errors.phone}>
-            <input
-              className={`${a.input} ${errors.phone ? a.invalid : ''}`}
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(410) 555-0100"
-              autoComplete="tel"
-            />
-          </Field>
-        </div>
-        <Field label="Email" error={errors.email}>
+        <p className={a.hint}>
+          Applying as <b>{user?.name ?? 'you'}</b>
+          {user?.email ? ` · ${user.email}` : ''}. We&apos;ll use your account for contact.
+        </p>
+        <Field label="Phone" error={errors.phone}>
           <input
-            className={`${a.input} ${errors.email ? a.invalid : ''}`}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
+            className={`${a.input} ${errors.phone ? a.invalid : ''}`}
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="(410) 555-0100"
+            autoComplete="tel"
           />
         </Field>
         <div className={a.two}>

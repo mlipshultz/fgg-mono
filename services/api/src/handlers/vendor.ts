@@ -21,7 +21,7 @@ import {
   type VendorProfile,
   type Venue,
 } from '@fgg/types';
-import { claimsFrom, type Actor } from '../lib/auth.js';
+import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
 import {
   createHold,
   history,
@@ -40,6 +40,7 @@ import {
   getFloorPlan,
   getOrder,
   getSettings,
+  getUser,
   getVendor,
   getVendorForUser,
   listOrdersForOwner,
@@ -102,9 +103,7 @@ function profileView(v: Vendor): VendorProfile {
 function prefillFrom(v: Vendor): NonNullable<HoldResponse['prefill']> {
   return {
     tableName: v.businessName,
-    contactName: v.contactName,
     phone: v.phone,
-    email: v.email,
     ...(v.sellsDescription ? { sellsDescription: v.sellsDescription } : {}),
   };
 }
@@ -220,9 +219,11 @@ const router = new Router()
     const actor = claimsFrom(req);
     const vendor = await vendorFor(actor);
     const input = parseBody(req, UpdateHoldInput);
-    const items = await updateHoldItems(await loadHold(vendor.id, id!), {
-      vendorInfo: input.vendorInfo,
-    });
+    const vendorInfo: VendorInfo = {
+      ...input.vendorInfo,
+      ...contactFor(actor, await getUser(actor.sub)),
+    };
+    const items = await updateHoldItems(await loadHold(vendor.id, id!), { vendorInfo });
     const ctx = await eventCtx(items[0]!.eventId, false);
     return json(req, await holdResponse(items, ctx, vendor), 200, { 'cache-control': 'no-store' });
   })

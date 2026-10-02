@@ -68,9 +68,7 @@ function webhook(topic: string, payload: unknown, secret = SECRET): APIGatewayPr
 
 const vendorInfo = {
   tableName: "Maya's Card Corner",
-  contactName: 'Maya Johnson',
   phone: '4105550100',
-  email: 'maya@cardcorner.com',
   sellsDescription: 'Singles and sealed',
   codeOfConductAccepted: true,
 };
@@ -158,6 +156,8 @@ describe('vendor booking flow', () => {
     );
     expect(patched.status).toBe(200);
     expect(HoldResponse.parse(patched.body).vendorInfo?.tableName).toBe("Maya's Card Corner");
+    // Contact details come from the account, not the form.
+    expect(HoldResponse.parse(patched.body).vendorInfo?.email).toBe('maya@cardcorner.com');
     expect(HoldResponse.parse(patched.body).prefill).toBeUndefined();
 
     const checkout = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
@@ -286,7 +286,7 @@ describe('vendor profile', () => {
       await handler(
         authed('PATCH', '/vendor/profile', {
           businessName: 'Maya & Co',
-          email: 'Maya@CardCorner.com',
+          email: 'other@example.com',
           sellsDescription: 'Vintage singles and slabs',
           socials: { instagram: 'mayaco' },
         }),
@@ -295,7 +295,7 @@ describe('vendor profile', () => {
     expect(patched.status).toBe(200);
     const p = VendorProfile.parse(patched.body);
     expect(p.businessName).toBe('Maya & Co');
-    expect(p.email).toBe('maya@cardcorner.com');
+    expect(p.email).toBe('maya@cardcorner.com'); // not editable; unknown keys are dropped
     expect(p.sellsDescription).toBe('Vintage singles and slabs');
     expect(p.socials.instagram).toBe('mayaco');
     const k = keys.vendor(VENDOR);

@@ -5,7 +5,7 @@ import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from '.
 import { Me, Role } from './user.js';
 import { SocialHandles, Vendor, VendorApplication, VendorApprovalMode } from './vendor.js';
 import { FloorPlan, Venue } from './venue.js';
-import { Order, TableHold, TableRate, VendorInfo } from './order.js';
+import { Order, TableHold, TableRate, VendorInfo, VendorInfoInput } from './order.js';
 
 /** Every error response from the API has this shape. */
 export const ApiError = z.object({
@@ -309,11 +309,11 @@ export const HoldResponse = z.object({
   event: PublicEvent,
   vendorInfo: VendorInfo.optional(),
   /** From the vendor profile, to seed the info step when nothing has been saved yet. */
-  prefill: VendorInfo.omit({ codeOfConductAccepted: true }).partial().optional(),
+  prefill: VendorInfoInput.omit({ codeOfConductAccepted: true }).partial().optional(),
 });
 export type HoldResponse = z.infer<typeof HoldResponse>;
 
-export const UpdateHoldInput = z.object({ vendorInfo: VendorInfo });
+export const UpdateHoldInput = z.object({ vendorInfo: VendorInfoInput });
 export type UpdateHoldInput = z.infer<typeof UpdateHoldInput>;
 
 /** POST /vendor/holds/{id}/checkout → send the browser to invoiceUrl. */

@@ -45,10 +45,9 @@ export type VendorApplicationStatus = z.infer<typeof VendorApplicationStatus>;
 export const VendorApprovalMode = z.enum(['manual_call', 'auto_video_terms']);
 export type VendorApprovalMode = z.infer<typeof VendorApprovalMode>;
 
+/** What the form collects. Contact name and email come from the signed-in account. */
 export const VendorApplicationInput = z.object({
   businessName: z.string().min(1).max(120),
-  contactName: z.string().min(1).max(120),
-  email: Email,
   phone: z.string().min(7).max(30),
   /** Required free text: what they plan to bring to the table. Staff read this before the call. */
   sellsDescription: z.string().trim().min(1).max(1000),
@@ -64,6 +63,9 @@ export type VendorApplicationInput = z.infer<typeof VendorApplicationInput>;
 
 export const VendorApplication = VendorApplicationInput.extend({
   id: Ulid,
+  /** From the account at submit time. */
+  contactName: z.string().min(1).max(120),
+  email: Email,
   /** Older rows (and imported legacy vendors) have no description. */
   sellsDescription: z.string().max(1000).default(''),
   sells: z.array(SellsCategory).default([]),
@@ -115,12 +117,11 @@ export const VendorMember = z.object({
 });
 export type VendorMember = z.infer<typeof VendorMember>;
 
-/** PATCH /vendor/profile — the parts of a vendor its members can edit. */
+/** PATCH /vendor/profile — the parts of a vendor its members can edit. Contact name and
+ *  email track the account and are not editable here. */
 export const VendorProfileInput = z
   .object({
     businessName: z.string().trim().min(1).max(120),
-    contactName: z.string().trim().min(1).max(120),
-    email: Email,
     phone: z.string().trim().min(7).max(30),
     sellsDescription: z.string().trim().min(1).max(1000),
     socials: SocialHandles,

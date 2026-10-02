@@ -64,8 +64,6 @@ const staff = as(ADMIN, ['superadmin', 'staff', 'attendee']);
 
 const input = {
   businessName: "Maya's Card Corner",
-  contactName: 'Maya Johnson',
-  email: 'maya@cardcorner.com',
   phone: '4105550100',
   sellsDescription: 'Modern singles and a bulk bin',
   pokeBucksInterest: true,
@@ -99,6 +97,9 @@ describe('vendor applications', () => {
     expect(created.status).toBe(201);
     const app = VendorApplication.parse(created.body);
     expect(app.status).toBe('submitted');
+    // Contact details are taken from the account, not the form.
+    expect(app.email).toBe(`${SUB.slice(0, 4)}@example.com`);
+    expect(app.contactName).toBeTruthy();
     expect(cognito.commandCalls(AdminAddUserToGroupCommand)[0]!.args[0].input.GroupName).toBe(
       'vendor_applicant',
     );

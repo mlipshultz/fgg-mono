@@ -42,7 +42,7 @@ export function ProfileCard({
           <div className={styles.brandText}>
             <span className={styles.brandName}>{profile.businessName}</span>
             <span className={styles.brandMeta}>
-              {profile.contactName} · {profile.email}
+              {profile.contactName} · {profile.email} · {profile.phone}
             </span>
           </div>
         </div>
@@ -111,9 +111,7 @@ function ProfileForm({
   onSaved: (p: VendorProfile) => void;
 }) {
   const [businessName, setBusinessName] = useState(profile.businessName);
-  const [contactName, setContactName] = useState(profile.contactName);
   const [phone, setPhone] = useState(profile.phone);
-  const [email, setEmail] = useState(profile.email);
   const [sellsDescription, setSellsDescription] = useState(profile.sellsDescription);
   const [instagram, setInstagram] = useState(profile.socials.instagram ?? '');
   const [tiktok, setTiktok] = useState(profile.socials.tiktok ?? '');
@@ -135,9 +133,6 @@ function ProfileForm({
     ev.preventDefault();
     const errs: Record<string, string> = {};
     if (!businessName.trim()) errs.businessName = 'Your business or table name.';
-    if (!contactName.trim()) errs.contactName = 'Who should we talk to?';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()))
-      errs.email = "Hmm, that email doesn't look right";
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'A phone number we can reach you at.';
     if (!sellsDescription.trim()) errs.sellsDescription = 'Tell shoppers what you sell.';
     setErrors(errs);
@@ -154,9 +149,7 @@ function ProfileForm({
           : `https://${website.trim()}`;
       const input: VendorProfileInput = {
         businessName: businessName.trim(),
-        contactName: contactName.trim(),
         phone: phone.trim(),
-        email: email.trim().toLowerCase(),
         sellsDescription: sellsDescription.trim().slice(0, 1000),
         socials,
       };
@@ -211,32 +204,17 @@ function ProfileForm({
             onChange={(e) => setBusinessName(e.target.value)}
           />
         </Field>
-        <div className={a.two}>
-          <Field label="Contact name" error={errors.contactName}>
-            <input
-              className={`${a.input} ${errors.contactName ? a.invalid : ''}`}
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              autoComplete="name"
-            />
-          </Field>
-          <Field label="Phone" error={errors.phone}>
-            <input
-              className={`${a.input} ${errors.phone ? a.invalid : ''}`}
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              autoComplete="tel"
-            />
-          </Field>
-        </div>
-        <Field label="Email" error={errors.email}>
+        <p className={a.hint}>
+          Contact: <b>{profile.contactName}</b> · {profile.email}. This follows the account that
+          applied; phone is yours to set.
+        </p>
+        <Field label="Phone" error={errors.phone}>
           <input
-            className={`${a.input} ${errors.email ? a.invalid : ''}`}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
+            className={`${a.input} ${errors.phone ? a.invalid : ''}`}
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            autoComplete="tel"
           />
         </Field>
         <Field

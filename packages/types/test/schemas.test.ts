@@ -34,8 +34,6 @@ describe('schemas', () => {
   it('requires both agreements on a vendor application', () => {
     const base = {
       businessName: 'Card Shop',
-      contactName: 'Sam',
-      email: 'sam@example.com',
       phone: '4105551234',
       sellsDescription: 'Singles and a bulk bin',
       codeOfConductAccepted: true,

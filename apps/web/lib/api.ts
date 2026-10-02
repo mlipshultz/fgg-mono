@@ -28,7 +28,7 @@ import {
   VendorApplicationList,
   type VendorApplicationStatus,
   VendorDashboard,
-  type VendorInfo,
+  type VendorInfoInput,
   VendorOrder,
   VendorOrderList,
   VendorProfile,
@@ -297,10 +297,16 @@ export async function getHold(holdId: string): Promise<HoldResponse> {
   );
 }
 
-export async function updateHold(holdId: string, vendorInfo: VendorInfo): Promise<HoldResponse> {
+export async function updateHold(
+  holdId: string,
+  vendorInfo: VendorInfoInput,
+): Promise<HoldResponse> {
   if (!hasApi) {
     const h = localize(holdFixture('C4', ['2026-10-24', '2026-10-25'], 'standard'));
-    return fake({ ...h, vendorInfo });
+    return fake({
+      ...h,
+      vendorInfo: { ...vendorInfo, contactName: 'Maya Johnson', email: 'maya@cardcorner.com' },
+    });
   }
   return HoldResponse.parse(
     await authedRequest<unknown>(`/vendor/holds/${encodeURIComponent(holdId)}`, {
