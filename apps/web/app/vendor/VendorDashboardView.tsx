@@ -11,7 +11,13 @@ import v from '@/components/vendor/vendor.module.css';
 import { bookHref } from '@/components/vendor/BookCta';
 import { downloadVendorFile, getVendorDashboard, requestCancel } from '@/lib/api';
 import { initials } from '@/lib/auth';
-import { fmtCents, orderDates, tableLinesOf, tablesLabel } from '@/lib/booking';
+import {
+  fmtCents,
+  tableDaysCount,
+  tableDaysSummary,
+  tableLinesOf,
+  tablesLabel,
+} from '@/lib/booking';
 import { daysUntil, fullDateLabel, shortDateLabel, year } from '@/lib/dates';
 import { ProfileCard } from './ProfileCard';
 import styles from './vendor.module.css';
@@ -36,9 +42,6 @@ function tableOf(o: VendorOrder): string {
 }
 function tablesWord(o: VendorOrder): string {
   return tableLinesOf(o).length === 1 ? 'Table' : 'Tables';
-}
-function datesOf(o: VendorOrder): string[] {
-  return orderDates(o);
 }
 function passesOf(o: VendorOrder): number {
   return 2 * Math.max(1, tableLinesOf(o).length);
@@ -193,7 +196,10 @@ export function VendorDashboardView() {
                 <div className={styles.showName}>{o.event.name}</div>
                 <div className={styles.showMeta}>
                   {shortDateLabel(o.event.startDate, o.event.endDate)} · {tablesWord(o)}{' '}
-                  {tableOf(o)}, Main Hall
+                  {tableDaysSummary(
+                    o,
+                    o.event.days.map((d) => d.date),
+                  )}
                   {o.loadInLabel ? ` · Load-in ${o.loadInLabel}` : ''}
                 </div>
                 <div className={styles.pills}>
@@ -202,7 +208,7 @@ export function VendorDashboardView() {
                   </span>
                   <span className={v.statusPill}>{passesOf(o)} vendor passes</span>
                   <span className={v.statusPill}>
-                    {datesOf(o).length} {datesOf(o).length === 1 ? 'day' : 'days'}
+                    {tableDaysCount(o)} {tableDaysCount(o) === 1 ? 'table-day' : 'table-days'}
                   </span>
                   {o.cancelRequestedAt && (
                     <span className={`${v.statusPill} ${v.pending}`}>Cancellation requested</span>
@@ -338,7 +344,12 @@ export function VendorDashboardView() {
                   <td>
                     {shortDateLabel(o.event.startDate, o.event.endDate)}, {year(o.event.startDate)}
                   </td>
-                  <td>{tableOf(o)}</td>
+                  <td>
+                    {tableDaysSummary(
+                      o,
+                      o.event.days.map((d) => d.date),
+                    )}
+                  </td>
                   <td>{o.source === 'manual' ? 'Comped' : fmtCents(o.totalCents)}</td>
                   <td>
                     <span className={`${v.statusPill} ${STATUS_CLASS[o.status]}`}>

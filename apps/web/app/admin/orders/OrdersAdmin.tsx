@@ -15,7 +15,14 @@ import {
   hasApi,
 } from '@/lib/api';
 import { isSuperAdmin } from '@/lib/auth';
-import { daysLabel, fmtCents, orderDates, tableLinesOf, tablesLabel } from '@/lib/booking';
+import {
+  daysLabel,
+  fmtCents,
+  orderDates,
+  tableDaysSummary,
+  tableLinesOf,
+  tablesLabel,
+} from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import styles from '@/components/admin/admin.module.css';
 
@@ -300,7 +307,16 @@ export function OrdersAdmin() {
                   <td className={styles.mono}>{o.passNumber ?? '—'}</td>
                   <td>
                     <span className={styles.name}>{o.event.name}</span>
-                    <span className={styles.sub}>{t ? daysLabel(t.dates) : ''}</span>
+                    <span className={styles.sub}>
+                      {t
+                        ? tableLinesOf(o).length > 1
+                          ? tableDaysSummary(
+                              o,
+                              o.event.days.map((d) => d.date),
+                            )
+                          : daysLabel(t.dates)
+                        : ''}
+                    </span>
                   </td>
                   <td>
                     <span className={styles.name}>{o.vendorInfo?.tableName ?? '—'}</span>

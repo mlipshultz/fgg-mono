@@ -127,14 +127,6 @@ async function holdResponse(items: HoldItem[], ctx: Ctx, vendor: Vendor): Promis
   };
 }
 
-/** "Table B7 · Sat Oct 24 + Sun Oct 25" or "2 tables (B7, B8) · Sat Oct 24 + Sun Oct 25". */
-function cartLabel(items: HoldItem[]): string {
-  const tables = heldTables(items);
-  const dates = [...new Set(tables.flatMap((t) => t.dates))].sort().map(shortDate).join(' + ');
-  if (tables.length === 1) return `Table ${tables[0]!.tableId} · ${dates}`;
-  return `${tables.length} tables (${tables.map((t) => t.tableId).join(', ')}) · ${dates}`;
-}
-
 const LOGO_EXT: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -298,8 +290,14 @@ const router = new Router()
       updatedAt: createdAt,
     };
     const draft = await shopify().createDraftOrder({
-      title: `${ctx.event.name} · ${cartLabel(items)}`,
-      totalCents: h.totalCents,
+      lineItems: [
+        ...tables.map((t) => ({
+          title: `${ctx.event.name} · Table ${t.tableId} · ${t.dates.map(shortDate).join(' + ')}`,
+          cents: t.amountCents,
+        })),
+        ...(h.feeCents > 0 ? [{ title: 'Processing fee', cents: h.feeCents }] : []),
+        ...(h.taxCents > 0 ? [{ title: 'Sales tax', cents: h.taxCents }] : []),
+      ],
       email: vendorInfo.email,
       attributes: {
         orderId: order.id,
