@@ -71,17 +71,17 @@ export function MobileMenu({ links }: { links: NavLink[] }) {
                 </Link>
               </li>
             ))}
-            {status === 'signed-in' && (
-              <li>
-                <Link href="/dashboard" onClick={() => setOpen(false)}>
-                  My Dashboard
-                </Link>
-              </li>
-            )}
             {status === 'signed-in' && user?.roles.includes('vendor') && (
               <li>
                 <Link href="/vendor" onClick={() => setOpen(false)}>
                   Vendor Dashboard
+                </Link>
+              </li>
+            )}
+            {status === 'signed-in' && (
+              <li>
+                <Link href="/dashboard" onClick={() => setOpen(false)}>
+                  My Dashboard
                 </Link>
               </li>
             )}

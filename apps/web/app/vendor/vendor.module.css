@@ -113,6 +113,9 @@
 .cardAqua {
   box-shadow: var(--shadow-card-aqua);
 }
+.cardYellow {
+  box-shadow: var(--shadow-card-yellow);
+}
 .cardTitle {
   font-family: var(--type-brand-font-family);
   font-weight: var(--font-weight-bold);
@@ -400,6 +403,39 @@
   border: var(--border-width) solid var(--border-color);
   object-fit: cover;
   background: var(--color-white);
+}
+.logoLarge {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+}
+.logoLarge.logoEmpty {
+  font-size: 28px;
+}
+.logoPrompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  border: var(--border-width) dashed var(--border-color);
+  border-radius: var(--radius-card-sm);
+  padding: 12px 14px;
+  background: var(--color-paper);
+}
+.logoPrompt > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--type-body-font-family);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted);
+}
+.logoPrompt b {
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-ink);
+  font-size: 14px;
 }
 .logoEmpty {
   display: inline-flex;

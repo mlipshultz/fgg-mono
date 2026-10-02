@@ -62,14 +62,6 @@ export function UserMenu() {
             <b>{user.name}</b>
             {user.email}
           </div>
-          <Link
-            href="/dashboard"
-            className={styles.item}
-            role="menuitem"
-            onClick={() => setOpen(false)}
-          >
-            My Dashboard
-          </Link>
           {isVendor(user) && (
             <Link
               href="/vendor"
@@ -80,6 +72,14 @@ export function UserMenu() {
               Vendor dashboard
             </Link>
           )}
+          <Link
+            href="/dashboard"
+            className={styles.item}
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            My Dashboard
+          </Link>
           {isStaff(user) && (
             <>
               <Link

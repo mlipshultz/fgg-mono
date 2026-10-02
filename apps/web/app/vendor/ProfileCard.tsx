@@ -24,18 +24,21 @@ export function ProfileCard({
   const [editing, setEditing] = useState(false);
   if (!editing) {
     return (
-      <div className={styles.card} id="profile">
+      <div className={`${styles.card} ${styles.cardYellow}`} id="profile">
         <div className={styles.brandHead}>
-          <span className={styles.cardTitle}>Your brand</span>
+          <span className={styles.cardTitle}>Your Brand</span>
           <button type="button" className={styles.historyLink} onClick={() => setEditing(true)}>
             Edit
           </button>
         </div>
         <div className={styles.brand}>
           {profile.logoUrl ? (
-            <img src={profile.logoUrl} alt="" className={styles.logo} />
+            <img src={profile.logoUrl} alt="" className={`${styles.logo} ${styles.logoLarge}`} />
           ) : (
-            <span className={`${styles.logo} ${styles.logoEmpty}`} aria-hidden="true">
+            <span
+              className={`${styles.logo} ${styles.logoLarge} ${styles.logoEmpty}`}
+              aria-hidden="true"
+            >
               {initials(profile.businessName)}
             </span>
           )}
@@ -82,9 +85,17 @@ export function ProfileCard({
           </div>
         )}
         {!profile.logoUrl && (
-          <span className={styles.brandMeta}>
-            Add a logo so your table stands out on the event page.
-          </span>
+          <div className={styles.logoPrompt}>
+            <div>
+              <b>Add your logo</b>
+              <span>
+                Recommended. Shoppers see it next to your table on every event&apos;s vendor list.
+              </span>
+            </div>
+            <Button type="button" variant="primary" size="sm" onClick={() => setEditing(true)}>
+              Upload a logo
+            </Button>
+          </div>
         )}
       </div>
     );
@@ -167,8 +178,13 @@ function ProfileForm({
   };
 
   return (
-    <form className={styles.card} id="profile" onSubmit={submit} noValidate>
-      <span className={styles.cardTitle}>Your brand</span>
+    <form
+      className={`${styles.card} ${styles.cardYellow}`}
+      id="profile"
+      onSubmit={submit}
+      noValidate
+    >
+      <span className={styles.cardTitle}>Your Brand</span>
       <div className={a.form}>
         <div className={styles.logoRow}>
           {logoPreview ? (
