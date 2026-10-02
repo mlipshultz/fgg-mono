@@ -1,22 +1,24 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Fredoka, Nunito } from 'next/font/google';
+import localFont from 'next/font/local';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Providers } from '@/components/Providers';
 import { getHomeContent } from '@/lib/api';
 import './globals.css';
 
-const fredoka = Fredoka({
-  subsets: ['latin'],
-  weight: ['500', '600', '700'],
+// Self-hosted (handoff §9): variable latin subsets, OFL. Avoids fetching Google Fonts at build.
+const fredoka = localFont({
+  src: [{ path: './fonts/fredoka-normal-latin.woff2', weight: '300 700', style: 'normal' }],
   variable: '--font-fredoka',
   display: 'swap',
 });
 
-const nunito = Nunito({
-  subsets: ['latin'],
-  weight: ['400', '600', '700', '800', '900'],
+const nunito = localFont({
+  src: [
+    { path: './fonts/nunito-normal-latin.woff2', weight: '200 1000', style: 'normal' },
+    { path: './fonts/nunito-italic-latin.woff2', weight: '200 1000', style: 'italic' },
+  ],
   variable: '--font-nunito',
   display: 'swap',
 });
