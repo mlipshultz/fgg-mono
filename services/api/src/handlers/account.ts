@@ -337,6 +337,7 @@ router
     const now = new Date().toISOString();
     const application: VendorApplication = {
       ...input,
+      sells: input.sells ?? [],
       id: ulid(),
       userId: actor.sub,
       status: 'submitted',

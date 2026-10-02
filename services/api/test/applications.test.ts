@@ -67,7 +67,6 @@ const input = {
   contactName: 'Maya Johnson',
   email: 'maya@cardcorner.com',
   phone: '4105550100',
-  sells: ['pokemon_cards'],
   sellsDescription: 'Modern singles and a bulk bin',
   pokeBucksInterest: true,
   codeOfConductAccepted: true,

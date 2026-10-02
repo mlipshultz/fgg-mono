@@ -37,7 +37,6 @@ describe('schemas', () => {
       contactName: 'Sam',
       email: 'sam@example.com',
       phone: '4105551234',
-      sells: ['pokemon_cards'],
       sellsDescription: 'Singles and a bulk bin',
       codeOfConductAccepted: true,
       sealedPolicyAccepted: true,
