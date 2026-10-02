@@ -147,9 +147,7 @@ export function holdFixture(
     event: halloween,
     prefill: {
       tableName: vendorFixture.businessName,
-      contactName: vendorFixture.contactName,
       phone: vendorFixture.phone,
-      email: vendorFixture.email,
       sellsDescription: vendorFixture.sellsDescription,
     },
   });

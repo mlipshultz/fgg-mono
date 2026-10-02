@@ -26,7 +26,7 @@ import {
   type VendorApplicationList,
   type VendorStanding,
 } from '@fgg/types';
-import { claimsFrom, type Actor } from '../lib/auth.js';
+import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
 import {
   createUserIfMissing,
   getEvent,
@@ -325,7 +325,7 @@ router
     const actor = claimsFrom(req);
     requireCan(actor, 'update_own', actor.sub);
     const input = parseBody(req, VendorApplicationInput);
-    await ensureUser(actor);
+    const user = await ensureUser(actor);
     if (await getVendorForUser(actor.sub)) {
       throw new HttpError(409, 'already_vendor', 'You are already an approved vendor');
     }
@@ -337,6 +337,7 @@ router
     const now = new Date().toISOString();
     const application: VendorApplication = {
       ...input,
+      ...contactFor(actor, user),
       sells: input.sells ?? [],
       id: ulid(),
       userId: actor.sub,

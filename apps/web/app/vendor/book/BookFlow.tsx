@@ -1,7 +1,14 @@
 'use client';
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type { EventFloorPlan, HoldResponse, IsoDate, TableRate, VendorInfo } from '@fgg/types';
+import type {
+  EventFloorPlan,
+  HoldResponse,
+  IsoDate,
+  TableRate,
+  VendorInfo,
+  VendorInfoInput,
+} from '@fgg/types';
 import { Button } from '@/components/Button';
 import { Field, authStyles as a } from '@/components/auth/AuthCard';
 import { useAuth } from '@/components/Providers';
@@ -200,13 +207,12 @@ export function BookFlow() {
         .catch(() => {});
   };
 
-  const saveInfo = async (info: VendorInfo) => {
+  const saveInfo = async (info: VendorInfoInput) => {
     if (!hold) return;
     setBusy(true);
     setError(null);
     try {
-      const h = await updateHold(hold.hold.id, info);
-      setHold({ ...h, vendorInfo: info });
+      setHold(await updateHold(hold.hold.id, info));
       setStep(3);
       window.scrollTo({ top: 0 });
     } catch (e) {
@@ -638,13 +644,11 @@ function VendorInfoForm({
   error: string | null;
   countdown: React.ReactNode;
   onBack: () => void;
-  onSubmit: (info: VendorInfo) => void;
+  onSubmit: (info: VendorInfoInput) => void;
 }) {
   const seed = initial ?? prefill;
   const [tableName, setTableName] = useState(seed?.tableName ?? '');
-  const [contactName, setContactName] = useState(seed?.contactName ?? user?.name ?? '');
   const [phone, setPhone] = useState(seed?.phone ?? '');
-  const [email, setEmail] = useState(seed?.email ?? user?.email ?? '');
   const [sellsDescription, setSellsDescription] = useState(seed?.sellsDescription ?? '');
   const [agree, setAgree] = useState(!!initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -653,19 +657,14 @@ function VendorInfoForm({
     ev.preventDefault();
     const errs: Record<string, string> = {};
     if (!tableName.trim()) errs.tableName = 'What should we print on your table sign?';
-    if (!contactName.trim()) errs.contactName = 'Who is running the table?';
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'Add a phone number for show day.';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()))
-      errs.email = "Hmm, that email doesn't look right";
     if (!sellsDescription.trim()) errs.sellsDescription = 'Tell shoppers what you’re bringing.';
     if (!agree) errs.agree = 'Please agree to the code of conduct.';
     setErrors(errs);
     if (Object.keys(errs).length) return;
     onSubmit({
       tableName: tableName.trim(),
-      contactName: contactName.trim(),
       phone: phone.trim(),
-      email: email.trim().toLowerCase(),
       sellsDescription: sellsDescription.trim().slice(0, 1000),
       codeOfConductAccepted: true,
     });
@@ -684,33 +683,18 @@ function VendorInfoForm({
             placeholder="Maya's Card Corner"
           />
         </Field>
-        <div className={a.two}>
-          <Field label="Contact name" error={errors.contactName}>
-            <input
-              className={`${a.input} ${errors.contactName ? a.invalid : ''}`}
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              autoComplete="name"
-            />
-          </Field>
-          <Field label="Phone" error={errors.phone}>
-            <input
-              className={`${a.input} ${errors.phone ? a.invalid : ''}`}
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(410) 555-0100"
-              autoComplete="tel"
-            />
-          </Field>
-        </div>
-        <Field label="Email (receipt goes here)" error={errors.email}>
+        <p className={a.hint}>
+          Booking as <b>{user?.name ?? 'you'}</b>
+          {user?.email ? ` · ${user.email}` : ''}. Your receipt and vendor pass go there.
+        </p>
+        <Field label="Phone" error={errors.phone}>
           <input
-            className={`${a.input} ${errors.email ? a.invalid : ''}`}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
+            className={`${a.input} ${errors.phone ? a.invalid : ''}`}
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="(410) 555-0100"
+            autoComplete="tel"
           />
         </Field>
         <Field

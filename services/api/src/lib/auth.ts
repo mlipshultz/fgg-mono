@@ -1,4 +1,4 @@
-import { Role } from '@fgg/types';
+import { Role, type User } from '@fgg/types';
 import { HttpError, type Req } from './http.js';
 
 export interface Actor {
@@ -36,4 +36,15 @@ export function claimsFrom(req: Req): Actor {
     ...(typeof claims.name === 'string' ? { name: claims.name } : {}),
     roles: rolesFromGroups(claims['cognito:groups']),
   };
+}
+
+/** Contact details for vendor records come from the account, never from a form. */
+export function contactFor(
+  actor: Actor,
+  user: Pick<User, 'displayName' | 'email'> | undefined,
+): { contactName: string; email: string } {
+  const email = (user?.email ?? actor.email ?? '').toLowerCase();
+  if (!email) throw new HttpError(400, 'no_email', 'Your account has no email address');
+  const name = (user?.displayName ?? actor.name ?? '').trim() || email.split('@')[0]!;
+  return { contactName: name.slice(0, 120), email };
 }

@@ -72,6 +72,10 @@ export const VendorInfo = z.object({
 });
 export type VendorInfo = z.infer<typeof VendorInfo>;
 
+/** What the booking form sends; contact name and email are filled from the account. */
+export const VendorInfoInput = VendorInfo.omit({ contactName: true, email: true });
+export type VendorInfoInput = z.infer<typeof VendorInfoInput>;
+
 /** Stored orders from before the free-text field have category arrays instead. */
 export const StoredVendorInfo = VendorInfo.partial({ sellsDescription: true });
 export type StoredVendorInfo = z.infer<typeof StoredVendorInfo>;
