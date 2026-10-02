@@ -39,5 +39,12 @@ export function stageConfig(stage: Stage): StageConfig {
   };
 }
 
+/** Browser origins allowed to sign in and call the API: the configured hostnames plus the
+ *  CloudFront distribution itself (the only hostname dev has, and a fallback in prod). */
+export function allowedOrigins(config: StageConfig, webUrl: string): string[] {
+  const extra = config.isProd ? [] : ['http://localhost:3000'];
+  return [...new Set([...config.webOrigins, webUrl, ...extra])];
+}
+
 export const REGION = 'us-east-1';
 export const PROJECT_TAG = 'fgg';

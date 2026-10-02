@@ -9,7 +9,7 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import type { Construct } from 'constructs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { StageConfig } from './stage.js';
+import { allowedOrigins, type StageConfig } from './stage.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(here, '../..');
@@ -43,6 +43,8 @@ export interface AuthStackProps extends StackProps {
   config: StageConfig;
   /** For the post-confirmation trigger, which creates the USER record. */
   table: dynamodb.ITableV2;
+  /** The web distribution URL (https://...cloudfront.net), allowed as an OAuth redirect. */
+  webUrl: string;
 }
 
 export class AuthStack extends Stack {
@@ -57,6 +59,7 @@ export class AuthStack extends Stack {
   constructor(scope: Construct, id: string, props: AuthStackProps) {
     super(scope, id, props);
     const { config, table } = props;
+    const origins = allowedOrigins(config, props.webUrl);
 
     // Triggers. The pool id is not known until the pool exists, so post-confirmation reads
     // it from the event instead of an env var; the group grant uses a wildcard for the same reason.
@@ -159,11 +162,8 @@ export class AuthStack extends Stack {
       oAuth: {
         flows: { authorizationCodeGrant: true },
         scopes: [cognito.OAuthScope.EMAIL, cognito.OAuthScope.OPENID, cognito.OAuthScope.PROFILE],
-        callbackUrls: [
-          ...config.webOrigins.map((o) => `${o}/auth/callback/`),
-          'fgg://auth/callback',
-        ],
-        logoutUrls: [...config.webOrigins.map((o) => `${o}/`), 'fgg://auth/signout'],
+        callbackUrls: [...origins.map((o) => `${o}/auth/callback/`), 'fgg://auth/callback'],
+        logoutUrls: [...origins.map((o) => `${o}/`), 'fgg://auth/signout'],
       },
       supportedIdentityProviders: providers,
       readAttributes: new cognito.ClientAttributes().withStandardAttributes({

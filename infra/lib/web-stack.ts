@@ -17,6 +17,8 @@ export interface WebStackProps extends StackProps {
 export class WebStack extends Stack {
   readonly bucket: s3.Bucket;
   readonly distribution: cloudfront.Distribution;
+  /** https://<distribution domain>. Added to the OAuth callback and CORS allow-lists. */
+  readonly url: string;
 
   constructor(scope: Construct, id: string, props: WebStackProps) {
     super(scope, id, props);
@@ -84,6 +86,7 @@ function handler(event) {
 
     new CfnOutput(this, 'WebBucketName', { value: this.bucket.bucketName });
     new CfnOutput(this, 'WebDistributionId', { value: this.distribution.distributionId });
-    new CfnOutput(this, 'WebUrl', { value: `https://${this.distribution.distributionDomainName}` });
+    this.url = `https://${this.distribution.distributionDomainName}`;
+    new CfnOutput(this, 'WebUrl', { value: this.url });
   }
 }
