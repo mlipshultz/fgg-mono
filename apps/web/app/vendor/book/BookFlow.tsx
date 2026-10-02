@@ -24,6 +24,7 @@ import {
   getEventFloorPlan,
   getHold,
   getQuote,
+  listVendorOrders,
   releaseHold,
   updateHold,
 } from '@/lib/api';
@@ -73,6 +74,8 @@ export function BookFlow() {
   const [rate, setRate] = useState<TableRate>('standard');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [hold, setHold] = useState<HoldResponse | null>(null);
+  /** Tables this vendor already paid for at this event → booked days. */
+  const [mine, setMine] = useState<Map<string, IsoDate[]>>(new Map());
   const [step, setStep] = useState<Step>(1);
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
@@ -93,6 +96,21 @@ export function BookFlow() {
       .then(async (d) => {
         if (!alive) return;
         setData(d);
+        // Mark what this vendor already owns here (best effort; the map works without it).
+        listVendorOrders()
+          .then((r) => {
+            if (!alive) return;
+            const m = new Map<string, IsoDate[]>();
+            for (const o of r.orders) {
+              if (o.eventId !== d.event.id || o.status !== 'paid') continue;
+              for (const l of o.lines) {
+                if (l.type !== 'table') continue;
+                m.set(l.tableId, [...new Set([...(m.get(l.tableId) ?? []), ...l.dates])].sort());
+              }
+            }
+            setMine(m);
+          })
+          .catch(() => {});
         try {
           const saved = sessionStorage.getItem(HOLD_KEY);
           if (saved) {
@@ -542,6 +560,17 @@ export function BookFlow() {
 
   const panelBody = (
     <>
+      {mine.size > 0 && (
+        <div className={styles.mine}>
+          <b>Already yours</b>
+          <span>
+            {[...mine.entries()]
+              .sort(([x], [y]) => x.localeCompare(y, 'en', { numeric: true }))
+              .map(([id, dates]) => `${id} · ${daysShort(eventDays, dates)}`)
+              .join(', ')}
+          </span>
+        </div>
+      )}
       <div>
         <div className={styles.selName}>
           {cart.length ? `${cart.length} ${tablesWord} picked` : 'Pick your tables'}
@@ -690,6 +719,7 @@ export function BookFlow() {
             plan={data.floorPlan}
             eventDays={eventDays}
             openDays={openDays}
+            mine={mine}
             picked={new Set(cart.map((l) => l.tableId))}
             filterDay={filterDay}
             disabled={!!hold}
@@ -712,6 +742,11 @@ export function BookFlow() {
             <span>
               <span className={`${styles.swatch} ${styles.swatchPick}`} /> In your cart
             </span>
+            {mine.size > 0 && (
+              <span>
+                <span className={`${styles.swatch} ${styles.swatchMine}`} /> Your tables
+              </span>
+            )}
             <span>
               <span className={`${styles.swatch} ${styles.swatchTaken}`} /> Taken
             </span>

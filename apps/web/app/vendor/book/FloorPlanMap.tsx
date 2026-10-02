@@ -8,6 +8,7 @@ function TableButton({
   t,
   eventDays,
   openDays,
+  mineDays,
   picked,
   dimmed,
   disabled,
@@ -16,29 +17,35 @@ function TableButton({
   t: FloorTable;
   eventDays: IsoDate[];
   openDays: ReadonlySet<IsoDate>;
+  /** Days this vendor already booked the table for (paid). */
+  mineDays: IsoDate[];
   picked: boolean;
   dimmed: boolean;
   disabled: boolean;
   onToggle: (id: string) => void;
 }) {
   const taken = openDays.size === 0;
+  const mine = mineDays.length > 0;
   const partial = !taken && openDays.size < eventDays.length;
   const state = picked
     ? 'in your cart'
-    : taken
-      ? 'taken'
-      : partial
-        ? `open ${daysShort(eventDays, [...openDays])} only`
-        : 'open all days';
-  const stripes = picked ? undefined : stripesFor(eventDays, openDays);
+    : mine
+      ? `yours ${daysShort(eventDays, mineDays)}${openDays.size ? ` · open ${daysShort(eventDays, [...openDays])}` : ''}`
+      : taken
+        ? 'taken'
+        : partial
+          ? `open ${daysShort(eventDays, [...openDays])} only`
+          : 'open all days';
+  const stripes = picked || mine ? undefined : stripesFor(eventDays, openDays);
   return (
     <button
       type="button"
       className={[
         styles.table,
-        taken ? styles.tableTaken : '',
+        taken && !mine ? styles.tableTaken : '',
+        mine && !picked ? styles.tableMine : '',
         picked ? styles.tablePicked : '',
-        partial && !picked ? styles.tablePartial : '',
+        partial && !picked && !mine ? styles.tablePartial : '',
         dimmed ? styles.tableDim : '',
       ].join(' ')}
       style={stripes ? { backgroundImage: stripes } : undefined}
@@ -62,6 +69,7 @@ export function FloorPlanMap({
   plan,
   eventDays,
   openDays,
+  mine,
   picked,
   filterDay,
   disabled = false,
@@ -70,6 +78,8 @@ export function FloorPlanMap({
   plan: FloorPlan;
   eventDays: IsoDate[];
   openDays: ReadonlyMap<string, ReadonlySet<IsoDate>>;
+  /** Tables this vendor already holds a paid order for, with the booked days. */
+  mine: ReadonlyMap<string, IsoDate[]>;
   picked: ReadonlySet<string>;
   /** When set, tables not open on this day are dimmed. */
   filterDay: IsoDate | null;
@@ -85,6 +95,7 @@ export function FloorPlanMap({
         t={t}
         eventDays={eventDays}
         openDays={open}
+        mineDays={mine.get(t.id) ?? []}
         picked={picked.has(t.id)}
         dimmed={filterDay !== null && open.size > 0 && !open.has(filterDay)}
         disabled={disabled}
