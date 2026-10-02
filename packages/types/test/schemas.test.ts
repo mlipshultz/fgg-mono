@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_SETTINGS, Order, Ulid, VendorApplicationInput, FloorTable } from '../src/index.js';
+import {
+  CognitoSub,
+  DEFAULT_SETTINGS,
+  Order,
+  Ulid,
+  VendorApplicationInput,
+  FloorTable,
+} from '../src/index.js';
 
 describe('schemas', () => {
   it('defaults settings to no fee, no tax, 10 minute holds, manual approval', () => {
@@ -15,6 +22,13 @@ describe('schemas', () => {
   it('validates ULIDs', () => {
     expect(Ulid.safeParse('01HZX3V9K7Q2M4N8P6R5T1W0YA').success).toBe(true);
     expect(Ulid.safeParse('not-a-ulid').success).toBe(false);
+  });
+
+  it('accepts Cognito subs that are not RFC 4122 variant UUIDs', () => {
+    // Email user (variant bits valid) and Google-federated user (variant nibble 6) from dev.
+    expect(CognitoSub.safeParse('34a80488-d031-70c0-b8b7-f5c27ff25f29').success).toBe(true);
+    expect(CognitoSub.safeParse('4458d418-50e1-7095-69b9-90c2e0aa2620').success).toBe(true);
+    expect(CognitoSub.safeParse('google_110044957262712945265').success).toBe(false);
   });
 
   it('requires both agreements on a vendor application', () => {
