@@ -13,6 +13,7 @@ import { Field, authStyles as a } from '@/components/auth/AuthCard';
 import { updateVendorProfile, uploadVendorLogo } from '@/lib/api';
 import { initials } from '@/lib/auth';
 import { resizeImage } from '@/lib/image';
+import { UNSAVED_MESSAGE, useUnsavedChanges } from '@/lib/useUnsavedChanges';
 import styles from './vendor.module.css';
 
 function socialHref(kind: 'instagram' | 'tiktok', handle: string): string {
@@ -162,6 +163,7 @@ export function ProfileCard({
     <ProfileForm
       profile={profile}
       onCancel={() => setEditing(false)}
+      onLogoSaved={onChange}
       onSaved={(p) => {
         onChange(p);
         setEditing(false);
@@ -173,10 +175,13 @@ export function ProfileCard({
 function ProfileForm({
   profile,
   onCancel,
+  onLogoSaved,
   onSaved,
 }: {
   profile: VendorProfile;
   onCancel: () => void;
+  /** The logo saves the moment it's picked; the rest of the form stays open. */
+  onLogoSaved: (p: VendorProfile) => void;
   onSaved: (p: VendorProfile) => void;
 }) {
   const [businessName, setBusinessName] = useState(profile.businessName);
@@ -186,17 +191,45 @@ function ProfileForm({
   const [instagram, setInstagram] = useState(profile.socials.instagram ?? '');
   const [tiktok, setTiktok] = useState(profile.socials.tiktok ?? '');
   const [website, setWebsite] = useState(profile.socials.website ?? '');
-  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | undefined>(profile.logoUrl);
+  const [logoState, setLogoState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const pickLogo = (file: File | undefined) => {
+  // Picking a logo uploads and saves it right away, matching the dashboard's quick upload.
+  const pickLogo = async (file: File | undefined) => {
     if (!file) return;
-    setLogoFile(file);
     setLogoPreview(URL.createObjectURL(file));
+    setLogoState('saving');
+    try {
+      const { blob, contentType } = await resizeImage(file, 512);
+      const up = await uploadVendorLogo(blob, contentType);
+      onLogoSaved(await updateVendorProfile({ logoKey: up.key }));
+      setLogoState('saved');
+    } catch {
+      setLogoPreview(profile.logoUrl);
+      setLogoState('error');
+    }
+  };
+
+  const norm = (v: string) => v.trim();
+  const sameTags =
+    sells.length === (profile.sells ?? []).length &&
+    sells.every((t) => (profile.sells ?? []).includes(t));
+  const dirty =
+    norm(businessName) !== profile.businessName ||
+    norm(phone) !== profile.phone ||
+    norm(sellsDescription) !== profile.sellsDescription ||
+    !sameTags ||
+    norm(instagram) !== (profile.socials.instagram ?? '') ||
+    norm(tiktok) !== (profile.socials.tiktok ?? '') ||
+    norm(website) !== (profile.socials.website ?? '');
+  useUnsavedChanges(dirty && !busy);
+  const cancel = () => {
+    if (dirty && !window.confirm(UNSAVED_MESSAGE)) return;
+    onCancel();
   };
 
   const submit = async (ev: FormEvent) => {
@@ -224,11 +257,6 @@ function ProfileForm({
         sells,
         socials,
       };
-      if (logoFile) {
-        const { blob, contentType } = await resizeImage(logoFile, 512);
-        const up = await uploadVendorLogo(blob, contentType);
-        input.logoKey = up.key;
-      }
       onSaved(await updateVendorProfile(input));
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Could not save your profile');
@@ -260,17 +288,28 @@ function ProfileForm({
               type="file"
               accept="image/png,image/jpeg,image/webp"
               hidden
-              onChange={(e) => pickLogo(e.target.files?.[0])}
+              onChange={(e) => void pickLogo(e.target.files?.[0])}
             />
             <Button
               type="button"
               variant="outline"
               size="sm"
+              disabled={logoState === 'saving'}
               onClick={() => fileRef.current?.click()}
             >
-              {logoPreview ? 'Change logo' : 'Upload a logo'}
+              {logoState === 'saving'
+                ? 'Uploading…'
+                : logoPreview
+                  ? 'Change logo'
+                  : 'Upload a logo'}
             </Button>
-            <span className={styles.brandMeta}>Square works best. PNG, JPG or WebP.</span>
+            <span className={styles.brandMeta}>
+              {logoState === 'saved'
+                ? 'Logo saved.'
+                : logoState === 'error'
+                  ? 'That image didn’t upload. Try another file.'
+                  : 'Square works best. PNG, JPG or WebP. Saves as soon as you pick it.'}
+            </span>
           </div>
         </div>
         <Field label="Business / table name" error={errors.businessName}>
@@ -364,7 +403,7 @@ function ProfileForm({
         </div>
       )}
       <div className={styles.formNav}>
-        <button type="button" className={styles.historyLink} onClick={onCancel} disabled={busy}>
+        <button type="button" className={styles.historyLink} onClick={cancel} disabled={busy}>
           Cancel
         </button>
         <Button type="submit" variant="primary" size="sm" disabled={busy}>
