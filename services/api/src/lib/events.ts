@@ -1,6 +1,15 @@
-import type { Event, EventAvailability, EventDay, FloorPlan, PublicEvent, Venue } from '@fgg/types';
+import type {
+  Event,
+  EventAvailability,
+  EventDay,
+  FloorPlan,
+  PriceWindow,
+  PublicEvent,
+  Venue,
+} from '@fgg/types';
 import { mediaUrl } from './media.js';
-import { getFloorPlan, getVenue, listBookedTables, listHolds } from './db.js';
+import { getFloorPlan, getVenue, listBookedTables, listHolds, listPriceWindows } from './db.js';
+import { activeWindow } from './pricing.js';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -24,7 +33,29 @@ export function hoursLabel(days: EventDay[]): string {
   return days.map((d, i) => `${dowOf(d.date)} ${spans[i]}`).join(' · ');
 }
 
-export function toPublicEvent(ev: Event, venue: Venue, tablesLeft?: number): PublicEvent {
+/** Cheapest standard per-day price a vendor could pay today, for "Tables from $X". */
+export function tablesFromCents(
+  ev: Event,
+  plan: FloorPlan | undefined,
+  windows: PriceWindow[],
+  now = new Date(),
+): number {
+  const win = activeWindow(windows, now);
+  const base = win ? win.tableRateCents : ev.tableRateCents;
+  const prices = (plan?.tables ?? []).map((t) =>
+    t.priceOverrideCents !== undefined
+      ? t.priceOverrideCents
+      : Math.max(0, base + (t.premiumDeltaCents ?? 0)),
+  );
+  return prices.length ? Math.min(...prices) : base;
+}
+
+export function toPublicEvent(
+  ev: Event,
+  venue: Venue,
+  tablesLeft?: number,
+  fromCents?: number,
+): PublicEvent {
   const dates = [...ev.days].map((d) => d.date).sort();
   return {
     id: ev.id,
@@ -43,6 +74,7 @@ export function toPublicEvent(ev: Event, venue: Venue, tablesLeft?: number): Pub
     vendorStatus: ev.vendorStatus,
     ...(ev.vendorOpensAt ? { vendorOpensAt: ev.vendorOpensAt } : {}),
     ...(tablesLeft !== undefined ? { tablesLeft } : {}),
+    ...(fromCents !== undefined ? { tablesFromCents: fromCents } : {}),
     tableRateCents: ev.tableRateCents,
     pokeBucksRateCents: ev.pokeBucksRateCents,
   };
@@ -118,7 +150,8 @@ export async function toPublicEvents(events: Event[]): Promise<PublicEvent[]> {
     const venue = await venueFor(ev.venueId);
     if (!venue) continue;
     const left = ev.vendorStatus === 'open' ? (await loadAvailability(ev)).tablesLeft : undefined;
-    out.push(toPublicEvent(ev, venue, left));
+    const [plan, windows] = await Promise.all([getFloorPlan(ev.venueId), listPriceWindows(ev.id)]);
+    out.push(toPublicEvent(ev, venue, left, tablesFromCents(ev, plan, windows)));
   }
   return out;
 }

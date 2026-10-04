@@ -18,11 +18,14 @@ export function VenueMap({
   plan,
   booked,
   focus,
+  flash,
   onPick,
 }: {
   plan: FloorPlan;
   booked: ReadonlyMap<string, BookedTable>;
   focus: string | null;
+  /** Changes each time the vendor asks to be found; re-runs the flash animation. */
+  flash: number;
   onPick: (vendorId: string) => void;
 }) {
   const cell = (t: FloorTable) => {
@@ -30,12 +33,17 @@ export function VenueMap({
     const hot = !!b && b.vendorId === focus;
     return (
       <button
-        key={t.id}
+        key={hot ? `${t.id}-${flash}` : t.id}
         type="button"
         data-table={t.id}
+        data-hot={hot || undefined}
         className={[
           book.table,
-          b ? (hot ? book.tablePicked : book.tableMine) : styles.tableFree,
+          b
+            ? hot
+              ? `${book.tablePicked} ${styles.tableFlash}`
+              : book.tableMine
+            : styles.tableFree,
         ].join(' ')}
         aria-label={b ? `Table ${t.id}, ${b.name}` : `Table ${t.id}, open`}
         title={b ? `${t.id} · ${b.name}` : `${t.id} · open`}

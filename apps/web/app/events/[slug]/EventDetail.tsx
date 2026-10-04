@@ -46,6 +46,8 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState<'all' | SellsCategory>('all');
   const [focus, setFocus] = useState<string | null>(null);
+  /** Bumped on every Find on map so the highlighted tables flash again. */
+  const [flash, setFlash] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -97,7 +99,12 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
   };
   const findOnMap = (vendorId: string) => {
     setFocus(vendorId);
-    document.getElementById('venue-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setFlash((n) => n + 1);
+    // Only move the page when the map isn't already on screen.
+    const map = document.getElementById('venue-map');
+    const r = map?.getBoundingClientRect();
+    if (r && (r.bottom < 120 || r.top > window.innerHeight - 160))
+      map?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   return (
@@ -105,10 +112,7 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
       <section className={styles.hero} aria-labelledby="event-title">
         <div className={styles.poster}>
           {ev.posterUrl ? (
-            <>
-              <img src={ev.posterUrl} alt="" aria-hidden="true" className={styles.posterBlur} />
-              <img src={ev.posterUrl} alt={`${ev.name} poster`} className={styles.posterImg} />
-            </>
+            <img src={ev.posterUrl} alt={`${ev.name} poster`} className={styles.posterImg} />
           ) : (
             <span className={styles.posterEmpty}>Poster coming soon</span>
           )}
@@ -195,12 +199,13 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
           <div className={styles.ctaCard}>
             <div className={styles.ctaRow}>
               <div>
-                <span className={styles.ctaLabel}>Vendor tables</span>
+                <span className={styles.ctaLabel}>
+                  Tables from {fmtCents(ev.tablesFromCents ?? ev.tableRateCents)}/day
+                </span>
                 <span className={styles.ctaSub}>
                   {ev.vendorStatus === 'open' && (
                     <>
-                      {fmtCents(ev.tableRateCents)}/day ·{' '}
-                      <TablesLeft eventId={ev.id} initial={ev.tablesLeft} />
+                      Open · <TablesLeft eventId={ev.id} initial={ev.tablesLeft} />
                     </>
                   )}
                   {ev.vendorStatus === 'closed' && 'Sold out · join the waitlist'}
@@ -239,7 +244,13 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
             </h2>
             <span className={styles.sectionNote}>Tap a booked table to see who&apos;s there.</span>
           </div>
-          <VenueMap plan={plan.floorPlan} booked={booked} focus={focus} onPick={jumpToVendor} />
+          <VenueMap
+            plan={plan.floorPlan}
+            booked={booked}
+            focus={focus}
+            flash={flash}
+            onPick={jumpToVendor}
+          />
         </section>
       )}
 

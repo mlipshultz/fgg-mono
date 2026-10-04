@@ -38,10 +38,18 @@ test.describe('public site', () => {
     await expect(cards.first()).toContainText('Pocket Monsters MD');
     await page.getByRole('searchbox', { name: 'Search vendors' }).fill('');
 
-    // The map knows who's where: Maya has B7 and B8.
+    await expect(page.getByText('Tables from $200/day')).toBeVisible();
+
+    // The map knows who's where: Maya has B7 and B8, and Find on map lights them up.
     const map = page.getByRole('group', { name: 'Tables' });
     await expect(map.getByRole('button', { name: "Table B7, Maya's Card Corner" })).toBeVisible();
     await expect(map.getByRole('button', { name: 'Table A1, open' })).toBeDisabled();
+    await cards.first().getByRole('button', { name: 'Find on map' }).click();
+    await expect(map.locator('[data-hot]')).toHaveCount(2);
+    await expect(map.getByRole('button', { name: "Table B8, Maya's Card Corner" })).toHaveAttribute(
+      'data-hot',
+      'true',
+    );
   });
 
   test('login page has email, password and Google', async ({ browser, baseURL }) => {

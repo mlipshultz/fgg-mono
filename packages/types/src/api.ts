@@ -64,6 +64,8 @@ export const PublicEvent = z.object({
   tablesLeft: z.number().int().nonnegative().optional(),
   tableRateCents: z.number().int().nonnegative(),
   pokeBucksRateCents: z.number().int().nonnegative(),
+  /** Cheapest standard per-day table price right now: current price window, lowest table override. */
+  tablesFromCents: z.number().int().nonnegative().optional(),
 });
 export type PublicEvent = z.infer<typeof PublicEvent>;
 
