@@ -3,7 +3,13 @@ import { Activity, Partner } from './content.js';
 import { EventDay, VendorTableStatus } from './event.js';
 import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
 import { Me, Role } from './user.js';
-import { SocialHandles, Vendor, VendorApplication, VendorApprovalMode } from './vendor.js';
+import {
+  SocialHandles,
+  Vendor,
+  VendorApplication,
+  VendorApprovalMode,
+  SellsCategory,
+} from './vendor.js';
 import { FloorPlan, Venue } from './venue.js';
 import {
   Order,
@@ -386,14 +392,15 @@ export const VendorDashboard = z.object({
 export type VendorDashboard = z.infer<typeof VendorDashboard>;
 
 /** GET /public/events/{idOrSlug}/vendors — who has a paid table. No contact details. */
+/** One vendor at an event, however many tables they booked. */
 export const EventVendor = z.object({
   vendorId: Ulid,
   name: z.string(),
   sellsDescription: z.string(),
+  tags: z.array(SellsCategory),
   logoUrl: z.string().url().optional(),
   socials: SocialHandles,
-  tableId: z.string(),
-  dates: z.array(IsoDate).min(1),
+  tables: z.array(z.object({ tableId: z.string(), dates: z.array(IsoDate).min(1) })).min(1),
 });
 export type EventVendor = z.infer<typeof EventVendor>;
 export const EventVendorList = z.object({ event: PublicEvent, vendors: z.array(EventVendor) });

@@ -329,7 +329,12 @@ the panel. Per-day availability is drawn with stripes (one colour + line directi
 day chips above the map filter by dimming and double as the legend. `QuoteInput`/`Quote`,
 `TableHold` and the hold items are per table (`lines`/`tables`); orders already carried a list of
 lines, so passes, receipts and the public vendor list just iterate them.
-Not built: SES emails, PokéBucks toggle endpoint, QR on the vendor pass (Phase 5), tests in web.
+Event page (`/events/[slug]/`, 2026-10-04): poster hero with venue (maps link), per-day hours,
+vendor avatars and the table CTA; About; a read-only venue map (booked tables carry the vendor,
+"Find on map" from a card); and the vendor list, one card per vendor with store tags, a tag
+filter row and search. Vendor tags are `Vendor.sells` (`SellsCategory`, labels in
+`SELLS_LABEL`), editable on the vendor profile, up to `MAX_VENDOR_TAGS`.
+Not built: SES emails, PokéBucks toggle endpoint, QR on the vendor pass (Phase 5).
 
 - Vendor application form, Calendly pending screen, review queue in admin, approval that creates
   the `VENDOR#` record, adds the applicant as its first member, moves the Cognito group and emails.

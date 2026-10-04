@@ -227,8 +227,7 @@ describe('vendor booking flow', () => {
         vendorId: VENDOR,
         name: "Maya's Card Corner",
         sellsDescription: 'Singles and sealed',
-        tableId: 'B2',
-        dates: ['2026-10-24', '2026-10-25'],
+        tables: [{ tableId: 'B2', dates: ['2026-10-24', '2026-10-25'] }],
       }),
     ]);
     expect(JSON.stringify(who.body)).not.toContain('4105550100');
@@ -284,7 +283,9 @@ describe('vendor booking flow', () => {
     expect(vo.lines).toHaveLength(2);
     expect(vo.loadInLabel).toBe('Sat Oct 24 · 9am');
     const who = parse(await publicHandler(baseReq('GET', `/public/events/${EVENT_ID}/vendors`)));
-    expect(EventVendorList.parse(who.body).vendors.map((v) => v.tableId)).toEqual(['B1', 'B3']);
+    const listed = EventVendorList.parse(who.body).vendors;
+    expect(listed).toHaveLength(1); // one card per vendor, both tables on it
+    expect(listed[0]!.tables.map((t) => t.tableId)).toEqual(['B1', 'B3']);
   });
 
   it('rejects anyone without a vendor and expired holds', async () => {

@@ -527,3 +527,54 @@
     overflow-x: auto;
   }
 }
+
+/* Store tags */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 3px 10px;
+  background: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+}
+.tagPicks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tagPick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 5px 12px 5px 8px;
+  background: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+  cursor: pointer;
+}
+.tagPick input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--color-ink);
+}
+.tagPickOn {
+  background: var(--color-aqua);
+  box-shadow: 2px 2px 0 var(--color-ink);
+}
+.tagPick:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

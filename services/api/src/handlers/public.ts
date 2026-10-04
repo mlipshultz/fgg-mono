@@ -209,24 +209,32 @@ export const router = new Router()
         .filter((v): v is NonNullable<typeof v> => !!v)
         .map((v) => [v.id, v]),
     );
-    const list: EventVendor[] = [];
+    // One card per vendor, however many tables or orders they have.
+    const byVendor = new Map<string, EventVendor>();
     for (const o of paid) {
       const v = vendors.get(o.ownerId);
       if (!v) continue;
+      const entry = byVendor.get(v.id) ?? {
+        vendorId: v.id,
+        name: o.vendorInfo?.tableName || v.businessName,
+        sellsDescription: o.vendorInfo?.sellsDescription || v.sellsDescription || '',
+        tags: v.sells ?? [],
+        ...(v.logoKey ? { logoUrl: mediaUrl(v.logoKey) } : {}),
+        socials: v.socials ?? {},
+        tables: [],
+      };
       for (const line of o.lines) {
         if (line.type !== 'table') continue;
-        list.push({
-          vendorId: v.id,
-          name: o.vendorInfo?.tableName || v.businessName,
-          sellsDescription: o.vendorInfo?.sellsDescription || v.sellsDescription || '',
-          ...(v.logoKey ? { logoUrl: mediaUrl(v.logoKey) } : {}),
-          socials: v.socials ?? {},
-          tableId: line.tableId,
-          dates: [...line.dates].sort(),
-        });
+        const t = entry.tables.find((x) => x.tableId === line.tableId);
+        if (t) t.dates = [...new Set([...t.dates, ...line.dates])].sort();
+        else entry.tables.push({ tableId: line.tableId, dates: [...line.dates].sort() });
       }
+      if (entry.tables.length) byVendor.set(v.id, entry);
     }
-    list.sort((a, b) => a.tableId.localeCompare(b.tableId, 'en', { numeric: true }));
+    const list = [...byVendor.values()];
+    for (const e of list)
+      e.tables.sort((a, b) => a.tableId.localeCompare(b.tableId, 'en', { numeric: true }));
+    list.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
     const [event] = await toPublicEvents([ev]);
     const body: EventVendorList = { event: event!, vendors: list };
     return json(req, body, 200, { 'cache-control': 'public, max-age=60' });

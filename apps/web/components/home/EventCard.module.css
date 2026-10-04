@@ -32,6 +32,25 @@
     transparent 8px 16px
   );
 }
+.poster {
+  display: block;
+  color: inherit;
+}
+.poster:hover .posterImg {
+  transform: scale(1.02);
+}
+.posterImg {
+  transition: transform 160ms ease-out;
+}
+.nameLink {
+  color: inherit;
+  text-decoration: none;
+}
+.nameLink:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
 .posterBlur,
 .posterImg {
   position: absolute;
