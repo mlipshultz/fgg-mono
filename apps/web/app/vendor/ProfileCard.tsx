@@ -28,6 +28,27 @@ export function ProfileCard({
   onChange: (p: VendorProfile) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const quickRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  /** The "Add your logo" prompt goes straight to the file picker; no form in between. */
+  const quickUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const { blob, contentType } = await resizeImage(file, 512);
+      const up = await uploadVendorLogo(blob, contentType);
+      onChange(await updateVendorProfile({ logoKey: up.key }));
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Could not upload that image');
+    } finally {
+      setUploading(false);
+      if (quickRef.current) quickRef.current.value = '';
+    }
+  };
+
   if (!editing) {
     return (
       <div className={`${styles.card} ${styles.cardYellow}`} id="profile">
@@ -110,9 +131,28 @@ export function ProfileCard({
                 Recommended. Shoppers see it next to your table on every event&apos;s vendor list.
               </span>
             </div>
-            <Button type="button" variant="primary" size="sm" onClick={() => setEditing(true)}>
-              Upload a logo
+            <input
+              ref={quickRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              aria-label="Choose a logo image"
+              onChange={(e) => void quickUpload(e.target.files?.[0])}
+            />
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={uploading}
+              onClick={() => quickRef.current?.click()}
+            >
+              {uploading ? 'Uploading…' : 'Upload a logo'}
             </Button>
+            {uploadError && (
+              <span className={a.error} role="alert">
+                {uploadError}
+              </span>
+            )}
           </div>
         )}
       </div>
