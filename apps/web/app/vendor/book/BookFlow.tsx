@@ -160,9 +160,12 @@ export function BookFlow() {
   }, [slug, step]);
 
   const eventDays = useMemo(() => (data ? data.event.days.map((d) => d.date) : []), [data]);
+  // Seed the Available checkboxes once per event. Keyed on the dates themselves: the 20s
+  // availability poll replaces `data`, which must not reset what the vendor unchecked.
+  const dayKey = eventDays.join(',');
   useEffect(() => {
-    setShownDays(new Set(eventDays));
-  }, [eventDays]);
+    setShownDays(new Set(dayKey ? (dayKey.split(',') as IsoDate[]) : []));
+  }, [dayKey]);
   const openDays = useMemo(() => {
     if (!data) return new Map<string, Set<IsoDate>>();
     const m = openDaysByTable(data.floorPlan, data.availability);
