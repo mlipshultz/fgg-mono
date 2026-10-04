@@ -16,7 +16,6 @@
 }
 .poster {
   position: relative;
-  aspect-ratio: 1;
   overflow: hidden;
   border: var(--border-width) solid var(--border-color);
   border-radius: var(--radius-card-lg);
@@ -28,25 +27,14 @@
     transparent 8px 16px
   );
 }
-.posterBlur,
 .posterImg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
   display: block;
-}
-.posterBlur {
-  object-fit: cover;
-  filter: blur(18px) saturate(1.2);
-  transform: scale(1.2);
-}
-.posterImg {
-  object-fit: contain;
+  width: 100%;
+  height: auto;
 }
 .posterEmpty {
-  position: absolute;
-  inset: 0;
+  display: flex;
+  aspect-ratio: 1.6;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -267,10 +255,30 @@ a.factTitle:hover {
   white-space: pre-line;
 }
 
-/* Venue map: free tables fade back so booked ones read */
+/* Venue map: free tables fade back so booked ones read; found tables flash */
 .tableFree {
   opacity: 0.45;
   cursor: default;
+}
+.tableFlash {
+  animation: tableFlash 500ms ease-in-out 4;
+}
+@keyframes tableFlash {
+  0%,
+  100% {
+    background: var(--color-pink);
+    transform: none;
+  }
+  50% {
+    background: var(--color-yellow);
+    transform: scale(1.18);
+    box-shadow: 4px 4px 0 var(--color-ink);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tableFlash {
+    animation: none;
+  }
 }
 
 /* Vendors */
@@ -440,9 +448,6 @@ a.factTitle:hover {
   .hero {
     grid-template-columns: 1fr;
   }
-  .poster {
-    aspect-ratio: 1.6;
-  }
   .grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -456,7 +461,6 @@ a.factTitle:hover {
     font-size: 30px;
   }
   .poster {
-    aspect-ratio: 1.2;
     box-shadow: none;
   }
   .grid {

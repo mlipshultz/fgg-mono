@@ -60,6 +60,7 @@ export const fixtureEvents: PublicEvent[] = [
     vendorStatus: 'open',
     tablesLeft: 18,
     tableRateCents: 20000,
+    tablesFromCents: 20000,
     pokeBucksRateCents: 10000,
   },
   {
@@ -77,6 +78,7 @@ export const fixtureEvents: PublicEvent[] = [
     venue: venues.merriweather,
     vendorStatus: 'closed',
     tableRateCents: 20000,
+    tablesFromCents: 20000,
     pokeBucksRateCents: 10000,
   },
   {
@@ -96,6 +98,7 @@ export const fixtureEvents: PublicEvent[] = [
     vendorStatus: 'coming_soon',
     vendorOpensAt: '2027-01-15T12:00:00-05:00',
     tableRateCents: 20000,
+    tablesFromCents: 20000,
     pokeBucksRateCents: 10000,
   },
   {
@@ -114,6 +117,7 @@ export const fixtureEvents: PublicEvent[] = [
     posterUrl: 'https://fixture.local/posters/summer-fest-og.png',
     vendorStatus: 'coming_soon',
     tableRateCents: 20000,
+    tablesFromCents: 20000,
     pokeBucksRateCents: 10000,
   },
   {
@@ -136,6 +140,7 @@ export const fixtureEvents: PublicEvent[] = [
     posterUrl: 'https://fixture.local/posters/harbor-fest-og.jpg',
     vendorStatus: 'coming_soon',
     tableRateCents: 20000,
+    tablesFromCents: 20000,
     pokeBucksRateCents: 10000,
   },
 ];
