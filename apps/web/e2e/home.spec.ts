@@ -16,10 +16,14 @@ test.describe('public site', () => {
     expect(await vendors.count()).toBeGreaterThan(0);
   });
 
-  test('login page has email, password and Google', async ({ page }) => {
+  test('login page has email, password and Google', async ({ browser, baseURL }) => {
+    // Signed-in sessions get redirected away from /login, so use a fresh context.
+    const ctx = await browser.newContext({ baseURL: baseURL!, storageState: undefined });
+    const page = await ctx.newPage();
     await page.goto('/login/');
     await expect(page.getByPlaceholder('you@email.com')).toBeVisible();
     await expect(page.getByPlaceholder('Your password')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Log in' })).toBeEnabled();
+    await ctx.close();
   });
 });
