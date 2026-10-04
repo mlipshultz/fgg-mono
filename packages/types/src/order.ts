@@ -76,7 +76,7 @@ export const VendorInfo = z.object({
   contactName: z.string().min(1).max(120),
   phone: z.string().min(7).max(30),
   email: z.string().email(),
-  /** What they're bringing; prefilled from the vendor profile. */
+  /** About the store; prefilled from the vendor profile. */
   sellsDescription: z.string().trim().min(1).max(1000),
   codeOfConductAccepted: z.literal(true),
 });

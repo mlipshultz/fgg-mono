@@ -75,7 +75,7 @@ export function ApplyForm() {
     const errs: Record<string, string> = {};
     if (!businessName.trim()) errs.businessName = 'Tell us your business or table name.';
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'Add a phone number we can reach you at.';
-    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell us what you plan to bring.';
+    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell us about your store.';
     if (pokeBucks === null) errs.pokeBucks = 'Let us know either way.';
     if (!conduct) errs.conduct = 'Please agree to the code of conduct.';
     if (!sealed) errs.sealed = 'Please agree to the sealed product policy.';
@@ -203,8 +203,8 @@ export function ApplyForm() {
           </div>
         </Field>
         <Field
-          label="What do you plan to sell?"
-          hint="Singles, sealed, graded, plush, price range — whatever you'll bring to the table."
+          label="About your store"
+          hint="What you sell and what makes your table worth a stop: singles, sealed, graded, plush, price range."
           error={errors.sellsDescription}
         >
           <textarea

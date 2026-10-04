@@ -115,7 +115,7 @@ export function ApplicationsAdmin() {
             <tr>
               <th>Business</th>
               <th>Contact</th>
-              <th>Sells</th>
+              <th>Store</th>
               <th>History</th>
               <th>Applied</th>
               <th>

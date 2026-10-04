@@ -18,7 +18,7 @@ function validate(i: Info): Record<keyof Info, string | undefined> {
   return {
     tableName: i.tableName.trim() ? undefined : 'What should we print on your table sign?',
     phone: i.phone.replace(/\D/g, '').length >= 7 ? undefined : 'Add a phone number for show day.',
-    sellsDescription: i.sellsDescription.trim() ? undefined : 'Tell shoppers what you’re bringing.',
+    sellsDescription: i.sellsDescription.trim() ? undefined : 'Tell shoppers about your store.',
   };
 }
 const hasErrors = (e: ReturnType<typeof validate>) => Object.values(e).some(Boolean);
@@ -173,7 +173,7 @@ export function Payment({
               {field('phone')}
             </Field>
             <Field
-              label="What are you bringing?"
+              label="About your store"
               hint="Shown on the event's vendor list. Prefilled from your profile; tweak it per show."
               error={errors?.sellsDescription}
             >
@@ -208,7 +208,7 @@ export function Payment({
               <dd>{info.phone}</dd>
             </div>
             <div>
-              <dt>Bringing</dt>
+              <dt>Your store</dt>
               <dd>{info.sellsDescription}</dd>
             </div>
           </dl>
