@@ -19,6 +19,9 @@ spec is `docs/handoff/README.md` and the canvas `docs/handoff/FGG Site.dc.html`.
 
 - `pnpm install`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (Turborepo).
 - `pnpm --filter @fgg/web dev` for the site. `pnpm --filter @fgg/infra deploy:dev` to deploy dev.
+- Browser tests (Playwright, `apps/web/e2e`): `pnpm --filter @fgg/web e2e:build && pnpm --filter @fgg/web e2e`
+  runs against the fixture export (what CI runs); `pnpm --filter @fgg/web e2e:dev` runs the `@live`
+  specs against dev, signing in with the smoke account from `.env.dev-smoke`. `e2e:ui` to watch.
 - Never run AWS commands without `--profile fgg`; the default profile is a different account.
 
 ## Conventions
