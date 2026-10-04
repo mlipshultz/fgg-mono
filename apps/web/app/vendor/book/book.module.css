@@ -1014,6 +1014,9 @@
   .h2 {
     font-size: 26px;
   }
+  .days > span:first-child {
+    width: 100%;
+  }
   .headRow {
     align-items: center;
   }

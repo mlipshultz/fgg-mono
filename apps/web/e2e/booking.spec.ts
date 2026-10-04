@@ -88,9 +88,11 @@ test.describe('booking picker', () => {
     await expect(page.getByText('1 table · 1 table-day')).toBeVisible();
   });
 
-  test('Available checkboxes filter the map and seed the day picker', async ({ page }) => {
+  test('Show-tables-available checkboxes filter the map and seed the day picker', async ({
+    page,
+  }) => {
     await gotoBooking(page);
-    const show = page.getByRole('group', { name: 'Available days' });
+    const show = page.getByRole('group', { name: 'Show tables available' });
     const sat = show.getByRole('checkbox', { name: 'Sat Oct 24' });
     const sun = show.getByRole('checkbox', { name: 'Sun Oct 25' });
     await expect(sat).toBeChecked();
