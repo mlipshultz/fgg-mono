@@ -19,7 +19,7 @@ decided on top of it, what is assumed until told otherwise, the architecture, an
 | AWS accounts                       | **One account** (CLI profile `fgg`, id 462545111287 is the Frost work account, do not use). `dev` and `prod` are stage-suffixed stacks in the same account. Stack naming and CDK context keep an account split possible later.                                                                                     |
 | Everything in handoff §0A          | Stands as written except child profiles (below): 13+ accounts, keep PokéBucks/PokéPets names, no tax or fee (configurable, default 0), React Native mobile, staff tools inside the same app, 3b event cards, placeholder XP/badges.                                                                                |
 | Vendor = business, not person      | A `VENDOR#id` record with one or more member users. One member at launch; adding a second is an admin action.                                                                                                                                                                                                      |
-| Vendor approval                    | **Global.** Once approved, a vendor can book any open event. Per-event details ("what are you bringing") are collected in the booking's vendor-info step.                                                                                                                                                          |
+| Vendor approval                    | **Global.** Once approved, a vendor can book any open event. Per-event details ("what are you bringing") sit on the Pay step as an editable card, prefilled from the profile.                                                                                                                                      |
 | Attendee purchases                 | **Yes, eventually.** Free tickets and premium tickets per event. Vendor table bookings and tickets are both `ORDER` records with a `kind`, sharing the Shopify, webhook and refund path. Ticket UI is not in the designs; schema and API support it from day one, UI ships after the vendor flow.                  |
 | Pricing                            | Per-table **premium overrides** in the floor plan (e.g. corner or stage-adjacent tables). **Early-bird pricing** as dated price windows on the event. No multi-day discount.                                                                                                                                       |
 | Search                             | **Not now.** Exact email lookup only; admin lists are paged and filtered client-side. Users are expected to stay small.                                                                                                                                                                                            |
@@ -183,7 +183,7 @@ and XP audit rows under `EVENT#` are anonymized (owner replaced with `DELETED`),
 1. `GET /events/{id}/availability` returns, per day, the set of taken and held table IDs.
 2. Vendor picks days, then a table. `POST /events/{id}/holds` runs the transaction above and returns
    a `holdId` with a 10-minute `expiresAt`. The picker shows the countdown.
-3. Vendor info step writes to the hold. Rate choice (standard / PokéBucks) is stored on the hold.
+3. The Pay step saves the vendor info (prefilled from the profile, editable in place) to the hold right before checkout. Rate choice (standard / PokéBucks) is stored on the hold.
 4. `POST /holds/{id}/checkout`:
    - extends the hold to 30 minutes;
    - creates a Shopify draft order: one custom line item titled
@@ -319,7 +319,7 @@ order whose invoice renders in Shopify checkout with our attributes; the test pa
 left to Matt (auto mode blocks transactions), after which the paid webhook path is confirmed.
 Ops: `infra/scripts/dev-token.sh` mints an ID token via the IAM-gated admin auth flow.
 2026-10-02: vendor profile (`GET/PATCH /vendor/profile`, logo via presigned S3 PUT to
-`vendors/{id}/`, resized in the browser) prefills the booking info step; "what you sell" is free
+`vendors/{id}/`, resized in the browser) prefills the info card on the Pay step; "what you sell" is free
 text everywhere (application, profile, per-order); `GET /public/events/{id}/vendors` powers the
 public `/events/{slug}/` "who's vending" page, fetched at runtime so it needs no rebuild.
 Multi-table picker (same day): a vendor books up to 10 tables in one order. The map is a cart

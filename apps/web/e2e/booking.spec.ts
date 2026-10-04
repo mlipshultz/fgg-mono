@@ -125,3 +125,44 @@ test.describe('booking picker on a phone', () => {
     await expect(sheet.getByRole('button', { name: /^Continue · \$200/ })).toBeEnabled();
   });
 });
+
+test.describe('payment step', () => {
+  test.skip(live, 'fixture-only data; holds would be real on dev');
+  test.skip(({ isMobile }) => !!isMobile, 'desktop panel only');
+
+  test('continue holds the tables and lands on Pay with info prefilled', async ({ page }) => {
+    await gotoBooking(page);
+    await table(page, 'A4').click();
+    await page
+      .getByRole('complementary', { name: 'Your tables' })
+      .getByRole('button', { name: /^Continue · \$400/ })
+      .click();
+
+    const steps = page.getByRole('list', { name: 'Booking progress' });
+    await expect(steps.getByRole('listitem')).toHaveText(['✓', '2 PAY', '3 DONE']);
+    await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible();
+    await expect(page.getByText('Total due today')).toBeVisible();
+
+    // Info comes from the profile as a card, not a form.
+    const info = page.getByRole('region', { name: 'Your info' });
+    await expect(info.getByText('Table sign')).toBeVisible();
+    await expect(info.getByRole('textbox')).toHaveCount(0);
+    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'vendor code of conduct' })).toBeVisible();
+
+    // Edit opens the fields in place; Save closes them with the new value.
+    await info.getByRole('button', { name: 'Edit' }).click();
+    const name = info.getByPlaceholder("Maya's Card Corner");
+    await name.fill('');
+    await info.getByRole('button', { name: 'Save' }).click();
+    await expect(info.getByText('What should we print on your table sign?')).toBeVisible();
+    await name.fill('Pocket Monsters MD');
+    await info.getByRole('button', { name: 'Save' }).click();
+    await expect(info.getByText('Pocket Monsters MD')).toBeVisible();
+    await expect(info.getByRole('textbox')).toHaveCount(0);
+
+    await page.getByRole('button', { name: '← Back' }).click();
+    await expect(page.getByRole('heading', { name: 'Pick your tables' })).toBeVisible();
+    await expect(table(page, 'A4')).toBeDisabled(); // held: the map is frozen until Change tables
+  });
+});
