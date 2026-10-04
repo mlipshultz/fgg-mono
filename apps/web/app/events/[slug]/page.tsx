@@ -30,7 +30,7 @@ export async function generateMetadata({
   if (!ev) return {};
   return {
     title: `Who's vending at ${ev.name}`,
-    description: `Every vendor with a table at ${ev.name} and what they're bringing.`,
+    description: `Every vendor with a table at ${ev.name} and a bit about each store.`,
   };
 }
 

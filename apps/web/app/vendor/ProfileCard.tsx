@@ -13,7 +13,7 @@ function socialHref(kind: 'instagram' | 'tiktok', handle: string): string {
   return kind === 'instagram' ? `https://instagram.com/${handle}` : `https://tiktok.com/@${handle}`;
 }
 
-/** The vendor's public face: logo, business name, what they sell, socials. Editable inline. */
+/** The vendor's public face: logo, business name, about the store, socials. Editable inline. */
 export function ProfileCard({
   profile,
   onChange,
@@ -50,7 +50,7 @@ export function ProfileCard({
           </div>
         </div>
         <div>
-          <span className={styles.brandLabel}>What you sell</span>
+          <span className={styles.brandLabel}>About your store</span>
           <p className={styles.brandSells}>
             {profile.sellsDescription || (
               <em>Not set yet. Shoppers see this on every event you book.</em>
@@ -145,7 +145,7 @@ function ProfileForm({
     const errs: Record<string, string> = {};
     if (!businessName.trim()) errs.businessName = 'Your business or table name.';
     if (phone.replace(/\D/g, '').length < 7) errs.phone = 'A phone number we can reach you at.';
-    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell shoppers what you sell.';
+    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell shoppers about your store.';
     setErrors(errs);
     if (Object.keys(errs).length) return;
     setBusy(true);
@@ -234,8 +234,8 @@ function ProfileForm({
           />
         </Field>
         <Field
-          label="What do you sell?"
-          hint="Prefills every booking and shows on the event's vendor list."
+          label="About your store"
+          hint="What you sell and what makes your table worth a stop. Prefills every booking and shows on the event's vendor list."
           error={errors.sellsDescription}
         >
           <textarea
