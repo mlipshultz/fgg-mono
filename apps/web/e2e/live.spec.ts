@@ -23,7 +23,7 @@ test.describe('live dev @live', () => {
     await gotoBooking(page);
     await expect(table(page, 'B7')).toHaveAccessibleName(/^Table B7, yours/);
     if (isMobile) await page.getByRole('button', { name: /Nothing picked yet/ }).click();
-    await expect(page.getByText('Already yours')).toBeVisible();
+    await expect(page.getByText('Already yours').filter({ visible: true })).toBeVisible();
   });
 
   test('who is vending lists the booked vendors', async ({ page }) => {
