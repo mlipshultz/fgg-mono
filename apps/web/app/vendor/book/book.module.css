@@ -450,6 +450,91 @@
   margin-left: auto;
 }
 
+/* Rate switch */
+.rateRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 14px;
+  color: var(--color-ink);
+}
+.switch:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.switchKnob {
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  background: var(--color-white);
+  transition: background 120ms ease;
+}
+.switchKnob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-ink);
+  transition: transform 120ms ease;
+}
+.switch[aria-checked='true'] .switchKnob {
+  background: var(--color-aqua);
+}
+.switch[aria-checked='true'] .switchKnob::after {
+  transform: translateX(16px);
+}
+.switchText {
+  line-height: 1.3;
+}
+.rateHelp {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-muted);
+  padding-left: 50px;
+}
+.rateHelp summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-pink-text);
+  width: fit-content;
+}
+.rateHelp p {
+  margin: 4px 0 0;
+}
+.perTableLink {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+  color: var(--color-pink-text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Side panel */
 .panel {
   position: sticky;
@@ -511,47 +596,6 @@
   font-weight: var(--font-weight-semibold);
   font-size: 13px;
   line-height: 1.45;
-}
-.rateLabel {
-  font-family: var(--type-body-font-family);
-  font-weight: var(--font-weight-extrabold);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.rates {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-}
-.rate {
-  text-align: left;
-  cursor: pointer;
-  border: var(--border-width) solid var(--border-color);
-  border-radius: var(--radius-tile);
-  padding: 12px 14px;
-  background: var(--color-white);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-family: var(--type-body-font-family);
-  color: var(--color-ink);
-}
-.rate[aria-pressed='true'] {
-  background: var(--color-aqua);
-  box-shadow: 3px 3px 0 var(--color-ink);
-}
-.rateHead {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  font-weight: var(--font-weight-extrabold);
-  font-size: 14px;
-}
-.rateText {
-  font-weight: var(--font-weight-semibold);
-  font-size: 12px;
-  line-height: 1.4;
 }
 .lines {
   display: flex;
@@ -838,24 +882,35 @@
     line-height: 1.35;
     color: var(--color-muted);
   }
-  .sheetRates {
+  .sheetHandle {
     display: flex;
-    gap: var(--space-8);
-  }
-  .sheetRate {
-    flex: 1;
-    min-height: 44px;
-    border: var(--border-width) solid var(--border-color);
-    border-radius: var(--radius-input);
-    background: var(--color-white);
-    font-family: var(--type-body-font-family);
-    font-weight: var(--font-weight-extrabold);
-    font-size: 13px;
-    color: var(--color-ink);
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
     cursor: pointer;
+    color: var(--color-ink);
   }
-  .sheetRate[aria-pressed='true'] {
-    background: var(--color-aqua);
+  .sheetSelText {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+  .sheetBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    max-height: 55vh;
+    overflow-y: auto;
+    padding: 4px 2px 8px;
+    border-top: var(--border-width) solid var(--border-color);
+  }
+  .sheetOpen {
+    max-height: 90vh;
   }
   .stepCard {
     padding: 22px 18px;

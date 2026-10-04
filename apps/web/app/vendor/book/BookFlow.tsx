@@ -24,6 +24,7 @@ import {
   getEventFloorPlan,
   getHold,
   getQuote,
+  getVendorProfile,
   listVendorOrders,
   releaseHold,
   updateHold,
@@ -37,9 +38,9 @@ import {
   fmtCents,
   openDaysByTable,
   stripeFor,
-  tableById,
 } from '@/lib/booking';
 import { dayOfWeek, shortDateLabel } from '@/lib/dates';
+import { type CartLine, CartBody } from './Cart';
 import { FloorPlanMap } from './FloorPlanMap';
 import styles from './book.module.css';
 
@@ -56,10 +57,6 @@ function useCountdown(expiresAt: string | undefined) {
   return expiresAt ? countdown(expiresAt, now) : null;
 }
 
-interface CartLine {
-  tableId: string;
-  dates: IsoDate[];
-}
 const byTable = (a: CartLine, b: CartLine) =>
   a.tableId.localeCompare(b.tableId, 'en', { numeric: true });
 
@@ -70,7 +67,11 @@ export function BookFlow() {
   const [data, setData] = useState<EventFloorPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [filterDay, setFilterDay] = useState<IsoDate | null>(null);
+  /** Order-level days: every table gets all its open days, or just this one. */
+  const [dayChoice, setDayChoice] = useState<'all' | IsoDate>('all');
+  /** The exception path: per-table day toggles in the cart. */
+  const [perTable, setPerTable] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [rate, setRate] = useState<TableRate>('standard');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [hold, setHold] = useState<HoldResponse | null>(null);
@@ -80,6 +81,8 @@ export function BookFlow() {
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
   const quoteSeq = useRef(0);
+  const holdRef = useRef<HoldResponse | null>(null);
+  holdRef.current = hold;
 
   // Load the event + floor plan, resume a hold from sessionStorage.
   useEffect(() => {
@@ -96,6 +99,12 @@ export function BookFlow() {
       .then(async (d) => {
         if (!alive) return;
         setData(d);
+        // PokéBucks partners default to their rate; the switch can still flip it.
+        getVendorProfile()
+          .then((p) => {
+            if (alive && p.pokeBucksPartner) setRate((r) => (holdRef.current ? r : 'poke_bucks'));
+          })
+          .catch(() => {});
         // Mark what this vendor already owns here (best effort; the map works without it).
         listVendorOrders()
           .then((r) => {
@@ -227,12 +236,28 @@ export function BookFlow() {
         return cur;
       }
       const open = openDays.get(id) ?? new Set<IsoDate>();
-      const dates = eventDays.filter((d) => open.has(d));
+      const dates = eventDays.filter(
+        (d) => open.has(d) && (dayChoice === 'all' || d === dayChoice),
+      );
       if (!dates.length) return cur;
       setError(null);
       return [...cur, { tableId: id, dates }].sort(byTable);
     });
   };
+  /** Apply an order-level day choice to every table in the cart (drops tables not open then). */
+  const chooseDays = (choice: 'all' | IsoDate) => {
+    setDayChoice(choice);
+    setPerTable(false);
+    setCart((cur) =>
+      cur.flatMap((l) => {
+        const open = openDays.get(l.tableId) ?? new Set<IsoDate>();
+        const dates = eventDays.filter((d) => open.has(d) && (choice === 'all' || d === choice));
+        return dates.length ? [{ ...l, dates }] : [];
+      }),
+    );
+  };
+  const availOn = (d: IsoDate) =>
+    data ? data.floorPlan.tables.filter((t) => openDays.get(t.id)?.has(d)).length : 0;
   const toggleLineDay = (id: string, d: IsoDate) =>
     setCart((cur) =>
       cur.map((l) => {
@@ -372,7 +397,6 @@ export function BookFlow() {
 
   const ev = data.event;
   const eyebrow = `${ev.name} · ${shortDateLabel(ev.startDate, ev.endDate)} · ${ev.venue.name}`;
-  const totalTables = data.floorPlan.tables.length;
   const availCount = data.floorPlan.tables.filter(
     (t) => (openDays.get(t.id)?.size ?? 0) > 0,
   ).length;
@@ -504,177 +528,78 @@ export function BookFlow() {
   }
 
   // Step 1
-  const cartList = (
-    <div className={styles.cart}>
-      {cart.length === 0 && (
-        <div className={styles.cartEmpty}>
-          Tap any open table on the map. Add as many as you need.
-        </div>
-      )}
-      {cart.map((l) => {
-        const t = tableById(data.floorPlan, l.tableId);
-        const open = openDays.get(l.tableId) ?? new Set<IsoDate>();
-        return (
-          <div className={styles.cartLine} key={l.tableId}>
-            <span className={styles.cartTile}>{l.tableId}</span>
-            <div className={styles.cartBody}>
-              <span className={styles.cartRow}>
-                {t ? `Row ${t.row}` : 'Main Hall'} · {fmtCents(lineUnit(l))}/day
-              </span>
-              {multiDay && (
-                <div className={styles.cartDays} role="group" aria-label={`Days for ${l.tableId}`}>
-                  {eventDays.map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={styles.cartDay}
-                      aria-pressed={l.dates.includes(d)}
-                      disabled={!!hold || !open.has(d)}
-                      title={open.has(d) ? dayLabel(d) : `${dayLabel(d)} · taken`}
-                      onClick={() => toggleLineDay(l.tableId, d)}
-                    >
-                      {dayOfWeek(d)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className={styles.cartRight}>
-              <span className={styles.cartPrice}>{fmtCents(lineCents(l))}</span>
-              {!hold && (
-                <button
-                  type="button"
-                  className={styles.cartRemove}
-                  onClick={() => removeLine(l.tableId)}
-                  aria-label={`Remove ${l.tableId}`}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const frozen = !!hold;
+  const pokeBucksCents = ev.pokeBucksRateCents;
+  const summaryLine = cart.length
+    ? `${cart.length} ${tablesWord} · ${cartLabel}`
+    : 'Nothing picked yet';
+  const summarySub = cart.length
+    ? `${fmtCents(total)} total · ${rate === 'poke_bucks' ? 'PokéBucks rate' : 'Standard rate'}`
+    : 'Tap any open table on the map.';
 
-  const panelBody = (
-    <>
-      {mine.size > 0 && (
-        <div className={styles.mine}>
-          <b>Already yours</b>
-          <span>
-            {[...mine.entries()]
-              .sort(([x], [y]) => x.localeCompare(y, 'en', { numeric: true }))
-              .map(([id, dates]) => `${id} · ${daysShort(eventDays, dates)}`)
-              .join(', ')}
-          </span>
-        </div>
-      )}
-      <div>
-        <div className={styles.selName}>
-          {cart.length ? `${cart.length} ${tablesWord} picked` : 'Pick your tables'}
-        </div>
-        <div className={styles.selSub}>
-          {cart.length
-            ? multiDay
-              ? 'Adjust days per table below.'
-              : 'Add more from the map, or continue.'
-            : 'Every table is 8ft with 2 chairs and 2 vendor passes.'}
-        </div>
-      </div>
-      {cartList}
-      <div className={styles.rates}>
-        <span className={styles.rateLabel}>Your rate</span>
-        <button
-          type="button"
-          className={styles.rate}
-          aria-pressed={rate === 'standard'}
-          onClick={() => setRate('standard')}
-          disabled={!!hold}
-        >
-          <span className={styles.rateHead}>
-            <span>Standard</span>
-            <span>{fmtCents(ev.tableRateCents)}/day</span>
-          </span>
-          <span className={styles.rateText}>The table, chairs and 2 passes.</span>
-        </button>
-        <button
-          type="button"
-          className={styles.rate}
-          aria-pressed={rate === 'poke_bucks'}
-          onClick={() => setRate('poke_bucks')}
-          disabled={!!hold}
-        >
-          <span className={styles.rateHead}>
-            <span>PokéBucks partner</span>
-            <span>{fmtCents(ev.pokeBucksRateCents)}/day</span>
-          </span>
-          <span className={styles.rateText}>
-            Bring a bulk binder and sell cards to kids for the PokéBucks they get at the door.
-          </span>
-        </button>
-      </div>
-      <div className={styles.lines}>
-        <div className={styles.line}>
-          <span>
-            {cart.length} {tablesWord} · {cart.reduce((n, l) => n + l.dates.length, 0)} table-days
-          </span>
-          <span>{fmtCents(subtotal)}</span>
-        </div>
-        {priced && priced.feeCents > 0 && (
-          <div className={`${styles.line} ${styles.lineMuted}`}>
-            <span>Processing fee</span>
-            <span>{fmtCents(priced.feeCents)}</span>
-          </div>
-        )}
-        {priced && priced.taxCents > 0 && (
-          <div className={`${styles.line} ${styles.lineMuted}`}>
-            <span>Tax</span>
-            <span>{fmtCents(priced.taxCents)}</span>
-          </div>
-        )}
-        <div className={styles.total}>
-          <span>Total</span>
-          <span>{fmtCents(total)}</span>
-        </div>
-      </div>
+  const cartBody = (heading: boolean) => (
+    <CartBody
+      heading={heading}
+      cart={cart}
+      plan={data.floorPlan}
+      eventDays={eventDays}
+      openDays={openDays}
+      mine={mine}
+      perTable={perTable}
+      rate={rate}
+      pokeBucksCents={pokeBucksCents}
+      priced={priced}
+      lineUnit={lineUnit}
+      lineCents={lineCents}
+      subtotal={subtotal}
+      total={total}
+      frozen={frozen}
+      onRate={setRate}
+      onToggleLineDay={toggleLineDay}
+      onRemove={removeLine}
+      onPerTable={() => setPerTable(true)}
+      onSameDays={() => chooseDays(dayChoice)}
+    >
       {error && (
         <div className={styles.errorBox} role="alert">
           {error}
         </div>
       )}
-      {hold ? (
-        <>
-          {countdownChip}
-          <Button type="button" variant="primary" size="lg" block onClick={() => setStep(2)}>
-            Continue with {cartLabel} →
-          </Button>
-          <button type="button" className={v.back} onClick={() => void chooseAnother()}>
-            Change tables
-          </button>
-        </>
-      ) : (
+    </CartBody>
+  );
+
+  const actions = (size: 'lg' | 'md') =>
+    hold ? (
+      <>
+        {size === 'lg' && countdownChip}
+        <Button type="button" variant="primary" size={size} block onClick={() => setStep(2)}>
+          Continue · {fmtCents(total)} →
+        </Button>
+        <button type="button" className={v.back} onClick={() => void chooseAnother()}>
+          Change tables
+        </button>
+      </>
+    ) : (
+      <>
         <Button
           type="button"
           variant="primary"
-          size="lg"
+          size={size}
           block
           disabled={cart.length === 0 || busy}
           onClick={() => void doHold()}
         >
           {busy
-            ? 'Holding…'
+            ? 'One sec…'
             : cart.length
-              ? `Hold ${cart.length === 1 ? cartLabel : `${cart.length} tables`} & continue →`
+              ? `Continue · ${fmtCents(total)} →`
               : 'Pick a table to continue'}
         </Button>
-      )}
-      <span className={styles.holdNote}>
-        We hold your tables for 10 minutes while you finish checkout.
-      </span>
-    </>
-  );
+        <span className={styles.holdNote}>
+          Your tables are held for 10 minutes once you continue.
+        </span>
+      </>
+    );
 
   return (
     <main className={styles.page}>
@@ -687,19 +612,22 @@ export function BookFlow() {
               <h1 className={styles.h2}>Pick your tables</h1>
             </div>
             <span className={styles.avail}>
-              {availCount} of {totalTables} available
+              {dayChoice === 'all'
+                ? `${availCount} tables open`
+                : `${availOn(dayChoice)} open ${dayOfWeek(dayChoice)}`}
             </span>
           </div>
           {multiDay && (
-            <div className={styles.days} role="group" aria-label="Show tables open on">
-              <span>Open on</span>
+            <div className={styles.days} role="group" aria-label="Days">
+              <span>Days</span>
               <button
                 type="button"
                 className={styles.dayChip}
-                aria-pressed={filterDay === null}
-                onClick={() => setFilterDay(null)}
+                aria-pressed={dayChoice === 'all'}
+                disabled={frozen}
+                onClick={() => chooseDays('all')}
               >
-                All days
+                {eventDays.length === 2 ? 'Both days' : 'All days'}
               </button>
               {eventDays.map((d) => (
                 <button
@@ -707,8 +635,9 @@ export function BookFlow() {
                   type="button"
                   className={`${styles.dayChip} ${styles.dayChipMark}`}
                   style={{ backgroundImage: stripeFor(eventDays, d) }}
-                  aria-pressed={filterDay === d}
-                  onClick={() => setFilterDay((cur) => (cur === d ? null : d))}
+                  aria-pressed={dayChoice === d}
+                  disabled={frozen}
+                  onClick={() => chooseDays(d)}
                 >
                   <span>{dayLabel(d)}</span>
                 </button>
@@ -721,24 +650,23 @@ export function BookFlow() {
             openDays={openDays}
             mine={mine}
             picked={new Set(cart.map((l) => l.tableId))}
-            filterDay={filterDay}
-            disabled={!!hold}
+            filterDay={dayChoice === 'all' ? null : dayChoice}
+            disabled={frozen}
             onToggle={toggleTable}
           />
           <div className={styles.legend}>
             <span>
-              <span className={styles.swatch} /> Open all days
+              <span className={styles.swatch} /> Open {multiDay ? 'all days' : ''}
             </span>
-            {multiDay &&
-              eventDays.map((d) => (
-                <span key={d}>
-                  <span
-                    className={`${styles.swatch} ${styles.swatchStripe}`}
-                    style={{ backgroundImage: stripeFor(eventDays, d) }}
-                  />{' '}
-                  {dayOfWeek(d)} only
-                </span>
-              ))}
+            {multiDay && (
+              <span>
+                <span
+                  className={`${styles.swatch} ${styles.swatchStripe}`}
+                  style={{ backgroundImage: stripeFor(eventDays, eventDays[0]!) }}
+                />{' '}
+                Striped · open those days only
+              </span>
+            )}
             <span>
               <span className={`${styles.swatch} ${styles.swatchPick}`} /> In your cart
             </span>
@@ -750,71 +678,47 @@ export function BookFlow() {
             <span>
               <span className={`${styles.swatch} ${styles.swatchTaken}`} /> Taken
             </span>
-            <span className={styles.legendNote}>
-              Every table is the same: 8ft, 2 chairs, 2 vendor passes.
-            </span>
           </div>
         </div>
         <aside className={styles.panel} aria-label="Your tables">
-          {panelBody}
+          {cartBody(true)}
+          {actions('lg')}
         </aside>
       </div>
-      <div className={styles.sheet} role="dialog" aria-label="Your tables">
-        <span className={styles.grab} aria-hidden="true" />
-        <div className={styles.sheetSel}>
-          <span className={styles.sheetTile}>{cart.length || '—'}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className={styles.sheetName}>
-              {cart.length ? `${cart.length} ${tablesWord} · ${cartLabel}` : 'Pick your tables'}
-            </div>
-            <div className={styles.sheetSub}>
-              {cart.length ? `${fmtCents(total)} total` : 'Tap any open table on the map.'}
-            </div>
+      <div
+        className={`${styles.sheet} ${sheetOpen ? styles.sheetOpen : ''}`}
+        role="dialog"
+        aria-label="Your tables"
+      >
+        <button
+          type="button"
+          className={styles.sheetHandle}
+          aria-expanded={sheetOpen}
+          aria-controls="cart-sheet-body"
+          onClick={() => setSheetOpen((o) => !o)}
+        >
+          <span className={styles.grab} aria-hidden="true" />
+          <span className={styles.sheetSel}>
+            <span className={styles.sheetTile}>{cart.length || '—'}</span>
+            <span className={styles.sheetSelText}>
+              <span className={styles.sheetName}>{summaryLine}</span>
+              <span className={styles.sheetSub}>
+                {summarySub} · {sheetOpen ? 'Hide' : 'Details'}
+              </span>
+            </span>
+          </span>
+        </button>
+        {sheetOpen && (
+          <div id="cart-sheet-body" className={styles.sheetBody}>
+            {cartBody(false)}
           </div>
-        </div>
-        <div className={styles.sheetRates}>
-          <button
-            type="button"
-            className={styles.sheetRate}
-            aria-pressed={rate === 'standard'}
-            onClick={() => setRate('standard')}
-            disabled={!!hold}
-          >
-            Standard · {fmtCents(ev.tableRateCents)}
-          </button>
-          <button
-            type="button"
-            className={styles.sheetRate}
-            aria-pressed={rate === 'poke_bucks'}
-            onClick={() => setRate('poke_bucks')}
-            disabled={!!hold}
-          >
-            PokéBucks · {fmtCents(ev.pokeBucksRateCents)}
-          </button>
-        </div>
-        {error && (
+        )}
+        {!sheetOpen && error && (
           <div className={styles.errorBox} role="alert">
             {error}
           </div>
         )}
-        {hold ? (
-          <Button type="button" variant="primary" size="md" block onClick={() => setStep(2)}>
-            Continue · {fmtCents(total)} →
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            block
-            disabled={cart.length === 0 || busy}
-            onClick={() => void doHold()}
-          >
-            {cart.length
-              ? `Hold ${cart.length} ${tablesWord} · ${fmtCents(total)} →`
-              : 'Pick a table'}
-          </Button>
-        )}
+        {actions('md')}
       </div>
     </main>
   );

@@ -22,7 +22,8 @@ test.describe('live dev @live', () => {
   test('booking map marks the account’s own tables', async ({ page, isMobile }) => {
     await gotoBooking(page);
     await expect(table(page, 'B7')).toHaveAccessibleName(/^Table B7, yours/);
-    if (!isMobile) await expect(page.getByText('Already yours')).toBeVisible(); // desktop panel
+    if (isMobile) await page.getByRole('button', { name: /Nothing picked yet/ }).click();
+    await expect(page.getByText('Already yours')).toBeVisible();
   });
 
   test('who is vending lists the booked vendors', async ({ page }) => {
