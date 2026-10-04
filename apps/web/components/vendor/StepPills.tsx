@@ -1,9 +1,9 @@
 import styles from './vendor.module.css';
 
-const STEPS = ['TABLE', 'INFO', 'PAY', 'DONE'];
+const STEPS = ['TABLE', 'PAY', 'DONE'];
 
-/** 4-step progress pills from mocks 4a/1l: done = aqua ✓, current = ink, upcoming = white. */
-export function StepPills({ current, className }: { current: 1 | 2 | 3 | 4; className?: string }) {
+/** 3-step progress pills: done = aqua ✓, current = ink, upcoming = white. */
+export function StepPills({ current, className }: { current: 1 | 2 | 3; className?: string }) {
   return (
     <ol className={`${styles.steps} ${className ?? ''}`} aria-label="Booking progress">
       {STEPS.map((label, i) => {

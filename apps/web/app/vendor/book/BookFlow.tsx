@@ -1,6 +1,6 @@
 'use client';
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MAX_TABLES_PER_ORDER,
@@ -9,11 +9,10 @@ import {
   type IsoDate,
   type Quote,
   type TableRate,
-  type VendorInfo,
   type VendorInfoInput,
 } from '@fgg/types';
 import { Button } from '@/components/Button';
-import { Field, authStyles as a } from '@/components/auth/AuthCard';
+import { authStyles as a } from '@/components/auth/AuthCard';
 import { useAuth } from '@/components/Providers';
 import { StepPills } from '@/components/vendor/StepPills';
 import v from '@/components/vendor/vendor.module.css';
@@ -29,22 +28,14 @@ import {
   releaseHold,
   updateHold,
 } from '@/lib/api';
-import {
-  RATE_LABEL,
-  countdown,
-  dayLabel,
-  daysLabel,
-  daysShort,
-  fmtCents,
-  openDaysByTable,
-  stripeFor,
-} from '@/lib/booking';
-import { dayOfWeek, shortDateLabel } from '@/lib/dates';
+import { countdown, fmtCents, openDaysByTable } from '@/lib/booking';
+import { shortDateLabel } from '@/lib/dates';
 import { type CartLine, CartBody } from './Cart';
-import { FloorPlanMap } from './FloorPlanMap';
+import { Payment } from './Payment';
+import { Picker } from './Picker';
 import styles from './book.module.css';
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2;
 const HOLD_KEY = 'fgg.hold';
 
 function useCountdown(expiresAt: string | undefined) {
@@ -131,7 +122,7 @@ export function BookFlow() {
                 setHold(h);
                 setCart(h.hold.tables.map((t) => ({ tableId: t.tableId, dates: t.dates })));
                 setRate(h.hold.rate);
-                setStep(h.vendorInfo ? 3 : 2);
+                setStep(2);
               } else sessionStorage.removeItem(HOLD_KEY);
             }
           }
@@ -224,8 +215,8 @@ export function BookFlow() {
 
   const cd = useCountdown(hold?.hold.expiresAt);
   useEffect(() => {
-    if (cd?.expired && hold && step !== 3) setExpired(true);
-  }, [cd?.expired, hold, step]);
+    if (cd?.expired && hold) setExpired(true);
+  }, [cd?.expired, hold]);
 
   const toggleTable = (id: string) => {
     if (hold) return;
@@ -317,27 +308,15 @@ export function BookFlow() {
         .catch(() => {});
   };
 
-  const saveInfo = async (info: VendorInfoInput) => {
+  /** Save the vendor info on the hold, then hand off to Shopify checkout. */
+  const goCheckout = async (info: VendorInfoInput) => {
     if (!hold) return;
     setBusy(true);
     setError(null);
     try {
-      setHold(await updateHold(hold.hold.id, info));
-      setStep(3);
-      window.scrollTo({ top: 0 });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save your info');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const goCheckout = async () => {
-    if (!hold) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await checkout(hold.hold.id);
+      const h = await updateHold(hold.hold.id, info);
+      setHold(h);
+      const res = await checkout(h.hold.id);
       sessionStorage.setItem('fgg.order', res.orderId);
       window.location.href = res.invoiceUrl;
     } catch (e) {
@@ -396,11 +375,10 @@ export function BookFlow() {
   }
 
   const ev = data.event;
-  const eyebrow = `${ev.name} · ${shortDateLabel(ev.startDate, ev.endDate)} · ${ev.venue.name}`;
+  const eyebrow = `${shortDateLabel(ev.startDate, ev.endDate)} · ${ev.venue.name}`;
   const availCount = data.floorPlan.tables.filter(
     (t) => (openDays.get(t.id)?.size ?? 0) > 0,
   ).length;
-  const multiDay = eventDays.length > 1;
 
   const topbar = (
     <div className={styles.topbar}>
@@ -420,112 +398,6 @@ export function BookFlow() {
       ⏱ Held for {cd.text}
     </span>
   );
-
-  if (step === 2 && hold) {
-    return (
-      <main className={styles.page}>
-        {topbar}
-        <div className={styles.body} style={{ gridTemplateColumns: '1fr' }}>
-          <VendorInfoForm
-            initial={hold.vendorInfo}
-            prefill={hold.prefill}
-            user={user}
-            busy={busy}
-            error={error}
-            countdown={countdownChip}
-            onBack={() => setStep(1)}
-            onSubmit={saveInfo}
-          />
-        </div>
-      </main>
-    );
-  }
-
-  if (step === 3 && hold) {
-    const q = hold.quote;
-    const allDates = [...new Set(q.lines.flatMap((l) => l.dates))].sort();
-    return (
-      <main className={styles.page}>
-        {topbar}
-        <div className={styles.body} style={{ gridTemplateColumns: '1fr' }}>
-          <div className={styles.stepCard}>
-            <h1 className={styles.stepTitle}>Payment</h1>
-            {countdownChip}
-            <div className={styles.summary}>
-              <div className={styles.summaryHead}>
-                {ev.posterUrl ? (
-                  <img src={ev.posterUrl} alt="" className={styles.summaryThumb} />
-                ) : (
-                  <span className={`${styles.summaryThumb} ${styles.summaryThumbEmpty}`} />
-                )}
-                <div>
-                  <div className={styles.summaryTitle}>
-                    {ev.name} · {q.lines.length === 1 ? 'Table' : 'Tables'}{' '}
-                    {q.lines.map((l) => l.tableId).join(', ')}
-                  </div>
-                  <div className={styles.summarySub}>
-                    {daysLabel(allDates)} · {ev.venue.name}
-                  </div>
-                </div>
-              </div>
-              {q.lines.map((l) => (
-                <div className={styles.line} key={l.tableId}>
-                  <span>
-                    Table {l.tableId} · {RATE_LABEL[q.rate]} × {l.dates.length}{' '}
-                    {l.dates.length === 1 ? 'day' : 'days'}
-                    {multiDay ? ` (${daysShort(eventDays, l.dates)})` : ''}
-                  </span>
-                  <span>{fmtCents(l.lineCents)}</span>
-                </div>
-              ))}
-              {q.feeCents > 0 && (
-                <div className={`${styles.line} ${styles.lineMuted}`}>
-                  <span>Processing fee</span>
-                  <span>{fmtCents(q.feeCents)}</span>
-                </div>
-              )}
-              {q.taxCents > 0 && (
-                <div className={`${styles.line} ${styles.lineMuted}`}>
-                  <span>Tax</span>
-                  <span>{fmtCents(q.taxCents)}</span>
-                </div>
-              )}
-              <div className={styles.summaryTotal}>
-                <span>Total due today</span>
-                <span>{fmtCents(q.totalCents)}</span>
-              </div>
-            </div>
-            {error && (
-              <div className={styles.errorBox} role="alert">
-                {error}
-              </div>
-            )}
-            <Button
-              type="button"
-              variant="primary"
-              size="lg"
-              block
-              disabled={busy}
-              onClick={() => void goCheckout()}
-            >
-              {busy ? 'Opening checkout…' : 'Continue to secure checkout →'}
-            </Button>
-            <span className={styles.policy}>
-              Full refund up to 14 days before the show. Secure checkout by Shopify.
-            </span>
-            <div className={v.footerNav}>
-              <button type="button" className={v.back} onClick={() => setStep(2)}>
-                ← Back
-              </button>
-              <button type="button" className={v.back} onClick={() => void chooseAnother()}>
-                Change tables
-              </button>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
 
   // Step 1
   const frozen = !!hold;
@@ -604,241 +476,45 @@ export function BookFlow() {
   return (
     <main className={styles.page}>
       {topbar}
-      <div className={styles.body}>
-        <div className={styles.main}>
-          <div className={styles.headRow}>
-            <div>
-              <span className={styles.eyebrow}>{eyebrow}</span>
-              <h1 className={styles.h2}>Pick your tables</h1>
-            </div>
-            <span className={styles.avail}>
-              {dayChoice === 'all'
-                ? `${availCount} tables open`
-                : `${availOn(dayChoice)} open ${dayOfWeek(dayChoice)}`}
-            </span>
-          </div>
-          {multiDay && (
-            <div className={styles.days} role="group" aria-label="Days">
-              <span>Days</span>
-              <button
-                type="button"
-                className={styles.dayChip}
-                aria-pressed={dayChoice === 'all'}
-                disabled={frozen}
-                onClick={() => chooseDays('all')}
-              >
-                {eventDays.length === 2 ? 'Both days' : 'All days'}
-              </button>
-              {eventDays.map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  className={`${styles.dayChip} ${styles.dayChipMark}`}
-                  style={{ backgroundImage: stripeFor(eventDays, d) }}
-                  aria-pressed={dayChoice === d}
-                  disabled={frozen}
-                  onClick={() => chooseDays(d)}
-                >
-                  <span>{dayLabel(d)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <FloorPlanMap
-            plan={data.floorPlan}
+      {step === 2 && hold ? (
+        <div className={styles.body} style={{ gridTemplateColumns: '1fr' }}>
+          <Payment
+            key={hold.hold.id}
+            ev={ev}
             eventDays={eventDays}
-            openDays={openDays}
-            mine={mine}
-            picked={new Set(cart.map((l) => l.tableId))}
-            filterDay={dayChoice === 'all' ? null : dayChoice}
-            disabled={frozen}
-            onToggle={toggleTable}
+            hold={hold}
+            user={user}
+            busy={busy}
+            error={error}
+            countdown={countdownChip}
+            onCheckout={(info) => void goCheckout(info)}
+            onBack={() => setStep(1)}
+            onChangeTables={() => void chooseAnother()}
           />
-          <div className={styles.legend}>
-            <span>
-              <span className={styles.swatch} /> Open {multiDay ? 'all days' : ''}
-            </span>
-            {multiDay && (
-              <span>
-                <span
-                  className={`${styles.swatch} ${styles.swatchStripe}`}
-                  style={{ backgroundImage: stripeFor(eventDays, eventDays[0]!) }}
-                />{' '}
-                Striped · open those days only
-              </span>
-            )}
-            <span>
-              <span className={`${styles.swatch} ${styles.swatchPick}`} /> In your cart
-            </span>
-            {mine.size > 0 && (
-              <span>
-                <span className={`${styles.swatch} ${styles.swatchMine}`} /> Your tables
-              </span>
-            )}
-            <span>
-              <span className={`${styles.swatch} ${styles.swatchTaken}`} /> Taken
-            </span>
-          </div>
         </div>
-        <aside className={styles.panel} aria-label="Your tables">
-          {cartBody(true)}
-          {actions('lg')}
-        </aside>
-      </div>
-      <div
-        className={`${styles.sheet} ${sheetOpen ? styles.sheetOpen : ''}`}
-        role="dialog"
-        aria-label="Your tables"
-      >
-        <button
-          type="button"
-          className={styles.sheetHandle}
-          aria-expanded={sheetOpen}
-          aria-controls="cart-sheet-body"
-          onClick={() => setSheetOpen((o) => !o)}
-        >
-          <span className={styles.grab} aria-hidden="true" />
-          <span className={styles.sheetSel}>
-            <span className={styles.sheetTile}>{cart.length || '—'}</span>
-            <span className={styles.sheetSelText}>
-              <span className={styles.sheetName}>{summaryLine}</span>
-              <span className={styles.sheetSub}>
-                {summarySub} · {sheetOpen ? 'Hide' : 'Details'}
-              </span>
-            </span>
-          </span>
-        </button>
-        {sheetOpen && (
-          <div id="cart-sheet-body" className={styles.sheetBody}>
-            {cartBody(false)}
-          </div>
-        )}
-        {!sheetOpen && error && (
-          <div className={styles.errorBox} role="alert">
-            {error}
-          </div>
-        )}
-        {actions('md')}
-      </div>
-    </main>
-  );
-}
-
-function VendorInfoForm({
-  initial,
-  prefill,
-  user,
-  busy,
-  error,
-  countdown: cdChip,
-  onBack,
-  onSubmit,
-}: {
-  initial: VendorInfo | undefined;
-  /** From the vendor profile when nothing has been saved on this hold yet. */
-  prefill: HoldResponse['prefill'];
-  user: { name: string; email: string } | null;
-  busy: boolean;
-  error: string | null;
-  countdown: React.ReactNode;
-  onBack: () => void;
-  onSubmit: (info: VendorInfoInput) => void;
-}) {
-  const seed = initial ?? prefill;
-  const [tableName, setTableName] = useState(seed?.tableName ?? '');
-  const [phone, setPhone] = useState(seed?.phone ?? '');
-  const [sellsDescription, setSellsDescription] = useState(seed?.sellsDescription ?? '');
-  const [agree, setAgree] = useState(!!initial);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const submit = (ev: FormEvent) => {
-    ev.preventDefault();
-    const errs: Record<string, string> = {};
-    if (!tableName.trim()) errs.tableName = 'What should we print on your table sign?';
-    if (phone.replace(/\D/g, '').length < 7) errs.phone = 'Add a phone number for show day.';
-    if (!sellsDescription.trim()) errs.sellsDescription = 'Tell shoppers what you’re bringing.';
-    if (!agree) errs.agree = 'Please agree to the code of conduct.';
-    setErrors(errs);
-    if (Object.keys(errs).length) return;
-    onSubmit({
-      tableName: tableName.trim(),
-      phone: phone.trim(),
-      sellsDescription: sellsDescription.trim().slice(0, 1000),
-      codeOfConductAccepted: true,
-    });
-  };
-
-  return (
-    <form className={styles.stepCard} onSubmit={submit} noValidate>
-      <h1 className={styles.stepTitle}>Vendor info</h1>
-      {cdChip}
-      <div className={a.form}>
-        <Field label="Business / table name" error={errors.tableName}>
-          <input
-            className={`${a.input} ${errors.tableName ? a.invalid : ''}`}
-            value={tableName}
-            onChange={(e) => setTableName(e.target.value)}
-            placeholder="Maya's Card Corner"
-          />
-        </Field>
-        <p className={a.hint}>
-          Booking as <b>{user?.name ?? 'you'}</b>
-          {user?.email ? ` · ${user.email}` : ''}. Your receipt and vendor pass go there.
-        </p>
-        <Field label="Phone" error={errors.phone}>
-          <input
-            className={`${a.input} ${errors.phone ? a.invalid : ''}`}
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="(410) 555-0100"
-            autoComplete="tel"
-          />
-        </Field>
-        <Field
-          label="What are you bringing?"
-          hint="Shown on the event's vendor list. Prefilled from your profile; tweak it per show."
-          error={errors.sellsDescription}
-        >
-          <textarea
-            className={`${a.input} ${errors.sellsDescription ? a.invalid : ''}`}
-            rows={3}
-            value={sellsDescription}
-            onChange={(e) => setSellsDescription(e.target.value)}
-            placeholder="Mostly modern singles and a $1 bulk bin, some sealed ETBs…"
-            maxLength={1000}
-          />
-        </Field>
-        <label className={v.checkCard}>
-          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-          <span>
-            I agree to the{' '}
-            <a href="/vendor/code-of-conduct" target="_blank" rel="noreferrer">
-              vendor code of conduct
-            </a>
-            : family-friendly displays, fair pricing for kids, no counterfeit product.
-            {errors.agree && (
-              <span className={a.error} role="alert">
-                {' '}
-                {errors.agree}
-              </span>
-            )}
-          </span>
-        </label>
-      </div>
-      {error && (
-        <div className={styles.errorBox} role="alert">
-          {error}
-        </div>
+      ) : (
+        <Picker
+          eyebrow={eyebrow}
+          plan={data.floorPlan}
+          eventDays={eventDays}
+          openDays={openDays}
+          mine={mine}
+          picked={new Set(cart.map((l) => l.tableId))}
+          dayChoice={dayChoice}
+          frozen={frozen}
+          availCount={availCount}
+          availOn={availOn}
+          onChooseDays={chooseDays}
+          onToggleTable={toggleTable}
+          cartBody={cartBody}
+          actions={actions}
+          summaryLine={summaryLine}
+          summarySub={summarySub}
+          sheetOpen={sheetOpen}
+          onSheetToggle={() => setSheetOpen((o) => !o)}
+          sheetError={error}
+        />
       )}
-      <div className={v.footerNav}>
-        <button type="button" className={v.back} onClick={onBack}>
-          ← Back
-        </button>
-        <Button type="submit" variant="primary" size="md" disabled={busy}>
-          {busy ? 'Saving…' : 'Continue to payment →'}
-        </Button>
-      </div>
-    </form>
+    </main>
   );
 }
