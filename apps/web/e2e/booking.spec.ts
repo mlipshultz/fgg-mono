@@ -200,8 +200,23 @@ test.describe('payment step', () => {
     await expect(info.getByText('Pocket Monsters MD')).toBeVisible();
     await expect(info.getByRole('textbox')).toHaveCount(0);
 
-    await page.getByRole('button', { name: '← Back' }).click();
+    // Back lands on an editable map: the held table stays in the cart, more can be added.
+    await page.getByRole('button', { name: '← Back to tables' }).click();
     await expect(page.getByRole('heading', { name: 'Pick your tables' })).toBeVisible();
-    await expect(table(page, 'A4')).toBeDisabled(); // held: the map is frozen until Change tables
+    await expect(table(page, 'A4')).toHaveAttribute('aria-pressed', 'true');
+    await expect(table(page, 'A4')).toBeEnabled();
+    await expect(page.getByText('Still held for you').filter({ visible: true })).toBeVisible();
+    await addTable(page, 'C3');
+    await expect(page.getByText('2 tables · 4 table-days')).toBeVisible();
+    await page
+      .getByRole('complementary', { name: 'Your tables' })
+      .getByRole('button', { name: /^Continue · \$800/ })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible();
+    await expect(page.getByText('Tables A4, C3', { exact: false })).toBeVisible();
+    // The edited table sign survived the re-hold.
+    await expect(
+      page.getByRole('region', { name: 'Your info' }).getByText('Pocket Monsters MD'),
+    ).toBeVisible();
   });
 });

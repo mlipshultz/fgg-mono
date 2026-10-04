@@ -8,7 +8,7 @@ import v from '@/components/vendor/vendor.module.css';
 import { RATE_LABEL, daysLabel, daysShort, fmtCents } from '@/lib/booking';
 import styles from './book.module.css';
 
-interface Info {
+export interface Info {
   tableName: string;
   phone: string;
   sellsDescription: string;
@@ -36,9 +36,10 @@ export function Payment({
   busy,
   error,
   countdown,
+  fallbackInfo,
+  onInfoChange,
   onCheckout,
   onBack,
-  onChangeTables,
 }: {
   ev: PublicEvent;
   eventDays: IsoDate[];
@@ -47,11 +48,13 @@ export function Payment({
   busy: boolean;
   error: string | null;
   countdown: ReactNode;
+  /** What was saved on this screen before (survives a re-hold after a table change). */
+  fallbackInfo: Info | undefined;
+  onInfoChange: (info: Info) => void;
   onCheckout: (info: VendorInfoInput) => void;
   onBack: () => void;
-  onChangeTables: () => void;
 }) {
-  const seed = hold.vendorInfo ?? hold.prefill;
+  const seed = hold.vendorInfo ?? fallbackInfo ?? hold.prefill;
   const [info, setInfo] = useState<Info>({
     tableName: seed?.tableName ?? '',
     phone: seed?.phone ?? '',
@@ -70,6 +73,7 @@ export function Payment({
     setErrors(errs);
     if (hasErrors(errs)) return false;
     setInfo(draft);
+    onInfoChange(draft);
     setEditing(false);
     return true;
   };
@@ -232,10 +236,7 @@ export function Payment({
       </span>
       <div className={v.footerNav}>
         <button type="button" className={v.back} onClick={onBack}>
-          ← Back
-        </button>
-        <button type="button" className={v.back} onClick={onChangeTables}>
-          Change tables
+          ← Back to tables
         </button>
       </div>
     </div>

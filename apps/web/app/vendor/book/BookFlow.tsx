@@ -31,7 +31,7 @@ import {
 import { countdown, fmtCents, openDaysByTable, tableById } from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import { type CartLine, CartBody } from './Cart';
-import { Payment } from './Payment';
+import { type Info, Payment } from './Payment';
 import { Picker } from './Picker';
 import { TableConfirm } from './TableConfirm';
 import styles from './book.module.css';
@@ -75,6 +75,14 @@ export function BookFlow() {
   const quoteSeq = useRef(0);
   const holdRef = useRef<HoldResponse | null>(null);
   holdRef.current = hold;
+  /** Info from the last hold, so editing tables doesn't lose what was typed on Pay. */
+  const [lastInfo, setLastInfo] = useState<Info | undefined>(undefined);
+  useEffect(() => {
+    if (hold?.vendorInfo) {
+      const { tableName, phone, sellsDescription } = hold.vendorInfo;
+      setLastInfo({ tableName, phone, sellsDescription });
+    }
+  }, [hold]);
 
   // Load the event + floor plan, resume a hold from sessionStorage.
   useEffect(() => {
@@ -155,14 +163,29 @@ export function BookFlow() {
   useEffect(() => {
     setShownDays(new Set(eventDays));
   }, [eventDays]);
-  const openDays = useMemo(
-    () => (data ? openDaysByTable(data.floorPlan, data.availability) : new Map()),
-    [data],
-  );
+  const openDays = useMemo(() => {
+    if (!data) return new Map<string, Set<IsoDate>>();
+    const m = openDaysByTable(data.floorPlan, data.availability);
+    // Our own hold shows as taken in availability; hand those days back so they stay editable.
+    for (const t of hold?.hold.tables ?? []) {
+      const set = m.get(t.tableId) ?? new Set<IsoDate>();
+      for (const d of t.dates) set.add(d);
+      m.set(t.tableId, set);
+    }
+    return m;
+  }, [data, hold]);
+
+  /** Does the cart still match what the hold reserved? Then Continue can reuse it. */
+  const key = (lines: { tableId: string; dates: IsoDate[] }[]) =>
+    [...lines]
+      .map((l) => `${l.tableId}:${[...l.dates].sort().join('+')}`)
+      .sort()
+      .join('|');
+  const holdMatches = !!hold && hold.hold.rate === rate && key(hold.hold.tables) === key(cart);
 
   // If availability moves under the cart, drop the days (or tables) that went away.
   useEffect(() => {
-    if (hold || !data) return;
+    if (!data) return;
     setCart((cur) => {
       let changed = false;
       const next = cur.flatMap((l) => {
@@ -174,11 +197,11 @@ export function BookFlow() {
       });
       return changed ? next : cur;
     });
-  }, [openDays, hold, data]);
+  }, [openDays, data]);
 
   // Server quote for exact prices (overrides / windows); a local estimate fills in meanwhile.
   useEffect(() => {
-    if (!data || hold || cart.length === 0) {
+    if (!data || holdMatches || cart.length === 0) {
       setQuote(null);
       return;
     }
@@ -191,14 +214,14 @@ export function BookFlow() {
         .catch(() => {});
     }, 250);
     return () => clearTimeout(t);
-  }, [data, cart, rate, hold]);
+  }, [data, cart, rate, holdMatches]);
 
   const unit = data
     ? rate === 'poke_bucks'
       ? data.event.pokeBucksRateCents
       : data.event.tableRateCents
     : 0;
-  const served = hold?.quote ?? quote;
+  const served = holdMatches ? hold.quote : quote;
   const priced =
     served &&
     served.rate === rate &&
@@ -219,8 +242,13 @@ export function BookFlow() {
 
   const cd = useCountdown(hold?.hold.expiresAt);
   useEffect(() => {
-    if (cd?.expired && hold) setExpired(true);
-  }, [cd?.expired, hold]);
+    if (!cd?.expired || !hold) return;
+    if (step === 2) setExpired(true);
+    else {
+      setHold(null);
+      sessionStorage.removeItem(HOLD_KEY);
+    }
+  }, [cd?.expired, hold, step]);
 
   const availOn = (d: IsoDate) =>
     data ? data.floorPlan.tables.filter((t) => openDays.get(t.id)?.has(d)).length : 0;
@@ -235,7 +263,7 @@ export function BookFlow() {
     });
   /** Tap a table: single-day events add it straight away; otherwise open the day picker. */
   const pickTable = (id: string) => {
-    if (hold) return;
+    if (busy) return;
     const open = openDays.get(id) ?? new Set<IsoDate>();
     if (!open.size) return;
     setError(null);
@@ -279,9 +307,19 @@ export function BookFlow() {
 
   const doHold = async () => {
     if (!data || cart.length === 0) return;
+    setPending(null);
+    if (holdMatches) {
+      setStep(2);
+      window.scrollTo({ top: 0 });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
+      if (hold) {
+        releaseHold(hold.hold.id).catch(() => {});
+        setHold(null);
+      }
       const h = await createHold(data.event.id, { lines: cart, rate });
       setHold(h);
       sessionStorage.setItem(
@@ -414,7 +452,7 @@ export function BookFlow() {
   );
 
   // Step 1
-  const frozen = !!hold;
+  const frozen = busy;
   const pokeBucksCents = ev.pokeBucksRateCents;
   const summaryLine = cart.length
     ? `${cart.length} ${tablesWord} · ${cartLabel}`
@@ -477,38 +515,30 @@ export function BookFlow() {
     />
   );
 
-  const actions = (size: 'lg' | 'md') =>
-    hold ? (
-      <>
-        {size === 'lg' && countdownChip}
-        <Button type="button" variant="primary" size={size} block onClick={() => setStep(2)}>
-          Continue · {fmtCents(total)} →
-        </Button>
-        <button type="button" className={v.back} onClick={() => void chooseAnother()}>
-          Change tables
-        </button>
-      </>
-    ) : (
-      <>
-        <Button
-          type="button"
-          variant="primary"
-          size={size}
-          block
-          disabled={cart.length === 0 || busy}
-          onClick={() => void doHold()}
-        >
-          {busy
-            ? 'One sec…'
-            : cart.length
-              ? `Continue · ${fmtCents(total)} →`
-              : 'Pick a table to continue'}
-        </Button>
-        <span className={styles.holdNote}>
-          Your tables are held for 10 minutes once you continue.
-        </span>
-      </>
-    );
+  const actions = (size: 'lg' | 'md') => (
+    <>
+      {size === 'lg' && holdMatches && countdownChip}
+      <Button
+        type="button"
+        variant="primary"
+        size={size}
+        block
+        disabled={cart.length === 0 || busy}
+        onClick={() => void doHold()}
+      >
+        {busy
+          ? 'One sec…'
+          : cart.length
+            ? `Continue · ${fmtCents(total)} →`
+            : 'Pick a table to continue'}
+      </Button>
+      <span className={styles.holdNote}>
+        {holdMatches
+          ? 'Still held for you. Change anything here and we hold it fresh when you continue.'
+          : 'Your tables are held for 10 minutes once you continue.'}
+      </span>
+    </>
+  );
 
   return (
     <main className={styles.page}>
@@ -525,8 +555,9 @@ export function BookFlow() {
             error={error}
             countdown={countdownChip}
             onCheckout={(info) => void goCheckout(info)}
+            fallbackInfo={lastInfo}
+            onInfoChange={setLastInfo}
             onBack={() => setStep(1)}
-            onChangeTables={() => void chooseAnother()}
           />
         </div>
       ) : (
