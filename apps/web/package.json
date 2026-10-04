@@ -7,18 +7,24 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:dev": "E2E_BASE_URL=${E2E_BASE_URL:-https://diqfgyquh2fyc.cloudfront.net} playwright test",
+    "e2e:report": "playwright show-report",
+    "e2e:build": "NEXT_PUBLIC_API_URL= NEXT_PUBLIC_MEDIA_URL= next build"
   },
   "dependencies": {
+    "@fgg/game": "workspace:*",
     "@fgg/tokens": "workspace:*",
     "@fgg/types": "workspace:*",
+    "aws-amplify": "^6.22.1",
     "next": "^16.3.8",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "aws-amplify": "^6.22.1",
-    "@fgg/game": "workspace:*"
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "typescript": "~5.9.3"

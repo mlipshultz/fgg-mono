@@ -7,3 +7,5 @@ cdk.out
 pnpm-lock.yaml
 docs/handoff
 next-env.d.ts
+playwright-report
+test-results

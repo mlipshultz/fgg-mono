@@ -92,11 +92,13 @@ export const floorPlanResponseFixture = EventFloorPlan.parse({
   availability: {
     eventId: halloween.id,
     vendorStatus: 'open',
-    tablesLeft: 60 - TAKEN.size,
+    tablesLeft: 60 - TAKEN.size - 1,
     // A few tables differ by day so the picker's per-day stripes show up in fixture mode.
+    // B2 (Sat) and C4 (both days) belong to this vendor's paid order, so they're unavailable
+    // exactly as the API would report them; the map shows them as "yours".
     days: halloween.days.map((d, i) => ({
       date: d.date,
-      unavailable: [...TAKEN, ...(i === 0 ? ['D4', 'E5'] : ['A3', 'C5', 'F1'])].sort(),
+      unavailable: [...TAKEN, 'C4', ...(i === 0 ? ['B2', 'D4', 'E5'] : ['A3', 'C5', 'F1'])].sort(),
     })),
   },
 });
