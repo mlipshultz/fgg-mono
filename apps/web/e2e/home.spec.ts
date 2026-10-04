@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { EVENT_SLUG } from './helpers';
+import { EVENT_SLUG, live } from './helpers';
 
 test.describe('public site', () => {
   test('home renders the hero and event cards that link to the event', async ({ page }) => {
@@ -12,6 +12,7 @@ test.describe('public site', () => {
   });
 
   test('event page shows details, the map and a filterable vendor list', async ({ page }) => {
+    test.skip(live, 'fixture vendors and tags; live.spec covers the page on dev');
     await page.goto(`/events/${EVENT_SLUG}/`);
     await expect(page.getByRole('heading', { level: 1, name: 'Halloween Fest' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'About' })).toBeVisible();
