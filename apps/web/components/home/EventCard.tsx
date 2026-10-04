@@ -19,20 +19,26 @@ export function EventCard({ ev, index }: { ev: PublicEvent; index: number }) {
       className={styles.card}
       aria-labelledby={`event-${ev.slug}-name`}
     >
-      <div className={styles.poster}>
+      <Link
+        href={`/events/${ev.slug}/`}
+        className={styles.poster}
+        aria-label={`${ev.name} event details`}
+      >
         {ev.posterUrl ? (
           <>
             <img src={ev.posterUrl} alt="" aria-hidden="true" className={styles.posterBlur} />
-            <img src={ev.posterUrl} alt={`${ev.name} poster`} className={styles.posterImg} />
+            <img src={ev.posterUrl} alt="" className={styles.posterImg} />
           </>
         ) : (
           <span className={styles.posterEmpty}>Poster coming soon</span>
         )}
-      </div>
+      </Link>
       <div className={styles.body}>
         <div className={styles.titleRow}>
           <h3 id={`event-${ev.slug}-name`} className={styles.name}>
-            {ev.name}
+            <Link href={`/events/${ev.slug}/`} className={styles.nameLink}>
+              {ev.name}
+            </Link>
           </h3>
           <div className={styles.titleTools}>
             <HeartButton eventId={ev.id} slug={ev.slug} name={ev.name} />
@@ -51,7 +57,7 @@ export function EventCard({ ev, index }: { ev: PublicEvent; index: number }) {
         </div>
         <p className={styles.blurb}>{ev.blurb}</p>
         <Link href={`/events/${ev.slug}/`} className={styles.whoLink}>
-          See who&apos;s vending →
+          See event details →
         </Link>
         <div className={styles.foot}>
           <span className={styles.vendors}>

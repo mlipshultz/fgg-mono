@@ -1,7 +1,13 @@
 'use client';
 
 import { type FormEvent, useRef, useState } from 'react';
-import type { VendorProfile, VendorProfileInput } from '@fgg/types';
+import {
+  MAX_VENDOR_TAGS,
+  SELLS_LABEL,
+  type SellsCategory,
+  type VendorProfile,
+  type VendorProfileInput,
+} from '@fgg/types';
 import { Button } from '@/components/Button';
 import { Field, authStyles as a } from '@/components/auth/AuthCard';
 import { updateVendorProfile, uploadVendorLogo } from '@/lib/api';
@@ -56,6 +62,18 @@ export function ProfileCard({
               <em>Not set yet. Shoppers see this on every event you book.</em>
             )}
           </p>
+          <div className={styles.tags}>
+            {(profile.sells ?? []).map((t) => (
+              <span key={t} className={styles.tag}>
+                {SELLS_LABEL[t]}
+              </span>
+            ))}
+            {!profile.sells?.length && (
+              <span className={styles.brandMeta}>
+                No tags yet. Tags help shoppers find you on the event page.
+              </span>
+            )}
+          </div>
         </div>
         {(profile.socials.instagram || profile.socials.tiktok || profile.socials.website) && (
           <div className={styles.socials}>
@@ -124,6 +142,7 @@ function ProfileForm({
   const [businessName, setBusinessName] = useState(profile.businessName);
   const [phone, setPhone] = useState(profile.phone);
   const [sellsDescription, setSellsDescription] = useState(profile.sellsDescription);
+  const [sells, setSells] = useState<SellsCategory[]>(profile.sells ?? []);
   const [instagram, setInstagram] = useState(profile.socials.instagram ?? '');
   const [tiktok, setTiktok] = useState(profile.socials.tiktok ?? '');
   const [website, setWebsite] = useState(profile.socials.website ?? '');
@@ -162,6 +181,7 @@ function ProfileForm({
         businessName: businessName.trim(),
         phone: phone.trim(),
         sellsDescription: sellsDescription.trim().slice(0, 1000),
+        sells,
         socials,
       };
       if (logoFile) {
@@ -246,6 +266,29 @@ function ProfileForm({
             placeholder="Mostly modern singles and a $1 bulk bin, some sealed ETBs…"
             maxLength={1000}
           />
+        </Field>
+        <Field
+          label="Tags"
+          hint={`Pick up to ${MAX_VENDOR_TAGS}. Attendees filter the event's vendor list by these.`}
+        >
+          <div className={styles.tagPicks} role="group" aria-label="Tags">
+            {(Object.keys(SELLS_LABEL) as SellsCategory[]).map((t) => {
+              const on = sells.includes(t);
+              return (
+                <label key={t} className={`${styles.tagPick} ${on ? styles.tagPickOn : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={!on && sells.length >= MAX_VENDOR_TAGS}
+                    onChange={() =>
+                      setSells((cur) => (on ? cur.filter((x) => x !== t) : [...cur, t]))
+                    }
+                  />
+                  {SELLS_LABEL[t]}
+                </label>
+              );
+            })}
+          </div>
         </Field>
         <div className={a.two}>
           <Field label="Instagram" hint="Optional">

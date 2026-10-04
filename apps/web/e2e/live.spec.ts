@@ -25,9 +25,11 @@ test.describe('live dev @live', () => {
     await expect(page.getByText('Already yours')).toBeVisible(); // strip above the map
   });
 
-  test('who is vending lists the booked vendors', async ({ page }) => {
+  test('event page renders with its vendor list', async ({ page }) => {
     await page.goto(`/events/${EVENT_SLUG}/`);
-    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Vendors/ })).toBeVisible();
+    await expect(page.locator('article').first()).toBeVisible();
   });
 
   test('admin orders list opens for staff', async ({ page }) => {

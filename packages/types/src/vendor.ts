@@ -1,10 +1,17 @@
 import { z } from 'zod';
 import { CognitoSub, Email, IsoDateTime, Ulid } from './common.js';
 
+/** Vendor tags: what a store carries. Shown on the vendor's cards and used as event filters. */
 export const SellsCategory = z.enum([
   'pokemon_cards',
   'other_tcg',
+  'singles',
+  'sealed',
+  'graded',
+  'vintage',
   'video_games',
+  'plush',
+  'toys',
   'collectibles',
   'art',
   'apparel',
@@ -13,6 +20,24 @@ export const SellsCategory = z.enum([
   'other',
 ]);
 export type SellsCategory = z.infer<typeof SellsCategory>;
+export const SELLS_LABEL: Record<SellsCategory, string> = {
+  pokemon_cards: 'Pokémon',
+  other_tcg: 'Other TCG',
+  singles: 'Singles',
+  sealed: 'Sealed',
+  graded: 'Graded',
+  vintage: 'Vintage',
+  video_games: 'Video games',
+  plush: 'Plush',
+  toys: 'Toys & figures',
+  collectibles: 'Collectibles',
+  art: 'Art & prints',
+  apparel: 'Apparel',
+  accessories: 'Accessories & supplies',
+  food: 'Food & drink',
+  other: 'Other',
+};
+export const MAX_VENDOR_TAGS = 8;
 
 export const SocialHandles = z.object({
   instagram: z.string().max(60).optional(),
@@ -124,6 +149,8 @@ export const VendorProfileInput = z
     businessName: z.string().trim().min(1).max(120),
     phone: z.string().trim().min(7).max(30),
     sellsDescription: z.string().trim().min(1).max(1000),
+    /** Tags shown on the vendor's cards; attendees filter an event's vendor list by them. */
+    sells: z.array(SellsCategory).max(MAX_VENDOR_TAGS),
     socials: SocialHandles,
     /** Key returned by POST /vendor/profile/logo-upload once the browser has PUT the file. */
     logoKey: z.string().max(200),
