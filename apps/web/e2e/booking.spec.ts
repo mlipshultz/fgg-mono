@@ -24,59 +24,76 @@ test.describe('booking picker', () => {
     await expect(page.getByText('B2 · Sat, C4 · All days')).toBeVisible();
   });
 
-  test('cart holds several tables with their own days and totals them', async ({ page }) => {
+  test('cart holds several tables; days per table only on request', async ({ page }) => {
     await gotoBooking(page);
-    await expect(page.getByText('Pick your tables').first()).toBeVisible();
+    await expect(page.getByText('Nothing picked yet').first()).toBeVisible();
 
     await table(page, 'A4').click();
     await expect(table(page, 'A4')).toHaveAttribute('aria-pressed', 'true');
-    const a4Days = page.getByRole('group', { name: 'Days for A4' });
-    await expect(a4Days.getByRole('button', { name: 'Sat' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(a4Days.getByRole('button', { name: 'Sun' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(page.getByText('Row A · $200/day · All days')).toBeVisible();
     await expect(page.getByText('1 table · 2 table-days')).toBeVisible();
 
+    // D4 is Sunday-only, so it comes in with Sunday alone and no toggles are needed.
     await table(page, 'D4').click();
+    await expect(page.getByText('Row D · $200/day · Sun')).toBeVisible();
+    await expect(page.getByText('2 tables · 3 table-days')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Days for A4' })).toHaveCount(0);
+
+    // The exception path: per-table toggles appear behind the link.
+    await page.getByRole('button', { name: 'Need different days for one table?' }).click();
+    const a4Days = page.getByRole('group', { name: 'Days for A4' });
+    await expect(a4Days.getByRole('button', { name: 'Sat' })).toHaveAttribute('aria-pressed', 'true');
     const d4Days = page.getByRole('group', { name: 'Days for D4' });
     await expect(d4Days.getByRole('button', { name: 'Sat' })).toBeDisabled();
-    await expect(d4Days.getByRole('button', { name: 'Sun' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(page.getByText('2 tables · 3 table-days')).toBeVisible();
-
-    // Drop Sunday from A4: one day each.
     await a4Days.getByRole('button', { name: 'Sun' }).click();
     await expect(page.getByText('2 tables · 2 table-days')).toBeVisible();
 
+    // Back to one choice for everything restores all open days.
+    await page.getByRole('button', { name: 'Use the same days for every table' }).click();
+    await expect(page.getByText('2 tables · 3 table-days')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Days for A4' })).toHaveCount(0);
+
     await page.getByRole('button', { name: 'Remove D4' }).click();
-    await expect(page.getByText('1 table · 1 table-day')).toBeVisible();
+    await expect(page.getByText('1 table · 2 table-days')).toBeVisible();
     await expect(table(page, 'D4')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('"Open on" filter dims tables not open that day', async ({ page }) => {
+  test('the Days chips pick the day for every table and dim the rest of the map', async ({
+    page,
+  }) => {
     await gotoBooking(page);
-    const filter = page.getByRole('group', { name: 'Show tables open on' });
-    await filter.getByRole('button', { name: 'Sat' }).click();
+    const days = page.getByRole('group', { name: 'Days' });
+    await table(page, 'A4').click();
+    await days.getByRole('button', { name: 'Sat Oct 24' }).click();
     await expect(table(page, 'D4')).toBeDisabled(); // Sunday-only
     await expect(table(page, 'A3')).toBeEnabled(); // Saturday-only
-    await filter.getByRole('button', { name: 'Sun' }).click();
+    await expect(page.getByText('Row A · $200/day · Sat')).toBeVisible();
+    await expect(page.getByText('1 table · 1 table-day')).toBeVisible();
+    await expect(page.getByText(/open Sat$/)).toBeVisible();
+
+    await days.getByRole('button', { name: 'Sun Oct 25' }).click();
     await expect(table(page, 'D4')).toBeEnabled();
     await expect(table(page, 'A3')).toBeDisabled();
+    await table(page, 'D4').click();
+    await expect(page.getByText('2 tables · 2 table-days')).toBeVisible();
+
+    await days.getByRole('button', { name: 'Both days' }).click();
+    await expect(page.getByText('2 tables · 3 table-days')).toBeVisible();
+    await expect(page.getByText('33 tables open')).toBeVisible();
   });
 
-  test('PokéBucks rate halves the subtotal', async ({ page }) => {
+  test('PokéBucks switch halves the subtotal', async ({ page }) => {
     await gotoBooking(page);
     await table(page, 'A4').click();
-    const total = page.locator('text=Total').locator('..').locator('span').last();
+    const panel = page.getByRole('complementary', { name: 'Your tables' });
+    const total = panel.getByText('Total', { exact: true }).locator('..').locator('span').last();
     await expect(total).toHaveText('$400');
-    await page.getByRole('button', { name: /PokéBucks partner/ }).click();
+    const sw = page.getByRole('switch', { name: /PokéBucks partner rate/ });
+    await expect(sw).toHaveAttribute('aria-checked', 'false');
+    await sw.click();
+    await expect(sw).toHaveAttribute('aria-checked', 'true');
     await expect(total).toHaveText('$200');
+    await expect(page.getByText('Row A · $100/day · All days')).toBeVisible();
   });
 });
 
@@ -84,15 +101,24 @@ test.describe('booking picker on a phone', () => {
   test.skip(live, 'fixture-only data; live coverage lives in live.spec.ts');
   test.skip(({ isMobile }) => !isMobile, 'mobile sheet only');
 
-  test('the sheet tracks the cart count, total and rate', async ({ page }) => {
+  test('the sheet summarises the cart and expands to the full cart', async ({ page }) => {
     await gotoBooking(page);
     const sheet = page.getByRole('dialog', { name: 'Your tables' });
-    await expect(sheet.getByText('Pick your tables')).toBeVisible();
+    await expect(sheet.getByText('Nothing picked yet')).toBeVisible();
     await table(page, 'A4').click();
-    await expect(sheet.getByText(/^1 table · /)).toBeVisible();
-    await expect(sheet.getByText('$400 total')).toBeVisible();
-    await sheet.getByRole('button', { name: /PokéBucks/ }).click();
-    await expect(sheet.getByText('$200 total')).toBeVisible();
-    await expect(sheet.getByRole('button', { name: /^Hold 1 table · \$200/ })).toBeEnabled();
+    await table(page, 'D4').click();
+    const handle = sheet.getByRole('button', { name: /2 tables · A4, D4/ });
+    await expect(handle).toHaveAttribute('aria-expanded', 'false');
+    await expect(sheet.getByText(/\$600 total · Standard rate/)).toBeVisible();
+
+    await handle.click();
+    await expect(handle).toHaveAttribute('aria-expanded', 'true');
+    await expect(sheet.getByText('Already yours')).toBeVisible();
+    await expect(sheet.getByText('Row D · $200/day · Sun')).toBeVisible();
+    await sheet.getByRole('switch', { name: /PokéBucks partner rate/ }).click();
+    await expect(sheet.getByText(/\$300 total · PokéBucks rate/)).toBeVisible();
+    await sheet.getByRole('button', { name: 'Remove D4' }).click();
+    await expect(sheet.getByRole('button', { name: /1 table · A4/ })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: /^Continue · \$200/ })).toBeEnabled();
   });
 });
