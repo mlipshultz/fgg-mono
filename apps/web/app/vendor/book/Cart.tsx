@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import type { FloorPlan, IsoDate, Quote, TableRate } from '@fgg/types';
-import { dayLabel, daysShort, fmtCents, tableById } from '@/lib/booking';
+import { dayLabel, fmtCents, tableById } from '@/lib/booking';
 import { dayOfWeek } from '@/lib/dates';
 import styles from './book.module.css';
 
@@ -60,8 +60,6 @@ export function CartBody({
   plan,
   eventDays,
   openDays,
-  mine,
-  perTable,
   rate,
   pokeBucksCents,
   priced,
@@ -73,8 +71,6 @@ export function CartBody({
   onRate,
   onToggleLineDay,
   onRemove,
-  onPerTable,
-  onSameDays,
   heading = true,
   children,
 }: {
@@ -82,9 +78,6 @@ export function CartBody({
   plan: FloorPlan;
   eventDays: IsoDate[];
   openDays: ReadonlyMap<string, ReadonlySet<IsoDate>>;
-  mine: ReadonlyMap<string, IsoDate[]>;
-  /** Show the per-table day toggles (the exception path). */
-  perTable: boolean;
   rate: TableRate;
   pokeBucksCents: number;
   priced: Quote | null;
@@ -97,8 +90,6 @@ export function CartBody({
   onRate: (rate: TableRate) => void;
   onToggleLineDay: (tableId: string, d: IsoDate) => void;
   onRemove: (tableId: string) => void;
-  onPerTable: () => void;
-  onSameDays: () => void;
   /** The phone sheet's handle already says how many tables are picked. */
   heading?: boolean;
   children?: ReactNode;
@@ -108,17 +99,6 @@ export function CartBody({
   const tableDays = cart.reduce((n, l) => n + l.dates.length, 0);
   return (
     <>
-      {mine.size > 0 && (
-        <div className={styles.mine}>
-          <b>Already yours</b>
-          <span>
-            {[...mine.entries()]
-              .sort(([x], [y]) => x.localeCompare(y, 'en', { numeric: true }))
-              .map(([id, dates]) => `${id} · ${daysShort(eventDays, dates)}`)
-              .join(', ')}
-          </span>
-        </div>
-      )}
       {heading && (
         <div>
           <div className={styles.selName}>
@@ -146,9 +126,8 @@ export function CartBody({
               <div className={styles.cartBody}>
                 <span className={styles.cartRow}>
                   {t ? `Row ${t.row}` : 'Main Hall'} · {fmtCents(lineUnit(l))}/day
-                  {multiDay && !perTable ? ` · ${daysShort(eventDays, l.dates)}` : ''}
                 </span>
-                {multiDay && perTable && (
+                {multiDay && (
                   <div
                     className={styles.cartDays}
                     role="group"
@@ -186,15 +165,6 @@ export function CartBody({
             </div>
           );
         })}
-        {multiDay && cart.length > 0 && !frozen && (
-          <button
-            type="button"
-            className={styles.perTableLink}
-            onClick={perTable ? onSameDays : onPerTable}
-          >
-            {perTable ? 'Use the same days for every table' : 'Need different days for one table?'}
-          </button>
-        )}
       </div>
       <RateSwitch rate={rate} pokeBucksCents={pokeBucksCents} disabled={frozen} onChange={onRate} />
       <div className={styles.lines}>

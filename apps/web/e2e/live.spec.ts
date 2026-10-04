@@ -19,11 +19,10 @@ test.describe('live dev @live', () => {
     await expect(page.getByText('Your Brand').first()).toBeVisible();
   });
 
-  test('booking map marks the account’s own tables', async ({ page, isMobile }) => {
+  test('booking map marks the account’s own tables', async ({ page }) => {
     await gotoBooking(page);
     await expect(table(page, 'B7')).toHaveAccessibleName(/^Table B7, yours/);
-    if (isMobile) await page.getByRole('button', { name: /Nothing picked yet/ }).click();
-    await expect(page.getByText('Already yours').filter({ visible: true })).toBeVisible();
+    await expect(page.getByText('Already yours')).toBeVisible(); // strip above the map
   });
 
   test('who is vending lists the booked vendors', async ({ page }) => {
