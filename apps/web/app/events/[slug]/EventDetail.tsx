@@ -100,11 +100,18 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
   const findOnMap = (vendorId: string) => {
     setFocus(vendorId);
     setFlash((n) => n + 1);
-    // Only move the page when the map isn't already on screen.
-    const map = document.getElementById('venue-map');
-    const r = map?.getBoundingClientRect();
-    if (r && (r.bottom < 120 || r.top > window.innerHeight - 160))
-      map?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Bring the vendor's own tables into view (not just the map card) when they're off screen,
+    // and put keyboard focus on the first one.
+    const first = (vendors ?? []).find((v) => v.vendorId === vendorId)?.tables[0]?.tableId;
+    const cell = first
+      ? document.querySelector<HTMLElement>(`#venue-map [data-table="${first}"]`)
+      : null;
+    if (!cell) return;
+    const r = cell.getBoundingClientRect();
+    const margin = 96;
+    if (r.top < margin || r.bottom > window.innerHeight - margin)
+      cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    cell.focus({ preventScroll: true });
   };
 
   return (

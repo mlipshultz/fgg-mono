@@ -261,18 +261,17 @@ a.factTitle:hover {
   cursor: default;
 }
 .tableFlash {
-  animation: tableFlash 500ms ease-in-out 4;
+  animation: tableFlash 900ms ease-in-out 3;
 }
 @keyframes tableFlash {
   0%,
   100% {
     background: var(--color-pink);
-    transform: none;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-pink) 0%, transparent);
   }
   50% {
     background: var(--color-yellow);
-    transform: scale(1.18);
-    box-shadow: 4px 4px 0 var(--color-ink);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-pink) 45%, transparent);
   }
 }
 @media (prefers-reduced-motion: reduce) {
