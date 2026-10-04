@@ -42,7 +42,10 @@ test.describe('booking picker', () => {
     // The exception path: per-table toggles appear behind the link.
     await page.getByRole('button', { name: 'Need different days for one table?' }).click();
     const a4Days = page.getByRole('group', { name: 'Days for A4' });
-    await expect(a4Days.getByRole('button', { name: 'Sat' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(a4Days.getByRole('button', { name: 'Sat' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     const d4Days = page.getByRole('group', { name: 'Days for D4' });
     await expect(d4Days.getByRole('button', { name: 'Sat' })).toBeDisabled();
     await a4Days.getByRole('button', { name: 'Sun' }).click();

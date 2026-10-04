@@ -236,7 +236,9 @@ export function BookFlow() {
         return cur;
       }
       const open = openDays.get(id) ?? new Set<IsoDate>();
-      const dates = eventDays.filter((d) => open.has(d) && (dayChoice === 'all' || d === dayChoice));
+      const dates = eventDays.filter(
+        (d) => open.has(d) && (dayChoice === 'all' || d === dayChoice),
+      );
       if (!dates.length) return cur;
       setError(null);
       return [...cur, { tableId: id, dates }].sort(byTable);
@@ -683,7 +685,11 @@ export function BookFlow() {
           {actions('lg')}
         </aside>
       </div>
-      <div className={`${styles.sheet} ${sheetOpen ? styles.sheetOpen : ''}`} role="dialog" aria-label="Your tables">
+      <div
+        className={`${styles.sheet} ${sheetOpen ? styles.sheetOpen : ''}`}
+        role="dialog"
+        aria-label="Your tables"
+      >
         <button
           type="button"
           className={styles.sheetHandle}

@@ -122,12 +122,12 @@ export function CartBody({
       {heading && (
         <div>
           <div className={styles.selName}>
-          {cart.length ? `${cart.length} ${tablesWord} picked` : 'Nothing picked yet'}
-        </div>
-        <div className={styles.selSub}>
-          {cart.length
-            ? 'Add more from the map, or continue.'
-            : 'Every table is 8ft with 2 chairs and 2 vendor passes.'}
+            {cart.length ? `${cart.length} ${tablesWord} picked` : 'Nothing picked yet'}
+          </div>
+          <div className={styles.selSub}>
+            {cart.length
+              ? 'Add more from the map, or continue.'
+              : 'Every table is 8ft with 2 chairs and 2 vendor passes.'}
           </div>
         </div>
       )}
@@ -149,7 +149,11 @@ export function CartBody({
                   {multiDay && !perTable ? ` · ${daysShort(eventDays, l.dates)}` : ''}
                 </span>
                 {multiDay && perTable && (
-                  <div className={styles.cartDays} role="group" aria-label={`Days for ${l.tableId}`}>
+                  <div
+                    className={styles.cartDays}
+                    role="group"
+                    aria-label={`Days for ${l.tableId}`}
+                  >
                     {eventDays.map((d) => (
                       <button
                         key={d}
@@ -192,12 +196,7 @@ export function CartBody({
           </button>
         )}
       </div>
-      <RateSwitch
-        rate={rate}
-        pokeBucksCents={pokeBucksCents}
-        disabled={frozen}
-        onChange={onRate}
-      />
+      <RateSwitch rate={rate} pokeBucksCents={pokeBucksCents} disabled={frozen} onChange={onRate} />
       <div className={styles.lines}>
         <div className={styles.line}>
           <span>
