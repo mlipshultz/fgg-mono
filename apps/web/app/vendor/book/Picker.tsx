@@ -132,8 +132,8 @@ export function Picker({
             </span>
           </div>
           {multiDay && (
-            <div className={styles.days} role="group" aria-label="Show days">
-              <span>Show</span>
+            <div className={styles.days} role="group" aria-label="Available days">
+              <span>Available</span>
               {eventDays.map((d) => (
                 <label
                   key={d}

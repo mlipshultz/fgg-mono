@@ -228,8 +228,9 @@
   box-shadow: 2px 2px 0 var(--color-ink);
 }
 .tableTaken {
-  background: var(--color-closed);
-  opacity: 0.55;
+  background: var(--color-dash-strong);
+  border-color: var(--color-placeholder);
+  color: var(--color-muted);
   cursor: not-allowed;
 }
 .tablePicked {
@@ -443,8 +444,8 @@
   background: var(--color-ink);
 }
 .swatchTaken {
-  background: var(--color-closed);
-  opacity: 0.55;
+  background: var(--color-dash-strong);
+  border-color: var(--color-placeholder);
 }
 .legendNote {
   margin-left: auto;
