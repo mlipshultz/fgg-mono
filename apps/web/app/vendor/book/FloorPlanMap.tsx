@@ -22,7 +22,7 @@ function TableButton({
   picked: boolean;
   dimmed: boolean;
   disabled: boolean;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, el: HTMLButtonElement) => void;
 }) {
   const taken = openDays.size === 0;
   const mine = mineDays.length > 0;
@@ -49,11 +49,12 @@ function TableButton({
         dimmed ? styles.tableDim : '',
       ].join(' ')}
       style={stripes ? { backgroundImage: stripes } : undefined}
+      data-table={t.id}
       aria-pressed={picked}
       aria-label={`Table ${t.id}, ${state}`}
       title={`${t.id} · ${state}`}
       disabled={taken || disabled || (dimmed && !picked)}
-      onClick={() => onToggle(t.id)}
+      onClick={(e) => onToggle(t.id, e.currentTarget)}
     >
       <span className={styles.tableId}>{t.id}</span>
     </button>
@@ -71,7 +72,7 @@ export function FloorPlanMap({
   openDays,
   mine,
   picked,
-  filterDay,
+  shownDays,
   disabled = false,
   onToggle,
 }: {
@@ -81,10 +82,10 @@ export function FloorPlanMap({
   /** Tables this vendor already holds a paid order for, with the booked days. */
   mine: ReadonlyMap<string, IsoDate[]>;
   picked: ReadonlySet<string>;
-  /** When set, tables not open on this day are dimmed. */
-  filterDay: IsoDate | null;
+  /** Tables not open on any of these days are dimmed. */
+  shownDays: ReadonlySet<IsoDate>;
   disabled?: boolean;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, el: HTMLButtonElement) => void;
 }) {
   const pairs = rowPairs(plan);
   const cell = (t: FloorTable) => {
@@ -97,7 +98,7 @@ export function FloorPlanMap({
         openDays={open}
         mineDays={mine.get(t.id) ?? []}
         picked={picked.has(t.id)}
-        dimmed={filterDay !== null && open.size > 0 && !open.has(filterDay)}
+        dimmed={open.size > 0 && ![...shownDays].some((d) => open.has(d))}
         disabled={disabled}
         onToggle={onToggle}
       />

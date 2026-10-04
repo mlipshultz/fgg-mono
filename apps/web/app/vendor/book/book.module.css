@@ -535,6 +535,178 @@
   text-underline-offset: 2px;
 }
 
+/* Day checkboxes (which days the map shows) */
+.dayCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 7px 14px 7px 10px;
+  background-color: var(--color-white);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-ink);
+  cursor: pointer;
+  min-height: 36px;
+  opacity: 0.55;
+}
+.dayCheckOn {
+  opacity: 1;
+  box-shadow: 3px 3px 0 var(--color-ink);
+}
+.dayCheck input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-ink);
+  background: var(--color-white);
+  border-radius: 4px;
+}
+.dayCheck > span {
+  background: var(--color-white);
+  border-radius: 999px;
+  padding: 0 4px;
+}
+.dayCheck:has(input:disabled) {
+  cursor: default;
+}
+
+/* "Already yours" strip above the map */
+.mineStrip {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--color-ink);
+  color: var(--color-white);
+  border-radius: var(--radius-tile);
+  padding: 10px 14px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+}
+.mineStrip b {
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-aqua);
+}
+
+/* Table confirm: popover (desktop) / sheet (phone) */
+.planWrap {
+  position: relative;
+}
+.popover {
+  position: absolute;
+  z-index: 10;
+  width: 260px;
+  visibility: hidden;
+}
+.confirm {
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-tile);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 4px 4px 0 var(--color-ink);
+}
+.confirmHead {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.confirmTitle {
+  font-family: var(--type-brand-font-family);
+  font-weight: var(--font-weight-bold);
+  font-size: 18px;
+  line-height: 1.1;
+}
+.confirmSub {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.confirmClose {
+  background: none;
+  border: 0;
+  padding: 0 4px;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-muted);
+  align-self: start;
+}
+.confirmDays {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.confirmDay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 8px 12px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 14px;
+  cursor: pointer;
+  background: var(--color-white);
+}
+.confirmDay:has(input:checked) {
+  background: var(--color-yellow);
+}
+.confirmDay input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-ink);
+}
+.confirmDayOff {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--color-paper);
+}
+.confirmTaken {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.confirmFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.confirmPrice {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.confirmPrice b {
+  font-weight: var(--font-weight-extrabold);
+  font-size: 16px;
+  color: var(--color-ink);
+}
+.confirmActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* Payment: vendor info card */
 .infoCard {
   border: var(--border-width) solid var(--border-color);
@@ -972,6 +1144,14 @@
   }
   .sheetOpen {
     max-height: 90vh;
+  }
+  .sheetConfirm .confirm {
+    border: 0;
+    box-shadow: none;
+    padding: 4px 0 0;
+  }
+  .popover {
+    display: none;
   }
   .stepCard {
     padding: 22px 18px;

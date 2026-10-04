@@ -28,11 +28,12 @@ import {
   releaseHold,
   updateHold,
 } from '@/lib/api';
-import { countdown, fmtCents, openDaysByTable } from '@/lib/booking';
+import { countdown, fmtCents, openDaysByTable, tableById } from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import { type CartLine, CartBody } from './Cart';
 import { Payment } from './Payment';
 import { Picker } from './Picker';
+import { TableConfirm } from './TableConfirm';
 import styles from './book.module.css';
 
 type Step = 1 | 2;
@@ -58,10 +59,10 @@ export function BookFlow() {
   const [data, setData] = useState<EventFloorPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
-  /** Order-level days: every table gets all its open days, or just this one. */
-  const [dayChoice, setDayChoice] = useState<'all' | IsoDate>('all');
-  /** The exception path: per-table day toggles in the cart. */
-  const [perTable, setPerTable] = useState(false);
+  /** Days the map shows (filters cells and seeds the table confirm); never empty. */
+  const [shownDays, setShownDays] = useState<Set<IsoDate>>(new Set());
+  /** Table whose days are being chosen in the confirm card. */
+  const [pending, setPending] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [rate, setRate] = useState<TableRate>('standard');
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -151,6 +152,9 @@ export function BookFlow() {
   }, [slug, step]);
 
   const eventDays = useMemo(() => (data ? data.event.days.map((d) => d.date) : []), [data]);
+  useEffect(() => {
+    setShownDays(new Set(eventDays));
+  }, [eventDays]);
   const openDays = useMemo(
     () => (data ? openDaysByTable(data.floorPlan, data.availability) : new Map()),
     [data],
@@ -218,37 +222,48 @@ export function BookFlow() {
     if (cd?.expired && hold) setExpired(true);
   }, [cd?.expired, hold]);
 
-  const toggleTable = (id: string) => {
+  const availOn = (d: IsoDate) =>
+    data ? data.floorPlan.tables.filter((t) => openDays.get(t.id)?.has(d)).length : 0;
+  const toggleShownDay = (d: IsoDate) =>
+    setShownDays((cur) => {
+      const next = new Set(cur);
+      if (next.has(d)) {
+        if (next.size === 1) return cur; // keep at least one day on the map
+        next.delete(d);
+      } else next.add(d);
+      return next;
+    });
+  /** Tap a table: single-day events add it straight away; otherwise open the day picker. */
+  const pickTable = (id: string) => {
     if (hold) return;
+    const open = openDays.get(id) ?? new Set<IsoDate>();
+    if (!open.size) return;
+    setError(null);
+    if (eventDays.length === 1) {
+      setCart((cur) =>
+        cur.some((l) => l.tableId === id)
+          ? cur.filter((l) => l.tableId !== id)
+          : [...cur, { tableId: id, dates: [...open] }].sort(byTable),
+      );
+      return;
+    }
+    setPending((cur) => (cur === id ? null : id));
+  };
+  const confirmTable = (id: string, dates: IsoDate[]) => {
     setCart((cur) => {
-      if (cur.some((l) => l.tableId === id)) return cur.filter((l) => l.tableId !== id);
-      if (cur.length >= MAX_TABLES_PER_ORDER) {
+      const rest = cur.filter((l) => l.tableId !== id);
+      if (rest.length >= MAX_TABLES_PER_ORDER) {
         setError(`You can book up to ${MAX_TABLES_PER_ORDER} tables in one order.`);
         return cur;
       }
-      const open = openDays.get(id) ?? new Set<IsoDate>();
-      const dates = eventDays.filter(
-        (d) => open.has(d) && (dayChoice === 'all' || d === dayChoice),
-      );
-      if (!dates.length) return cur;
-      setError(null);
-      return [...cur, { tableId: id, dates }].sort(byTable);
+      return [...rest, { tableId: id, dates }].sort(byTable);
     });
+    setPending(null);
   };
-  /** Apply an order-level day choice to every table in the cart (drops tables not open then). */
-  const chooseDays = (choice: 'all' | IsoDate) => {
-    setDayChoice(choice);
-    setPerTable(false);
-    setCart((cur) =>
-      cur.flatMap((l) => {
-        const open = openDays.get(l.tableId) ?? new Set<IsoDate>();
-        const dates = eventDays.filter((d) => open.has(d) && (choice === 'all' || d === choice));
-        return dates.length ? [{ ...l, dates }] : [];
-      }),
-    );
+  const removeLine = (id: string) => {
+    setCart((cur) => cur.filter((l) => l.tableId !== id));
+    setPending(null);
   };
-  const availOn = (d: IsoDate) =>
-    data ? data.floorPlan.tables.filter((t) => openDays.get(t.id)?.has(d)).length : 0;
   const toggleLineDay = (id: string, d: IsoDate) =>
     setCart((cur) =>
       cur.map((l) => {
@@ -261,7 +276,6 @@ export function BookFlow() {
         return { ...l, dates };
       }),
     );
-  const removeLine = (id: string) => setCart((cur) => cur.filter((l) => l.tableId !== id));
 
   const doHold = async () => {
     if (!data || cart.length === 0) return;
@@ -416,8 +430,6 @@ export function BookFlow() {
       plan={data.floorPlan}
       eventDays={eventDays}
       openDays={openDays}
-      mine={mine}
-      perTable={perTable}
       rate={rate}
       pokeBucksCents={pokeBucksCents}
       priced={priced}
@@ -429,8 +441,6 @@ export function BookFlow() {
       onRate={setRate}
       onToggleLineDay={toggleLineDay}
       onRemove={removeLine}
-      onPerTable={() => setPerTable(true)}
-      onSameDays={() => chooseDays(dayChoice)}
     >
       {error && (
         <div className={styles.errorBox} role="alert">
@@ -438,6 +448,33 @@ export function BookFlow() {
         </div>
       )}
     </CartBody>
+  );
+
+  const pendingLine = pending ? cart.find((l) => l.tableId === pending) : undefined;
+  const pendingOpen = pending ? (openDays.get(pending) ?? new Set<IsoDate>()) : null;
+  const confirm = pending && pendingOpen && (
+    <TableConfirm
+      key={pending}
+      tableId={pending}
+      rowLabel={(() => {
+        const t = tableById(data.floorPlan, pending);
+        return t ? `Row ${t.row}` : 'Main Hall';
+      })()}
+      eventDays={eventDays}
+      openDays={pendingOpen}
+      initial={
+        pendingLine?.dates ??
+        (() => {
+          const shown = eventDays.filter((d) => pendingOpen.has(d) && shownDays.has(d));
+          return shown.length ? shown : eventDays.filter((d) => pendingOpen.has(d));
+        })()
+      }
+      unitCents={unit}
+      inCart={!!pendingLine}
+      onConfirm={(dates) => confirmTable(pending, dates)}
+      onRemove={() => removeLine(pending)}
+      onCancel={() => setPending(null)}
+    />
   );
 
   const actions = (size: 'lg' | 'md') =>
@@ -500,12 +537,14 @@ export function BookFlow() {
           openDays={openDays}
           mine={mine}
           picked={new Set(cart.map((l) => l.tableId))}
-          dayChoice={dayChoice}
+          shownDays={shownDays}
           frozen={frozen}
           availCount={availCount}
           availOn={availOn}
-          onChooseDays={chooseDays}
-          onToggleTable={toggleTable}
+          onToggleShownDay={toggleShownDay}
+          onPickTable={pickTable}
+          pendingTable={pending}
+          confirm={confirm}
           cartBody={cartBody}
           actions={actions}
           summaryLine={summaryLine}
