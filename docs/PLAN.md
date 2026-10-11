@@ -181,8 +181,10 @@ and XP audit rows under `EVENT#` are anonymized (owner replaced with `DELETED`),
 ### 3.5 Booking flow end to end
 
 1. `GET /events/{id}/availability` returns, per day, the set of taken and held table IDs.
-2. Vendor picks days, then a table. `POST /events/{id}/holds` runs the transaction above and returns
-   a `holdId` with a 10-minute `expiresAt`. The picker shows the countdown.
+2. Vendor taps a table and confirms its days (up to 10 tables per order). Continue → `POST
+/events/{id}/holds` runs the transaction above and returns a `holdId` with a 10-minute
+   `expiresAt`. Going back keeps the map editable: Continue reuses a hold the cart still
+   matches, otherwise releases it and holds afresh.
 3. The Pay step saves the vendor info (prefilled from the profile, editable in place) to the hold right before checkout. Rate choice (standard / PokéBucks) is stored on the hold.
 4. `POST /holds/{id}/checkout`:
    - extends the hold to 30 minutes;
@@ -322,19 +324,44 @@ Ops: `infra/scripts/dev-token.sh` mints an ID token via the IAM-gated admin auth
 `vendors/{id}/`, resized in the browser) prefills the info card on the Pay step; "about your store" is free
 text everywhere (application, profile, per-order); `GET /public/events/{id}/vendors` powers the
 public `/events/{slug}/` "who's vending" page, fetched at runtime so it needs no rebuild.
-Multi-table picker (same day): a vendor books up to 10 tables in one order. The map is a cart
-(tap to add/remove); every table defaults to all event days and days are adjusted per table in
-the panel. Per-day availability is drawn with stripes (one colour + line direction per day: aqua
-"/" Sat, yellow "\\" Sun, pink "—" for a third day), plain = open every day, grey = taken; the
-day chips above the map filter by dimming and double as the legend. `QuoteInput`/`Quote`,
-`TableHold` and the hold items are per table (`lines`/`tables`); orders already carried a list of
-lines, so passes, receipts and the public vendor list just iterate them.
-Event page (`/events/[slug]/`, 2026-10-04): poster hero with venue (maps link), per-day hours,
-vendor avatars and the table CTA; About; a read-only venue map (booked tables carry the vendor,
-"Find on map" from a card); and the vendor list, one card per vendor with store tags, a tag
-filter row and search. Vendor tags are `Vendor.sells` (`SellsCategory`, labels in
-`SELLS_LABEL`), editable on the vendor profile, up to `MAX_VENDOR_TAGS`.
-Not built: SES emails, PokéBucks toggle endpoint, QR on the vendor pass (Phase 5).
+Multi-table picker (reworked 2026-10-04; `apps/web/app/vendor/book/{BookFlow,Picker,Cart,
+Payment,TableConfirm}.tsx`): a vendor books up to 10 tables in one order. Tapping a table opens a
+TableConfirm card (popover under the cell on desktop, inside the bottom sheet on phones) with a
+checkbox per event day (taken days disabled), a price preview and Add to cart; tapping a table
+already in the cart reopens it with Update / Remove. "Show tables available" checkboxes above the
+map only filter it (the last one can't be unchecked) and seed the confirm's default days; the
+counter reads "N open Sat" when one day is shown. Per-day availability is drawn with stripes (one
+colour + line direction per day: aqua "/" Sat, yellow "\\" Sun, pink "—" for a third day),
+plain = open every day, dark grey = taken, ink = already yours (also listed in an "Already yours"
+strip above the map). Cart lines always show editable day chips; the rate is a one-line PokéBucks
+switch that defaults from the profile's `pokeBucksPartner`. The flow is Table → Pay → Done: Pay
+shows the summary plus a "Your info" card prefilled from the hold or profile (opens as a form only
+when something is missing or on Edit) and saves it to the hold on "Continue to secure checkout";
+the code-of-conduct checkbox is gone (accepted at application, restated in the Pay footer). Back
+from Pay lands on an editable map; a matching hold is reused (countdown chip stays), otherwise
+released and replaced, with the typed info carried over. A hold that lapses on the map just
+disappears; only Pay shows the expired card. `QuoteInput`/`Quote`, `TableHold` and the hold items
+are per table (`lines`/`tables`); orders already carried a list of lines, so passes, receipts and
+the public vendor list just iterate them.
+Browser tests (2026-10-04): Playwright in `apps/web/e2e`. CI runs the fixture export (static
+`out/`, auth gates bypassed with `?preview=1`) on Desktop Chrome + Pixel 7; `pnpm --filter
+@fgg/web e2e:dev` runs the `@live` specs against dev with the smoke account from `.env.dev-smoke`.
+Event page (`/events/[slug]/`, 2026-10-04): poster at its own aspect ratio, dates, venue (maps
+link, address from the public floor plan), per-day hours, vendor avatars and a CTA card reading
+"Tables from $X/day" (`PublicEvent.tablesFromCents`: standard rate in the active price window,
+lowest table override); About; a read-only venue map (booked tables carry the vendor, "Find on
+map" from a card flashes that vendor's tables and scrolls to them when off screen); and the vendor
+list, one card per vendor with store tags, a tag filter row with counts and search. Home event
+cards link to the page from the poster and the name ("See event details →"). Vendor tags are
+`Vendor.sells` (`SellsCategory`, labels in `SELLS_LABEL`), picked on the vendor profile up to
+`MAX_VENDOR_TAGS`. Profile: the logo uploads and saves the moment it's picked (form and the
+dashboard's "Upload a logo" prompt); `lib/useUnsavedChanges.ts` warns before leaving a dirty form.
+Not built (fold into Phase 4): SES emails; PokéBucks toggle endpoint; cleanup of abandoned
+`pending_payment` orders; role grants from the console (refunds are superadmin-only today); a
+cancel-request queue with Approve / Decline (vendor requests only flag the order); a separate
+card image per event (the home card and the event page share `posterKey`); a Calendly URL
+setting for the pending screen; the "FGG mobile app" note on the vendor dashboard is a Phase 5
+placeholder. QR on the vendor pass is Phase 5.
 
 - Vendor application form, Calendly pending screen, review queue in admin, approval that creates
   the `VENDOR#` record, adds the applicant as its first member, moves the Cognito group and emails.
@@ -351,11 +378,22 @@ Not built: SES emails, PokéBucks toggle endpoint, QR on the vendor pass (Phase 
 - Ticket types per event (free and paid, capacity, price windows), order flow reusing the Shopify
   path, `TICKET#` issuance with signed QR, "My tickets" on web and mobile, check-in scan.
 
-### Phase 4: Admin console (3–4 days)
+### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
-- Events CRUD with publish → rebuild, venues and floor plan JSON editor, orders list with
-  refund and manual/comp order actions, vendor list with member management, vendor applications,
-  gallery upload with resize Lambda, partners, settings (fee, tax, hold minutes), XP/badge config.
+Build order, smallest payoff first. Start with 1.
+
+1. **Settings and roles.** Fee, tax, hold minutes, refund cutoff, Calendly link; grant `staff` /
+   `superadmin` from the console (today only the smoke account can refund).
+2. **Events and venues.** Create / edit / publish → site rebuild; poster upload plus an optional
+   card image (landscape crop for the home card); price windows and premium tables; venue and
+   floor-plan editor.
+3. **Orders.** The list exists; add a cancel-request queue (Approve → refund, Decline), manual
+   and comp orders, and cleanup of abandoned `pending_payment` orders.
+4. **Vendors.** List, member management, edit store text / tags / logo on a vendor's behalf; the
+   applications queue already exists.
+5. **Gallery, partners, XP/badge config.** Gallery upload with the resize Lambda.
+6. **Emails (SES).** Order confirmation, application received / approved, refund issued. Dev can
+   send to verified addresses now; production access is a Phase 6 item.
 
 ### Phase 5: Mobile (5–7 days)
 
