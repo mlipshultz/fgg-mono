@@ -322,6 +322,7 @@ describe('vendor booking flow', () => {
     expect(plan.floorPlan).toBeUndefined();
     expect(plan.event.tableBooking).toBe('quantity');
     expect(plan.availability.days.map((d) => d.left)).toEqual([4, 4]);
+    expect(plan.terms).toEqual({ holdMinutes: 10, checkoutHoldMinutes: 10, refundCutoffDays: 14 });
 
     const bySpot = parse(
       await handler(

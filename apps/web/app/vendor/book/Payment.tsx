@@ -6,6 +6,7 @@ import { Button } from '@/components/Button';
 import { Field, authStyles as a } from '@/components/auth/AuthCard';
 import v from '@/components/vendor/vendor.module.css';
 import { RATE_LABEL, daysLabel, daysShort, fmtCents, tableCountLabel } from '@/lib/booking';
+import { type Terms, minutes } from './hold';
 import styles from './book.module.css';
 
 export interface Info {
@@ -31,6 +32,7 @@ const hasErrors = (e: ReturnType<typeof validate>) => Object.values(e).some(Bool
 export function Payment({
   ev,
   eventDays,
+  terms,
   hold,
   user,
   busy,
@@ -43,6 +45,7 @@ export function Payment({
 }: {
   ev: PublicEvent;
   eventDays: IsoDate[];
+  terms: Terms;
   hold: HoldResponse;
   user: { name: string; email: string } | null;
   busy: boolean;
@@ -240,15 +243,16 @@ export function Payment({
         {busy ? 'Opening checkout…' : 'Continue to secure checkout →'}
       </Button>
       <span className={styles.holdNote}>
-        You get a fresh 10 minutes to pay once checkout opens. After that your tables go back on
-        sale.
+        You get a fresh {minutes(terms.checkoutHoldMinutes)} to pay once checkout opens. After that
+        your tables go back on sale.
       </span>
       <span className={styles.policy}>
         By continuing you agree to the{' '}
         <a href="/vendor/code-of-conduct" target="_blank" rel="noreferrer">
           vendor code of conduct
         </a>
-        . Full refund up to 14 days before the show. Secure checkout by Shopify.
+        . Full refund up to {terms.refundCutoffDays} days before the show. Secure checkout by
+        Shopify.
       </span>
       <div className={v.footerNav}>
         <button type="button" className={v.back} onClick={onBack}>

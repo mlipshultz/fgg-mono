@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './Providers';
-import { initials, isStaff } from '@/lib/auth';
+import { initials, isStaff, isSuperAdmin } from '@/lib/auth';
 
 const isVendor = (u: { roles: string[] } | null) => !!u && u.roles.includes('vendor');
 import headerStyles from './Header.module.css';
@@ -106,6 +106,16 @@ export function UserMenu() {
               >
                 Admin · Users
               </Link>
+              {isSuperAdmin(user) && (
+                <Link
+                  href="/admin/settings"
+                  className={styles.item}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                >
+                  Admin · Settings
+                </Link>
+              )}
             </>
           )}
           <button

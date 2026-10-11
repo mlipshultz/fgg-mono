@@ -4,7 +4,9 @@ import {
   AdminUserRow,
   type CancelRequestInput,
   CheckoutResponse,
+  AdminSettings,
   type CompOrderInput,
+  type UpdateSettingsInput,
   type ContactSubmissionInput,
   Dashboard,
   EventAvailability,
@@ -588,6 +590,35 @@ export async function adminComp(input: CompOrderInput): Promise<VendorOrder> {
   return VendorOrder.parse(
     await authedRequest<unknown>('/admin/orders/comp', {
       method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Fixture mode keeps what was saved so the settings screen behaves like the real one. */
+let fixtureSettings: AdminSettings = {
+  processingFeePct: 0,
+  taxPct: 0,
+  holdMinutes: 10,
+  checkoutHoldMinutes: 10,
+  refundCutoffDays: 14,
+  calendlyUrl: 'https://calendly.com/feelgoodgaming/vendor-call',
+};
+
+export async function adminGetSettings(): Promise<AdminSettings> {
+  if (!hasApi) return fake(fixtureSettings);
+  return AdminSettings.parse(await authedRequest<unknown>('/admin/settings'));
+}
+
+export async function adminUpdateSettings(input: UpdateSettingsInput): Promise<AdminSettings> {
+  if (!hasApi) {
+    const { calendlyUrl, ...rest } = input;
+    fixtureSettings = { ...rest, ...(calendlyUrl ? { calendlyUrl } : {}) };
+    return fake(fixtureSettings);
+  }
+  return AdminSettings.parse(
+    await authedRequest<unknown>('/admin/settings', {
+      method: 'PUT',
       body: JSON.stringify(input),
     }),
   );

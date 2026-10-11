@@ -37,7 +37,14 @@ import {
 import { shortDateLabel } from '@/lib/dates';
 import { RateSwitch } from './Cart';
 import { type Info, Payment } from './Payment';
-import { HOLD_KEY, useCountdown, useReturnFromCheckout } from './hold';
+import {
+  DEFAULT_TERMS,
+  HOLD_KEY,
+  holdNote,
+  minutes,
+  useCountdown,
+  useReturnFromCheckout,
+} from './hold';
 import styles from './book.module.css';
 
 type Step = 1 | 2;
@@ -77,6 +84,7 @@ export function CountFlow({
 }) {
   const { user } = useAuth();
   const [data, setData] = useState(initial);
+  const terms = data.terms ?? DEFAULT_TERMS;
   const ev = data.event;
   const eventDays = useMemo(() => ev.days.map((d) => d.date), [ev.days]);
   /** Tables wanted per day; a day at 0 isn't booked. */
@@ -294,8 +302,8 @@ export function CountFlow({
           <span className={styles.eyebrow}>Time&apos;s up</span>
           <h1 className={styles.stepTitle}>Your hold expired</h1>
           <p className={a.lead}>
-            We held your {tableDays === 1 ? 'table' : 'tables'} for 10 minutes. They&apos;re back on
-            sale now, so book again and we&apos;ll hold them fresh.
+            We held your {tableDays === 1 ? 'table' : 'tables'} for {minutes(terms.holdMinutes)}.
+            They&apos;re back on sale now, so book again and we&apos;ll hold them fresh.
           </p>
           <div>
             <Button type="button" variant="primary" size="md" onClick={() => void chooseAgain()}>
@@ -330,6 +338,7 @@ export function CountFlow({
           <Payment
             key={hold.hold.id}
             ev={ev}
+            terms={terms}
             eventDays={eventDays}
             hold={hold}
             user={user}
@@ -460,7 +469,7 @@ export function CountFlow({
             <span className={styles.holdNote}>
               {holdMatches
                 ? 'Still held for you. Change anything here and we hold it fresh when you continue.'
-                : 'Your tables are held for 10 minutes once you continue, and 10 more when you open checkout.'}
+                : holdNote(terms)}
             </span>
           </div>
         )}

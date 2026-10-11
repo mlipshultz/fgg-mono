@@ -33,7 +33,14 @@ import { fmtCents, openDaysByTable, tableById } from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import { type CartLine, CartBody } from './Cart';
 import { CountFlow } from './CountFlow';
-import { HOLD_KEY, useCountdown, useReturnFromCheckout } from './hold';
+import {
+  DEFAULT_TERMS,
+  HOLD_KEY,
+  holdNote,
+  minutes,
+  useCountdown,
+  useReturnFromCheckout,
+} from './hold';
 import { type Info, Payment } from './Payment';
 import { Picker } from './Picker';
 import { TableConfirm } from './TableConfirm';
@@ -136,6 +143,7 @@ function MapFlow({
 }) {
   const { user } = useAuth();
   const [data, setData] = useState<PlanData>(initial);
+  const terms = data.terms ?? DEFAULT_TERMS;
   const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   /** Days the map shows (filters cells and seeds the table confirm); never empty. */
@@ -447,8 +455,8 @@ function MapFlow({
           <span className={styles.eyebrow}>Time&apos;s up</span>
           <h1 className={styles.stepTitle}>Your hold expired</h1>
           <p className={a.lead}>
-            We held {cartLabel || 'your tables'} for 10 minutes. They&apos;re back on the map now,
-            so pick again and we&apos;ll hold them fresh.
+            We held {cartLabel || 'your tables'} for {minutes(terms.holdMinutes)}. They&apos;re back
+            on the map now, so pick again and we&apos;ll hold them fresh.
           </p>
           <div>
             <Button type="button" variant="primary" size="md" onClick={() => void chooseAnother()}>
@@ -569,7 +577,7 @@ function MapFlow({
       <span className={styles.holdNote}>
         {holdMatches
           ? 'Still held for you. Change anything here and we hold it fresh when you continue.'
-          : 'Your tables are held for 10 minutes once you continue, and 10 more when you open checkout.'}
+          : holdNote(terms)}
       </span>
     </>
   );
@@ -582,6 +590,7 @@ function MapFlow({
           <Payment
             key={hold.hold.id}
             ev={ev}
+            terms={terms}
             eventDays={eventDays}
             hold={hold}
             user={user}

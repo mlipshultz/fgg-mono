@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { EventFloorPlan } from '@fgg/types';
 import { countdown } from '@/lib/booking';
 
 /** sessionStorage key for the hold a vendor can resume after a reload. */
@@ -27,3 +28,18 @@ export function useReturnFromCheckout(onReturn: () => void) {
     return () => window.removeEventListener('pageshow', onShow);
   }, []);
 }
+
+/** The booking terms from Settings that the booking pages spell out. */
+export type Terms = NonNullable<EventFloorPlan['terms']>;
+export const DEFAULT_TERMS: Terms = {
+  holdMinutes: 10,
+  checkoutHoldMinutes: 10,
+  refundCutoffDays: 14,
+};
+
+/** "1 minute" / "10 minutes" */
+export const minutes = (n: number) => `${n} ${n === 1 ? 'minute' : 'minutes'}`;
+
+/** The note under Continue on the first step. */
+export const holdNote = (t: Terms) =>
+  `Your tables are held for ${minutes(t.holdMinutes)} once you continue, and ${minutes(t.checkoutHoldMinutes)} more when you open checkout.`;

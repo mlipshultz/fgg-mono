@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from './Button';
 import { useAuth } from './Providers';
-import { isStaff } from '@/lib/auth';
+import { isStaff, isSuperAdmin } from '@/lib/auth';
 import styles from './MobileMenu.module.css';
 
 export interface NavLink {
@@ -102,6 +102,13 @@ export function MobileMenu({ links }: { links: NavLink[] }) {
                     Admin · Users
                   </Link>
                 </li>
+                {isSuperAdmin(user) && (
+                  <li>
+                    <Link href="/admin/settings" onClick={() => setOpen(false)}>
+                      Admin · Settings
+                    </Link>
+                  </li>
+                )}
               </>
             )}
           </ul>

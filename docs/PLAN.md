@@ -432,10 +432,15 @@ placeholder. QR on the vendor pass is Phase 5.
 
 ### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
-Build order, smallest payoff first. Start with 1.
+Build order, smallest payoff first. 1 is built; 2 is next.
 
-1. **Settings and roles.** Fee, tax, hold minutes, refund cutoff, Calendly link; grant `staff` /
-   `superadmin` from the console (today only the smoke account can refund).
+1. **Settings and roles.** Built 2026-10-11: `/admin/settings` (superadmin) edits fee, tax, hold
+   minutes, checkout hold minutes, refund cutoff and the Calendly link through `GET` / `PUT
+/admin/settings`; the booking pages and the receipt read the hold and refund numbers from
+   Settings instead of fixed text. Role grants were already in place at `/admin/users` (Phase 2);
+   the smoke account can make another account `superadmin` there. Not on the screen yet: vendor
+   approval mode, per-vendor table cap, PokéBucks partner cap, contact and social links. The
+   static `/terms` page still says 14 days.
 2. **Events and venues.** Create / edit / publish → site rebuild; poster upload plus an optional
    card image (landscape crop for the home card); price windows and premium tables; venue and
    floor-plan editor. The event editor sets the booking mode (`floor_plan` / `quantity`) and the

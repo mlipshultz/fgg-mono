@@ -70,7 +70,12 @@ const MUTED = rgb(0.36, 0.353, 0.333);
 const AQUA = rgb(0.2, 0.933, 0.863);
 
 /** Simple sticker-style receipt. Returns the PDF bytes. */
-export async function receiptPdf(order: Order, ev: Event, venue: Venue): Promise<Uint8Array> {
+export async function receiptPdf(
+  order: Order,
+  ev: Event,
+  venue: Venue,
+  refundCutoffDays = 14,
+): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -131,12 +136,9 @@ export async function receiptPdf(order: Order, ev: Event, venue: Venue): Promise
     page.drawText(v.replace(/[^\x20-\x7E]/g, ''), { x: 200, y, size: 12, font: reg, color: INK });
     y -= 26;
   }
-  page.drawText('Full refund up to 14 days before the show. hello@feelgoodgaming.com', {
-    x: 60,
-    y: 70,
-    size: 9,
-    font: reg,
-    color: MUTED,
-  });
+  page.drawText(
+    `Full refund up to ${refundCutoffDays} days before the show. hello@feelgoodgaming.com`,
+    { x: 60, y: 70, size: 9, font: reg, color: MUTED },
+  );
   return doc.save();
 }
