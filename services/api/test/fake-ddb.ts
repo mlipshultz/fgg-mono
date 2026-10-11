@@ -27,6 +27,8 @@ class TransactionCanceledException extends Error {
  */
 export class FakeDdb {
   items = new Map<string, Item>();
+  /** Runs once, just before the next TransactWrite: lets a test land a competing write. */
+  beforeTransact: (() => void) | undefined;
   readonly mock = mockClient(DynamoDBDocumentClient);
 
   constructor() {
@@ -65,6 +67,14 @@ export class FakeDdb {
     if (cond === 'attribute_not_exists(PK) OR orderId = :oid') {
       if (existing && existing.orderId !== values[':oid'])
         throw new ConditionalCheckFailedException('taken');
+      return;
+    }
+    if (cond === 'attribute_not_exists(#v)') {
+      if (existing?.version !== undefined) throw new ConditionalCheckFailedException('moved');
+      return;
+    }
+    if (cond === '#v = :cur') {
+      if (existing?.version !== values[':cur']) throw new ConditionalCheckFailedException('moved');
       return;
     }
     throw new Error(`fake-ddb: unsupported condition ${cond}`);
@@ -145,6 +155,9 @@ export class FakeDdb {
       return { Responses: { [table]: keys.map((k) => this.get(k.PK, k.SK)).filter(Boolean) } };
     });
     this.mock.on(TransactWriteCommand).callsFake((input: any) => {
+      const race = this.beforeTransact;
+      this.beforeTransact = undefined;
+      race?.();
       const snapshot = new Map(this.items);
       try {
         for (const t of input.TransactItems) {

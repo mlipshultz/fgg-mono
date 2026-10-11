@@ -9,7 +9,16 @@ import { mockClient } from 'aws-sdk-client-mock';
 import { Vendor, VendorApplication, VendorStanding } from '@fgg/types';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { FakeDdb } from './fake-ddb.js';
-import { EVENT_ID, event, floorPlan, parse, req as baseReq, venue } from './fixtures.js';
+import {
+  EVENT_ID,
+  countEvent,
+  countVenue,
+  event,
+  floorPlan,
+  parse,
+  req as baseReq,
+  venue,
+} from './fixtures.js';
 
 process.env.TABLE_NAME = 'fgg-test';
 process.env.MEDIA_BASE_URL = 'https://media.test';
@@ -221,6 +230,40 @@ describe('admin orders', () => {
     );
     expect(cancelled.body.status).toBe('cancelled');
     expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#A3')).toBeUndefined();
+  });
+
+  it('comps a number of tables on an event that books without a floor plan', async () => {
+    const app = parse(await handler(applicant('POST', '/me/vendor-application', input))).body;
+    const vendor = parse(
+      await handler(staff('POST', `/admin/vendor-applications/${app.id}/approve`)),
+    ).body;
+    db.put({ ...keys.eventIndex(countEvent), ...countEvent });
+    db.put({ ...keys.venue(countVenue.id), ...countVenue });
+    const counted = parse(
+      await handler(
+        staff('POST', '/admin/orders/comp', {
+          eventId: countEvent.id,
+          vendorId: vendor.id,
+          quantity: 2,
+          dates: ['2026-10-24'],
+        }),
+      ),
+    );
+    expect(counted.status).toBe(201);
+    expect(counted.body.lines).toEqual([
+      expect.objectContaining({ type: 'unassigned_tables', quantity: 2 }),
+    ]);
+    const tooMany = parse(
+      await handler(
+        staff('POST', '/admin/orders/comp', {
+          eventId: countEvent.id,
+          vendorId: vendor.id,
+          quantity: 3,
+          dates: ['2026-10-24'],
+        }),
+      ),
+    );
+    expect(tooMany.status).toBe(409);
   });
 
   it('registers webhooks for superadmin only', async () => {

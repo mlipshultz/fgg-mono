@@ -37,6 +37,21 @@ export const event: Event = {
   updatedAt: '2026-09-01T00:00:00Z',
 };
 
+/** A show at a new venue with no floor plan: vendors book a number of tables, 4 per day. */
+export const COUNT_EVENT_ID = '01HZX3V9K7Q2M4N8P6R5T1W0YG';
+export const COUNT_VENUE_ID = '01HZX3V9K7Q2M4N8P6R5T1W0YH';
+export const countVenue: Venue = { ...venue, id: COUNT_VENUE_ID, name: 'Frederick Fairgrounds' };
+export const countEvent: Event = {
+  ...event,
+  id: COUNT_EVENT_ID,
+  slug: 'winter-fest-2027',
+  seriesId: 'winter-fest',
+  name: 'Winter Fest',
+  venueId: COUNT_VENUE_ID,
+  tableBooking: 'quantity',
+  tableCapacity: 4,
+};
+
 export const floorPlan: FloorPlan = {
   venueId: VENUE_ID,
   version: 1,

@@ -63,6 +63,17 @@ export const keys = {
     PK: `EVENT#${eventId}`,
     SK: `TABLE#${date}#${tableId}`,
   }),
+  /** `quantity` events have no table IDs: holds key on the hold, booked rows on the order. */
+  countHold: (eventId: string, date: string, holdId: string): Keys => ({
+    PK: `EVENT#${eventId}`,
+    SK: `HOLD#${date}#QTY#${holdId}`,
+  }),
+  bookedCount: (eventId: string, date: string, orderId: string): Keys => ({
+    PK: `EVENT#${eventId}`,
+    SK: `TABLE#${date}#QTY#${orderId}`,
+  }),
+  /** Version stamp every `quantity` hold and booking bumps, so capacity checks can't race. */
+  capacity: (eventId: string): Keys => ({ PK: `EVENT#${eventId}`, SK: 'CAPACITY' }),
   activity: (id: string, sortOrder: number): Keys => ({
     PK: 'CONFIG',
     SK: `ACTIVITY#${pad(sortOrder)}#${id}`,
@@ -178,7 +189,9 @@ export interface HoldItem {
   eventId: string;
   vendorId: string;
   heldBy: string;
-  tableId: string;
+  /** Absent on `quantity` events, which set `quantity` instead. */
+  tableId?: string;
+  quantity?: number;
   date: string;
   /** All days held for this table (same on every day-item of the table). */
   dates: string[];
@@ -203,7 +216,9 @@ export interface HoldItem {
 export interface BookedTableItem {
   PK: string;
   SK: string;
-  tableId: string;
+  /** Absent on `quantity` events, which set `quantity` instead. */
+  tableId?: string;
+  quantity?: number;
   date: string;
   orderId: string;
   vendorId: string;
@@ -266,17 +281,31 @@ export async function getFloorPlan(venueId: string): Promise<FloorPlan | undefin
   return res.Item as FloorPlan | undefined;
 }
 
-async function listEventPrefix<T>(eventId: string, prefix: string): Promise<T[]> {
+async function listEventPrefix<T>(
+  eventId: string,
+  prefix: string,
+  consistent = false,
+): Promise<T[]> {
   const items = await queryAll({
     KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
     ExpressionAttributeValues: { ':pk': `EVENT#${eventId}`, ':sk': prefix },
+    ...(consistent ? { ConsistentRead: true } : {}),
   });
   return items as unknown as T[];
 }
 
-export const listHolds = (eventId: string) => listEventPrefix<HoldItem>(eventId, 'HOLD#');
-export const listBookedTables = (eventId: string) =>
-  listEventPrefix<BookedTableItem>(eventId, 'TABLE#');
+export const listHolds = (eventId: string, consistent = false) =>
+  listEventPrefix<HoldItem>(eventId, 'HOLD#', consistent);
+export const listBookedTables = (eventId: string, consistent = false) =>
+  listEventPrefix<BookedTableItem>(eventId, 'TABLE#', consistent);
+
+/** Current capacity version of a `quantity` event (0 before its first hold). */
+export async function getCapacityVersion(eventId: string): Promise<number> {
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE, Key: keys.capacity(eventId), ConsistentRead: true }),
+  );
+  return Number(res.Item?.version ?? 0);
+}
 
 async function listConfig<T>(prefix: string): Promise<T[]> {
   const items = await queryAll({

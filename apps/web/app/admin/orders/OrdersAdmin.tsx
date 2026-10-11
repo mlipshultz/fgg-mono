@@ -20,8 +20,10 @@ import {
   fmtCents,
   orderDates,
   tableDaysSummary,
-  tableLinesOf,
+  orderRate,
+  tableCount,
   tablesLabel,
+  tablesPhrase,
 } from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import styles from '@/components/admin/admin.module.css';
@@ -43,10 +45,8 @@ const STATUS_CLASS: Record<OrderStatus, string | undefined> = {
 };
 
 function tableOf(o: VendorOrder) {
-  const lines = tableLinesOf(o);
-  return lines.length
-    ? { tableId: tablesLabel(o), dates: orderDates(o), rate: lines[0]!.rate }
-    : null;
+  const rate = orderRate(o);
+  return rate ? { tableId: tablesLabel(o), dates: orderDates(o), rate } : null;
 }
 
 export function OrdersAdmin() {
@@ -93,10 +93,9 @@ export function OrdersAdmin() {
   }, [eventId, status, load]);
 
   const refund = async (o: VendorOrder) => {
-    const t = tableOf(o);
     if (
       !window.confirm(
-        `Refund ${fmtCents(o.totalCents)} to ${o.vendorInfo?.tableName ?? 'this vendor'} for table ${t?.tableId ?? ''} at ${o.event.name}? This frees the table.`,
+        `Refund ${fmtCents(o.totalCents)} to ${o.vendorInfo?.tableName ?? 'this vendor'} for ${tablesPhrase(o) || 'this order'} at ${o.event.name}? This frees the ${tableCount(o) > 1 ? 'tables' : 'table'}.`,
       )
     )
       return;
@@ -113,14 +112,26 @@ export function OrdersAdmin() {
     }
   };
 
+  /** The picked event books by number of tables (no floor plan), so comp a count, not a spot. */
+  const compByCount = events.find((e) => e.id === comp.eventId)?.tableBooking === 'quantity';
+
   const submitComp = async (ev: FormEvent) => {
     ev.preventDefault();
     const dates = comp.dates
       .split(/[,\s]+/)
       .map((d) => d.trim())
       .filter(Boolean);
-    if (!comp.eventId || !comp.vendorId || !comp.tableId || dates.length === 0) {
-      setError('Comp needs an event, a vendor id, a table and at least one date (YYYY-MM-DD).');
+    const quantity = Number(comp.tableId);
+    if (
+      !comp.eventId ||
+      !comp.vendorId ||
+      !comp.tableId ||
+      dates.length === 0 ||
+      (compByCount && !(Number.isInteger(quantity) && quantity > 0))
+    ) {
+      setError(
+        `Comp needs an event, a vendor id, ${compByCount ? 'how many tables' : 'a table'} and at least one date (YYYY-MM-DD).`,
+      );
       return;
     }
     setActing('comp');
@@ -129,14 +140,12 @@ export function OrdersAdmin() {
       const created = await adminComp({
         eventId: comp.eventId,
         vendorId: comp.vendorId,
-        tableId: comp.tableId.toUpperCase(),
+        ...(compByCount ? { quantity } : { tableId: comp.tableId.toUpperCase() }),
         dates,
         ...(comp.note.trim() ? { note: comp.note.trim() } : {}),
       });
       setRows((cur) => [created, ...cur]);
-      setToast(
-        `Comped table ${comp.tableId.toUpperCase()} (${created.passNumber ?? 'pass pending'}).`,
-      );
+      setToast(`Comped ${tablesPhrase(created)} (${created.passNumber ?? 'pass pending'}).`);
       setShowComp(false);
       setComp({ eventId: '', vendorId: '', tableId: '', dates: '', note: '' });
     } catch (e) {
@@ -240,11 +249,12 @@ export function OrdersAdmin() {
               />
             </label>
             <label>
-              Table
+              {compByCount ? 'How many tables' : 'Table'}
               <input
                 value={comp.tableId}
                 onChange={(e) => setComp({ ...comp, tableId: e.target.value })}
-                placeholder="B7"
+                placeholder={compByCount ? '2' : 'B7'}
+                inputMode={compByCount ? 'numeric' : 'text'}
               />
             </label>
             <label>
@@ -309,7 +319,7 @@ export function OrdersAdmin() {
                     <span className={styles.name}>{o.event.name}</span>
                     <span className={styles.sub}>
                       {t
-                        ? tableLinesOf(o).length > 1
+                        ? tableCount(o) > 1
                           ? tableDaysSummary(
                               o,
                               o.event.days.map((d) => d.date),

@@ -5,7 +5,7 @@ import type { VendorOrder } from '@fgg/types';
 import { Button } from '@/components/Button';
 import { PassCard } from '@/components/vendor/PassCard';
 import { downloadVendorFile, getVendorOrder } from '@/lib/api';
-import { tableDaysSummary, tableLinesOf, tablesLabel } from '@/lib/booking';
+import { tableCount, tableDaysSummary, tablesLabel, unassignedTables } from '@/lib/booking';
 import styles from './done.module.css';
 
 const MAX_WAIT_MS = 2 * 60_000;
@@ -48,7 +48,7 @@ export function Done() {
 
   const download = (kind: 'pass.ics' | 'receipt.pdf') => {
     if (!order) return;
-    const base = `${order.event.slug}-table-${tablesLabel(order).replace(/, /g, '-') || 'pass'}`;
+    const base = `${order.event.slug}-table-${tablesLabel(order).replace(/[, ]+/g, '-') || 'pass'}`;
     void downloadVendorFile(
       order.id,
       kind,
@@ -132,7 +132,8 @@ export function Done() {
   }
 
   const tables = tablesLabel(order);
-  const many = tableLinesOf(order).length > 1;
+  const many = tableCount(order) > 1;
+  const unassigned = unassignedTables(order) > 0;
   return (
     <main className={styles.page}>
       <div className={styles.card}>
@@ -142,7 +143,7 @@ export function Done() {
         <div>
           <h1 className={styles.title}>You&apos;re booked!</h1>
           <p className={styles.lead}>
-            {many ? 'Tables' : 'Table'}{' '}
+            {unassigned ? '' : many ? 'Tables ' : 'Table '}
             {many
               ? tableDaysSummary(
                   order,

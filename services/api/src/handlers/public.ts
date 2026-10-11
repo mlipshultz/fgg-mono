@@ -184,11 +184,13 @@ export const router = new Router()
       loadAvailability(ev),
     ]);
     if (!venue) throw new HttpError(500, 'venue_missing', 'Venue missing');
-    if (!floorPlan) throw new HttpError(404, 'no_floor_plan', 'This venue has no floor plan yet');
+    const byCount = ev.tableBooking === 'quantity';
+    if (!floorPlan && !byCount)
+      throw new HttpError(404, 'no_floor_plan', 'This venue has no floor plan yet');
     const body: EventFloorPlan = {
       event: toPublicEvent(ev, venue, availability.tablesLeft),
       venue,
-      floorPlan,
+      ...(floorPlan && !byCount ? { floorPlan } : {}),
       availability,
     };
     return json(req, body, 200, { 'cache-control': 'no-store' });
@@ -223,13 +225,15 @@ export const router = new Router()
         socials: v.socials ?? {},
         tables: [],
       };
+      let listed = false;
       for (const line of o.lines) {
+        if (line.type === 'unassigned_tables') listed = true;
         if (line.type !== 'table') continue;
         const t = entry.tables.find((x) => x.tableId === line.tableId);
         if (t) t.dates = [...new Set([...t.dates, ...line.dates])].sort();
         else entry.tables.push({ tableId: line.tableId, dates: [...line.dates].sort() });
       }
-      if (entry.tables.length) byVendor.set(v.id, entry);
+      if (entry.tables.length || listed) byVendor.set(v.id, entry);
     }
     const list = [...byVendor.values()];
     for (const e of list)

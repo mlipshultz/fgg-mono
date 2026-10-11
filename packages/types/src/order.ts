@@ -22,6 +22,16 @@ export const HeldTable = z.object({
 });
 export type HeldTable = z.infer<typeof HeldTable>;
 
+/** Held on a `quantity` event: a number of tables with no spots yet. unitCents is per table-day. */
+export const HeldTableCount = z.object({
+  quantity: z.number().int().positive(),
+  dates: z.array(IsoDate).min(1),
+  unitCents: Cents,
+  amountCents: Cents,
+  pricingInputs: PricingInputs,
+});
+export type HeldTableCount = z.infer<typeof HeldTableCount>;
+
 /** A vendor's hold on one or more tables for an event. Stored as one item per table-day. */
 export const TableHold = z.object({
   id: Ulid,
@@ -29,7 +39,7 @@ export const TableHold = z.object({
   vendorId: Ulid,
   heldBy: CognitoSub,
   rate: TableRate,
-  tables: z.array(HeldTable).min(1),
+  tables: z.array(z.union([HeldTable, HeldTableCount])).min(1),
   subtotalCents: Cents,
   expiresAt: IsoDateTime,
   createdAt: IsoDateTime,
@@ -58,6 +68,16 @@ export const OrderLine = z.discriminatedUnion('type', [
     tableId: z.string(),
     dates: z.array(IsoDate).min(1),
     rate: TableRate,
+    unitCents: Cents,
+    lineCents: Cents,
+  }),
+  /** Tables booked by number on a `quantity` event; FGG assigns the spots later. */
+  z.object({
+    type: z.literal('unassigned_tables'),
+    quantity: z.number().int().positive(),
+    dates: z.array(IsoDate).min(1),
+    rate: TableRate,
+    /** Per table per day. */
     unitCents: Cents,
     lineCents: Cents,
   }),

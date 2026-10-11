@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Activity, Partner } from './content.js';
-import { EventDay, VendorTableStatus } from './event.js';
+import { EventDay, TableBooking, VendorTableStatus } from './event.js';
 import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
 import { Me, Role } from './user.js';
 import {
@@ -60,6 +60,8 @@ export const PublicEvent = z.object({
   posterUrl: z.string().url().optional(),
   vendorStatus: VendorTableStatus,
   vendorOpensAt: IsoDateTime.optional(),
+  /** Absent means `floor_plan`. */
+  tableBooking: TableBooking.optional(),
   /** Live count; undefined when vendor tables are not open. */
   tablesLeft: z.number().int().nonnegative().optional(),
   tableRateCents: z.number().int().nonnegative(),
@@ -167,8 +169,14 @@ export const EventAvailability = z.object({
   eventId: Ulid,
   vendorStatus: VendorTableStatus,
   tablesLeft: z.number().int().nonnegative(),
-  /** Per day: table IDs that are taken or currently held. */
-  days: z.array(z.object({ date: IsoDate, unavailable: z.array(z.string()) })),
+  /** Per day: table IDs that are taken or currently held; on `quantity` events, tables left. */
+  days: z.array(
+    z.object({
+      date: IsoDate,
+      unavailable: z.array(z.string()),
+      left: z.number().int().nonnegative().optional(),
+    }),
+  ),
 });
 export type EventAvailability = z.infer<typeof EventAvailability>;
 
@@ -286,19 +294,30 @@ export type VendorApplicationList = z.infer<typeof VendorApplicationList>;
 export const EventFloorPlan = z.object({
   event: PublicEvent,
   venue: Venue,
-  floorPlan: FloorPlan,
+  /** Absent on `quantity` events. */
+  floorPlan: FloorPlan.optional(),
   availability: EventAvailability,
 });
 export type EventFloorPlan = z.infer<typeof EventFloorPlan>;
 
+export const MAX_TABLES_PER_ORDER = 10;
+
 /** One table in the cart with the days wanted for it. */
-export const QuoteLineInput = z.object({
+export const TableLineInput = z.object({
   tableId: z.string().regex(/^[A-Z]{1,2}\d{1,3}$/),
   dates: z.array(IsoDate).min(1),
 });
-export type QuoteLineInput = z.infer<typeof QuoteLineInput>;
+export type TableLineInput = z.infer<typeof TableLineInput>;
 
-export const MAX_TABLES_PER_ORDER = 10;
+/** `quantity` events: how many tables, and the days wanted for all of them. */
+export const TableCountInput = z.object({
+  quantity: z.number().int().positive().max(MAX_TABLES_PER_ORDER),
+  dates: z.array(IsoDate).min(1),
+});
+export type TableCountInput = z.infer<typeof TableCountInput>;
+
+export const QuoteLineInput = z.union([TableLineInput, TableCountInput]);
+export type QuoteLineInput = z.infer<typeof QuoteLineInput>;
 
 /** POST /vendor/events/{id}/quote and /holds: the cart. One rate applies to every table. */
 export const QuoteInput = z.object({
@@ -307,15 +326,26 @@ export const QuoteInput = z.object({
 });
 export type QuoteInput = z.infer<typeof QuoteInput>;
 
-/** Price resolved server-side per table (base rate, price window, table override). */
-export const QuoteLine = QuoteLineInput.extend({
+const LinePrice = {
+  /** Per table per day. */
   unitCents: z.number().int().nonnegative(),
   lineCents: z.number().int().nonnegative(),
   pricingInputs: PricingInputs,
+};
+
+/** Price resolved server-side per table (base rate, price window, table override). */
+export const TableQuoteLine = TableLineInput.extend({
+  ...LinePrice,
   /** "Row B · Main Hall", "Right by the stage, next to the Art Station." */
   rowLabel: z.string(),
   nearby: z.string(),
 });
+export type TableQuoteLine = z.infer<typeof TableQuoteLine>;
+
+export const TableCountQuoteLine = TableCountInput.extend(LinePrice);
+export type TableCountQuoteLine = z.infer<typeof TableCountQuoteLine>;
+
+export const QuoteLine = z.union([TableQuoteLine, TableCountQuoteLine]);
 export type QuoteLine = z.infer<typeof QuoteLine>;
 
 export const Quote = z.object({
@@ -402,7 +432,8 @@ export const EventVendor = z.object({
   tags: z.array(SellsCategory),
   logoUrl: z.string().url().optional(),
   socials: SocialHandles,
-  tables: z.array(z.object({ tableId: z.string(), dates: z.array(IsoDate).min(1) })).min(1),
+  /** Empty on `quantity` events, where tables have no spots yet. */
+  tables: z.array(z.object({ tableId: z.string(), dates: z.array(IsoDate).min(1) })),
 });
 export type EventVendor = z.infer<typeof EventVendor>;
 export const EventVendorList = z.object({ event: PublicEvent, vendors: z.array(EventVendor) });
@@ -419,11 +450,18 @@ export type AdminOrderList = z.infer<typeof AdminOrderList>;
 export const RefundInput = z.object({ reason: z.string().max(1000).optional() });
 export type RefundInput = z.infer<typeof RefundInput>;
 
-/** POST /admin/orders/comp — staff assign a table without payment (source: manual, $0). */
+/**
+ * POST /admin/orders/comp — staff assign a table without payment (source: manual, $0). Send
+ * `tableId` on floor-plan events and `quantity` on `quantity` events.
+ */
 export const CompOrderInput = z.object({
   eventId: Ulid,
   vendorId: Ulid,
-  tableId: z.string().regex(/^[A-Z]{1,2}\d{1,3}$/),
+  tableId: z
+    .string()
+    .regex(/^[A-Z]{1,2}\d{1,3}$/)
+    .optional(),
+  quantity: z.number().int().positive().max(MAX_TABLES_PER_ORDER).optional(),
   dates: z.array(IsoDate).min(1),
   note: z.string().max(500).optional(),
 });

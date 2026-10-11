@@ -11,6 +11,7 @@ import {
   VendorStanding,
   type FloorPlan,
   type FloorTable,
+  type QuoteInput,
   type Vendor,
 } from '@fgg/types';
 import { fixtureEvents } from './home';
@@ -103,14 +104,38 @@ export const floorPlanResponseFixture = EventFloorPlan.parse({
   },
 });
 
-export interface CartLineFixture {
-  tableId: string;
-  dates: string[];
-}
+/** Winter Fest books by number of tables: 12 left on Saturday, 3 on Sunday. */
+export const countEventFixture = fixtureEvents.find((e) => e.tableBooking === 'quantity')!;
+export const countResponseFixture = EventFloorPlan.parse({
+  event: countEventFixture,
+  venue: { ...venue, ...countEventFixture.venue, address: '797 E Patrick St' },
+  availability: {
+    eventId: countEventFixture.id,
+    vendorStatus: 'open',
+    tablesLeft: 12,
+    days: countEventFixture.days.map((d, i) => ({
+      date: d.date,
+      unavailable: [],
+      left: i === 0 ? 12 : 3,
+    })),
+  },
+});
+
+export type CartLineFixture = QuoteInput['lines'][number];
 
 export function quoteFixture(lines: CartLineFixture[], rate: 'standard' | 'poke_bucks'): Quote {
   const unit = rate === 'poke_bucks' ? 10000 : 20000;
-  const priced = lines.map(({ tableId, dates }) => {
+  const priced = lines.map((l) => {
+    if ('quantity' in l) {
+      return {
+        quantity: l.quantity,
+        dates: [...l.dates].sort(),
+        unitCents: unit,
+        lineCents: unit * l.quantity * l.dates.length,
+        pricingInputs: {},
+      };
+    }
+    const { tableId, dates } = l;
     const row = tableId[0]!;
     const n = Number(tableId.slice(1));
     return {
@@ -139,16 +164,17 @@ export function holdFixture(
   rate: 'standard' | 'poke_bucks',
 ): HoldResponse {
   const quote = quoteFixture(lines, rate);
+  const event = lines.some((l) => 'quantity' in l) ? countEventFixture : halloween;
   const now = Date.now();
   return HoldResponse.parse({
     hold: {
       id: fid('01JHLD', 1),
-      eventId: halloween.id,
+      eventId: event.id,
       vendorId: fid('01JVND', 1),
       heldBy: '2f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d',
       rate,
       tables: quote.lines.map((l) => ({
-        tableId: l.tableId,
+        ...('quantity' in l ? { quantity: l.quantity } : { tableId: l.tableId }),
         dates: l.dates,
         unitCents: l.unitCents,
         amountCents: l.lineCents,
@@ -159,7 +185,7 @@ export function holdFixture(
       createdAt: new Date(now).toISOString(),
     },
     quote,
-    event: halloween,
+    event,
     prefill: {
       tableName: vendorFixture.businessName,
       phone: vendorFixture.phone,

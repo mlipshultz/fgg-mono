@@ -89,17 +89,68 @@ export function daysShort(eventDays: IsoDate[], dates: IsoDate[]): string {
 export function tableLinesOf(order: Pick<Order, 'lines'>) {
   return order.lines.flatMap((l) => (l.type === 'table' ? [l] : []));
 }
-/** "B7" or "B7, B8" */
+/** Tables with no spots yet on each booked day of a `quantity` order, in day order. */
+export function unassignedByDay(order: Pick<Order, 'lines'>): [date: IsoDate, quantity: number][] {
+  const byDay = new Map<IsoDate, number>();
+  for (const l of order.lines) {
+    if (l.type !== 'unassigned_tables') continue;
+    for (const d of l.dates) byDay.set(d, (byDay.get(d) ?? 0) + l.quantity);
+  }
+  return [...byDay.entries()].sort(([x], [y]) => x.localeCompare(y));
+}
+/** Tables booked by number on a `quantity` event (the most on any one day); FGG assigns them. */
+export function unassignedTables(order: Pick<Order, 'lines'>): number {
+  return Math.max(0, ...unassignedByDay(order).map(([, n]) => n));
+}
+/** How many tables an order books, whichever way the event books. */
+export function tableCount(order: Pick<Order, 'lines'>): number {
+  return tableLinesOf(order).length + unassignedTables(order);
+}
+/** Every line that books tables, for the days and the rate. */
+function bookedLinesOf(order: Pick<Order, 'lines'>) {
+  return order.lines.flatMap((l) => (l.type === 'ticket' ? [] : [l]));
+}
+export function orderRate(order: Pick<Order, 'lines'>) {
+  return bookedLinesOf(order)[0]?.rate;
+}
+/** "1 table" / "3 tables" */
+export function tableCountLabel(n: number): string {
+  return `${n} ${n === 1 ? 'table' : 'tables'}`;
+}
+/**
+ * "B7" or "B7, B8". Tables with no spots yet read "2 tables", or day by day when the number
+ * differs: "2 tables Sat, 1 table Sun".
+ */
 export function tablesLabel(order: Pick<Order, 'lines'>): string {
-  return tableLinesOf(order)
-    .map((l) => l.tableId)
-    .join(', ');
+  const byDay = unassignedByDay(order);
+  const same = byDay.every(([, n]) => n === byDay[0]![1]);
+  const unassigned = !byDay.length
+    ? []
+    : same
+      ? [tableCountLabel(byDay[0]![1])]
+      : byDay.map(([d, n]) => `${tableCountLabel(n)} ${dayOfWeek(d)}`);
+  return [...tableLinesOf(order).map((l) => l.tableId), ...unassigned].join(', ');
+}
+/** "Table B7" / "Tables B7, B8" / "2 tables" */
+export function tablesPhrase(order: Pick<Order, 'lines'>): string {
+  const label = tablesLabel(order);
+  if (unassignedTables(order) || !label) return label;
+  return `${tableLinesOf(order).length === 1 ? 'Table' : 'Tables'} ${label}`;
 }
 /**
  * Tables with their days, only spelling days out per table when they differ:
  * "B2, C4 · Sat + Sun" when every table has the same days, else "B2 · Sat, C4 · Sat + Sun".
+ * Tables with no spots yet read "2 tables · Sat + Sun", or "2 tables Sat, 1 table Sun".
  */
 export function tableDaysSummary(order: Pick<Order, 'lines'>, eventDays?: IsoDate[]): string {
+  const byDay = unassignedByDay(order);
+  if (byDay.length) {
+    // A different number each day already names the days: "2 tables Sat, 1 table Sun".
+    if (byDay.some(([, n]) => n !== byDay[0]![1])) return tablesLabel(order);
+    const dates = byDay.map(([d]) => d);
+    const days = eventDays ? daysShort(eventDays, dates) : dates.map(dayOfWeek).join(' + ');
+    return `${tablesLabel(order)} · ${days}`;
+  }
   const lines = tableLinesOf(order);
   if (!lines.length) return '—';
   const key = (d: IsoDate[]) => [...d].sort().join();
@@ -117,12 +168,15 @@ export function tableDaysSummary(order: Pick<Order, 'lines'>, eventDays?: IsoDat
 
 /** Total table-days on an order (a table booked for two days counts twice). */
 export function tableDaysCount(order: Pick<Order, 'lines'>): number {
-  return tableLinesOf(order).reduce((n, l) => n + l.dates.length, 0);
+  return bookedLinesOf(order).reduce(
+    (n, l) => n + l.dates.length * (l.type === 'unassigned_tables' ? l.quantity : 1),
+    0,
+  );
 }
 
 /** Union of booked days, sorted. */
 export function orderDates(order: Pick<Order, 'lines'>): IsoDate[] {
-  return [...new Set(tableLinesOf(order).flatMap((l) => l.dates))].sort();
+  return [...new Set(bookedLinesOf(order).flatMap((l) => l.dates))].sort();
 }
 
 export function tableById(plan: FloorPlan, id: string): FloorTable | undefined {

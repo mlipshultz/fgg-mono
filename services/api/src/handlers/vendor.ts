@@ -23,13 +23,16 @@ import {
 } from '@fgg/types';
 import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
 import {
+  closeOrder,
   createHold,
   heldTables,
+  isExpired,
   history,
   loadHold,
   quoteFromHold,
   releaseHold,
   shortDate,
+  tableCountLabel,
   toTableHold,
   toVendorOrder,
   updateHoldItems,
@@ -39,6 +42,7 @@ import {
   getEvent,
   getEventBySlug,
   getFloorPlan,
+  getHoldItems,
   getOrder,
   getSettings,
   getUser,
@@ -64,7 +68,8 @@ const STAGE = process.env.STAGE ?? 'dev';
 interface Ctx {
   event: Event;
   venue: Venue;
-  floorPlan: FloorPlan;
+  /** Missing only on `quantity` events, which don't need one. */
+  floorPlan: FloorPlan | undefined;
   priceWindows: PriceWindow[];
   settings: Settings;
 }
@@ -92,7 +97,8 @@ async function eventCtx(idOrSlug: string, requireOpen = true): Promise<Ctx> {
     getSettings(),
   ]);
   if (!venue) throw new HttpError(500, 'venue_missing', 'Venue missing');
-  if (!floorPlan) throw new HttpError(409, 'no_floor_plan', 'This venue has no floor plan yet');
+  if (!floorPlan && ev.tableBooking !== 'quantity')
+    throw new HttpError(409, 'no_floor_plan', 'This venue has no floor plan yet');
   return { event: ev, venue, floorPlan, priceWindows, settings };
 }
 
@@ -111,10 +117,11 @@ function prefillFrom(v: Vendor): NonNullable<HoldResponse['prefill']> {
 
 async function holdResponse(items: HoldItem[], ctx: Ctx, vendor: Vendor): Promise<HoldResponse> {
   const describe = (tableId: string) => {
-    const table = ctx.floorPlan.tables.find((t) => t.id === tableId);
+    const plan = ctx.floorPlan;
+    const table = plan?.tables.find((t) => t.id === tableId);
     return {
       rowLabel: table ? `Row ${table.row} · Main Hall` : tableId,
-      nearby: table ? nearbyText(table, ctx.floorPlan) : '',
+      nearby: table && plan ? nearbyText(table, plan) : '',
     };
   };
   const [event] = await toPublicEvents([ctx.event]);
@@ -147,6 +154,52 @@ async function vendorOrderView(order: Order): Promise<VendorOrder> {
   if (!ev || !venue) throw new HttpError(500, 'event_missing', 'Event missing for order');
   return toVendorOrder(order, ev, venue);
 }
+
+/**
+ * Cancel checkouts the vendor walked away from, so they don't pile up as "awaiting payment":
+ * unpaid orders whose hold has gone or expired, plus (when starting a new hold) every unpaid
+ * order on that event, which the new hold replaces. The Shopify draft is deleted so its
+ * invoice link stops working; a payment that still gets through is refunded by the webhook.
+ */
+async function cancelAbandonedCheckouts(
+  vendor: Vendor,
+  replacingEventId?: string,
+): Promise<Order[]> {
+  const orders = await listOrdersForOwner(vendor.id);
+  const kept: Order[] = [];
+  for (const order of orders) {
+    const unpaid = order.status === 'pending_payment' && order.source === 'shopify';
+    const live =
+      unpaid &&
+      order.eventId !== replacingEventId &&
+      !!order.holdId &&
+      (await getHoldItems(vendor.id, order.holdId)).some((h) => !isExpired(h));
+    if (!unpaid || live) {
+      kept.push(order);
+      continue;
+    }
+    const ev = await getEvent(order.eventId);
+    if (!ev) {
+      kept.push(order);
+      continue;
+    }
+    if (order.shopifyDraftOrderId) {
+      try {
+        await shopify().deleteDraftOrder(order.shopifyDraftOrderId);
+      } catch (e) {
+        console.warn(`could not delete draft order for abandoned checkout ${order.id}`, e);
+      }
+    }
+    kept.push(
+      await closeOrder(order, ev, ev.startsAt, 'cancelled', 'system', 'checkout abandoned'),
+    );
+  }
+  return kept;
+}
+
+/** Orders that were paid for at some point (comps included): what a vendor's history shows. */
+const wasBooked = (o: Order) =>
+  o.status !== 'pending_payment' && (o.status !== 'cancelled' || !!o.paidAt);
 
 const router = new Router()
   // Profile: what the vendor's members can edit about the business, plus the brand logo.
@@ -196,6 +249,7 @@ const router = new Router()
     const ctx = await eventCtx(id!);
     const input = parseBody(req, QuoteInput);
     const quote = resolveQuote({ ...ctx, ...input });
+    await cancelAbandonedCheckouts(vendor, ctx.event.id);
     const items = await createHold({
       event: ctx.event,
       vendorId: vendor.id,
@@ -232,6 +286,7 @@ const router = new Router()
     } catch (e) {
       if (!(e instanceof HttpError && (e.status === 404 || e.status === 410))) throw e;
     }
+    await cancelAbandonedCheckouts(vendor);
     return json(req, { ok: true });
   })
   .add('POST', '/vendor/holds/{id}/checkout', async (req, { id }) => {
@@ -273,8 +328,9 @@ const router = new Router()
       placedBy: actor.sub,
       status: 'pending_payment',
       lines: tables.map((t) => ({
-        type: 'table' as const,
-        tableId: t.tableId,
+        ...('quantity' in t
+          ? { type: 'unassigned_tables' as const, quantity: t.quantity }
+          : { type: 'table' as const, tableId: t.tableId }),
         dates: t.dates,
         rate: h.rate,
         unitCents: t.unitCents,
@@ -292,7 +348,7 @@ const router = new Router()
     const draft = await shopify().createDraftOrder({
       lineItems: [
         ...tables.map((t) => ({
-          title: `${ctx.event.name} · Table ${t.tableId} · ${t.dates.map(shortDate).join(' + ')}`,
+          title: `${ctx.event.name} · ${'quantity' in t ? tableCountLabel(t.quantity) : `Table ${t.tableId}`} · ${t.dates.map(shortDate).join(' + ')}`,
           cents: t.amountCents,
         })),
         ...(h.feeCents > 0 ? [{ title: 'Processing fee', cents: h.feeCents }] : []),
@@ -303,7 +359,7 @@ const router = new Router()
         orderId: order.id,
         holdId: h.holdId,
         eventId: ctx.event.id,
-        tableId: tables.map((t) => t.tableId).join(','),
+        tableId: tables.map((t) => ('quantity' in t ? `x${t.quantity}` : t.tableId)).join(','),
       },
       tags: ['fgg', 'vendor-table', STAGE],
       note: `${vendorInfo.tableName} · ${h.rate === 'poke_bucks' ? 'PokéBucks partner' : 'Standard'} rate`,
@@ -400,7 +456,7 @@ const router = new Router()
     const actor = claimsFrom(req);
     const vendor = await vendorFor(actor);
     const [orders, settings, published] = await Promise.all([
-      listOrdersForOwner(vendor.id),
+      cancelAbandonedCheckouts(vendor),
       getSettings(),
       listPublishedEvents(),
     ]);
@@ -422,7 +478,7 @@ const router = new Router()
     const body: VendorDashboard = {
       vendor: profileView(vendor),
       upcoming,
-      history: views,
+      history: views.filter(wasBooked),
       paidThisYearCents: views
         .filter((o) => o.status === 'paid' && (o.paidAt ?? '').startsWith(year))
         .reduce((n, o) => n + o.totalCents, 0),

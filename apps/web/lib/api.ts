@@ -43,6 +43,8 @@ import {
   adminOrdersFixture,
   applicationsFixture,
   eventVendorsFixture,
+  countEventFixture,
+  countResponseFixture,
   floorPlanResponseFixture,
   holdFixture,
   paidOrderFixture,
@@ -245,7 +247,10 @@ export async function adminSetRoles(sub: string, roles: Role[]): Promise<AdminUs
 
 /** Public: floor plan + live availability for the picker. */
 export async function getEventFloorPlan(idOrSlug: string): Promise<EventFloorPlan> {
-  if (!hasApi) return fake(localize(floorPlanResponseFixture), 300);
+  if (!hasApi) {
+    const byCount = [countEventFixture.slug, countEventFixture.id].includes(idOrSlug);
+    return fake(localize(byCount ? countResponseFixture : floorPlanResponseFixture), 300);
+  }
   return EventFloorPlan.parse(
     await request<unknown>(`/public/events/${encodeURIComponent(idOrSlug)}/floorplan`),
   );
@@ -567,8 +572,9 @@ export async function adminComp(input: CompOrderInput): Promise<VendorOrder> {
         subtotalCents: 0,
         lines: [
           {
-            type: 'table' as const,
-            tableId: input.tableId,
+            ...(input.tableId
+              ? { type: 'table' as const, tableId: input.tableId }
+              : { type: 'unassigned_tables' as const, quantity: input.quantity ?? 1 }),
             dates: input.dates,
             rate: 'standard' as const,
             unitCents: 0,

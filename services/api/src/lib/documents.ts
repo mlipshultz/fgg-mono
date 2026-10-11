@@ -1,6 +1,13 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { Event, Order, Venue } from '@fgg/types';
-import { orderDates, shortDate, tableLines, tablesLabel } from './booking.js';
+import {
+  orderDates,
+  shortDate,
+  tableCountLabel,
+  tableLines,
+  tablesLabel,
+  unassignedLines,
+} from './booking.js';
 
 /** Naive local → floating time: the venue's own zone is implied by the location. */
 function icsDateTime(date: string, hhmm: string): string {
@@ -16,6 +23,15 @@ export function vendorPassIcs(order: Order, ev: Event, venue: Venue, now = new D
   const lines = tableLines(order);
   const tablesOn = (date: string) =>
     lines.filter((l) => l.dates.includes(date)).map((l) => l.tableId);
+  /** Tables with no spot yet (`quantity` events) on a day. */
+  const unassignedOn = (date: string) =>
+    unassignedLines(order)
+      .filter((l) => l.dates.includes(date))
+      .reduce((n, l) => n + l.quantity, 0);
+  const summary = (date: string) =>
+    unassignedOn(date)
+      ? `${ev.name} · Vendor · ${tableCountLabel(unassignedOn(date))}`
+      : `${ev.name} · Vendor ${tablesOn(date).length > 1 ? 'tables' : 'table'} ${tablesOn(date).join(', ')}`;
   const dates = orderDates(order);
   const stamp = now
     .toISOString()
@@ -31,7 +47,7 @@ export function vendorPassIcs(order: Order, ev: Event, venue: Venue, now = new D
       `DTSTAMP:${stamp}`,
       `DTSTART;TZID=${ev.timeZone}:${icsDateTime(date, start)}`,
       `DTEND;TZID=${ev.timeZone}:${icsDateTime(date, end)}`,
-      `SUMMARY:${icsEscape(`${ev.name} · Vendor ${tablesOn(date).length > 1 ? 'tables' : 'table'} ${tablesOn(date).join(', ')}`)}`,
+      `SUMMARY:${icsEscape(summary(date))}`,
       `LOCATION:${icsEscape(`${venue.name}, ${venue.address}, ${venue.city}, ${venue.state}`)}`,
       `DESCRIPTION:${icsEscape(`Vendor pass ${order.passNumber ?? ''}. Load-in ${start}. Doors ${day?.opens ?? ''}.`)}`,
       'END:VEVENT',
@@ -59,7 +75,8 @@ export async function receiptPdf(order: Order, ev: Event, venue: Venue): Promise
   const page = doc.addPage([612, 792]);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const reg = await doc.embedFont(StandardFonts.Helvetica);
-  const line = order.lines.find((l) => l.type === 'table');
+  const line = order.lines.find((l) => l.type !== 'ticket');
+  const unassigned = unassignedLines(order).length > 0;
   const dates = orderDates(order);
   const tables = tablesLabel(order);
 
@@ -92,17 +109,13 @@ export async function receiptPdf(order: Order, ev: Event, venue: Venue): Promise
           `${l.tableId} · ${[...l.dates].sort().map(shortDate).join(', ')}`,
         ])
       : [
-          ['Table', tables ? `${tables} · Main Hall` : '—'] as [string, string],
+          [
+            unassigned && tables !== '1 table' ? 'Tables' : 'Table',
+            unassigned ? `${tables} (assigned by FGG)` : tables ? `${tables} · Main Hall` : '—',
+          ] as [string, string],
           ['Days', dates.map(shortDate).join(', ')] as [string, string],
         ]),
-    [
-      'Rate',
-      line && line.type === 'table'
-        ? line.rate === 'poke_bucks'
-          ? 'PokéBucks partner'
-          : 'Standard'
-        : '—',
-    ],
+    ['Rate', line ? (line.rate === 'poke_bucks' ? 'PokéBucks partner' : 'Standard') : '—'],
     ['Subtotal', `$${(order.subtotalCents / 100).toFixed(2)}`],
     ['Fee', `$${(order.feeCents / 100).toFixed(2)}`],
     ['Tax', `$${(order.taxCents / 100).toFixed(2)}`],

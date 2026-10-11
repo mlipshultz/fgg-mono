@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   MAX_TABLES_PER_ORDER,
   type EventFloorPlan,
+  type FloorPlan,
   type HoldResponse,
   type IsoDate,
   type Quote,
@@ -28,35 +29,113 @@ import {
   releaseHold,
   updateHold,
 } from '@/lib/api';
-import { countdown, fmtCents, openDaysByTable, tableById } from '@/lib/booking';
+import { fmtCents, openDaysByTable, tableById } from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import { type CartLine, CartBody } from './Cart';
+import { CountFlow } from './CountFlow';
+import { HOLD_KEY, useCountdown, useReturnFromCheckout } from './hold';
 import { type Info, Payment } from './Payment';
 import { Picker } from './Picker';
 import { TableConfirm } from './TableConfirm';
 import styles from './book.module.css';
 
 type Step = 1 | 2;
-const HOLD_KEY = 'fgg.hold';
-
-function useCountdown(expiresAt: string | undefined) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!expiresAt) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  return expiresAt ? countdown(expiresAt, now) : null;
-}
+/** An event that books on a floor plan, which is then always there. */
+type PlanData = EventFloorPlan & { floorPlan: FloorPlan };
+const withPlan = (d: EventFloorPlan): PlanData | null =>
+  d.floorPlan ? { ...d, floorPlan: d.floorPlan } : null;
+/** The specific tables on a hold or quote (events that book by number have none). */
+const spots = <T extends object>(lines: T[]) =>
+  lines.flatMap((l) => ('tableId' in l ? [l as Extract<T, { tableId: string }>] : []));
 
 const byTable = (a: CartLine, b: CartLine) =>
   a.tableId.localeCompare(b.tableId, 'en', { numeric: true });
 
+/**
+ * Loads the event, then books it the way the event is set up: tables picked on the floor plan,
+ * or a number of tables when the venue's layout isn't known yet.
+ */
 export function BookFlow() {
-  const { user } = useAuth();
   const router = useRouter();
   const [slug, setSlug] = useState<string | null>(null);
   const [data, setData] = useState<EventFloorPlan | null>(null);
+  /** PokéBucks partners default to their rate; the switch can still flip it. */
+  const [rate, setRate] = useState<TableRate>('standard');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get('event');
+    setSlug(s);
+    if (!s) {
+      // No show chosen: the dashboard's quick-register list is the place to pick one.
+      router.replace('/vendor');
+      return;
+    }
+    let alive = true;
+    // The vendor's rate loads with the event, so the PokéBucks switch and prices start out right
+    // instead of flipping a moment after the page appears.
+    const partner = getVendorProfile()
+      .then((p) => p.pokeBucksPartner)
+      .catch(() => false);
+    Promise.all([getEventFloorPlan(s), partner])
+      .then(([d, isPartner]) => {
+        if (!alive) return;
+        setRate(isPartner ? 'poke_bucks' : 'standard');
+        setData(d);
+      })
+      .catch(
+        (e: unknown) =>
+          alive && setError(e instanceof Error ? e.message : 'Could not load the floor plan'),
+      );
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const byCount = data?.event.tableBooking === 'quantity';
+  const plan = data && !byCount ? withPlan(data) : null;
+  if (error || (data && !byCount && !plan)) {
+    return (
+      <main className={styles.page}>
+        <div className={`${a.card} ${a.cardPink} ${styles.expired}`}>
+          <span className={styles.eyebrow}>Hmm</span>
+          <h1 className={styles.stepTitle}>We couldn&apos;t open the floor plan</h1>
+          <p className={a.lead}>{error ?? 'This venue has no floor plan yet.'}</p>
+          <div>
+            <Button href="/#events" variant="yellow" size="md">
+              Back to events
+            </Button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+  if (!data || !slug) {
+    return (
+      <div className={a.skeleton} aria-busy="true" aria-label="Loading the floor plan">
+        <span />
+        <span />
+      </div>
+    );
+  }
+  return plan ? (
+    <MapFlow slug={slug} initial={plan} initialRate={rate} />
+  ) : (
+    <CountFlow slug={slug} initial={data} initialRate={rate} />
+  );
+}
+
+function MapFlow({
+  slug,
+  initial,
+  initialRate,
+}: {
+  slug: string;
+  initial: PlanData;
+  initialRate: TableRate;
+}) {
+  const { user } = useAuth();
+  const [data, setData] = useState<PlanData>(initial);
   const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   /** Days the map shows (filters cells and seeds the table confirm); never empty. */
@@ -64,7 +143,7 @@ export function BookFlow() {
   /** Table whose days are being chosen in the confirm card. */
   const [pending, setPending] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [rate, setRate] = useState<TableRate>('standard');
+  const [rate, setRate] = useState<TableRate>(initialRate);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [hold, setHold] = useState<HoldResponse | null>(null);
   /** Tables this vendor already paid for at this event → booked days. */
@@ -84,65 +163,45 @@ export function BookFlow() {
     }
   }, [hold]);
 
-  // Load the event + floor plan, resume a hold from sessionStorage.
+  // Mark what's already this vendor's and resume a hold from sessionStorage.
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    const s = q.get('event');
-    setSlug(s);
-    if (!s) {
-      // No show chosen: the dashboard's quick-register list is the place to pick one.
-      router.replace('/vendor');
-      return;
-    }
     let alive = true;
-    getEventFloorPlan(s)
-      .then(async (d) => {
+    const d = initial;
+    // Mark what this vendor already owns here (best effort; the map works without it).
+    listVendorOrders()
+      .then((r) => {
         if (!alive) return;
-        setData(d);
-        // PokéBucks partners default to their rate; the switch can still flip it.
-        getVendorProfile()
-          .then((p) => {
-            if (alive && p.pokeBucksPartner) setRate((r) => (holdRef.current ? r : 'poke_bucks'));
-          })
-          .catch(() => {});
-        // Mark what this vendor already owns here (best effort; the map works without it).
-        listVendorOrders()
-          .then((r) => {
-            if (!alive) return;
-            const m = new Map<string, IsoDate[]>();
-            for (const o of r.orders) {
-              if (o.eventId !== d.event.id || o.status !== 'paid') continue;
-              for (const l of o.lines) {
-                if (l.type !== 'table') continue;
-                m.set(l.tableId, [...new Set([...(m.get(l.tableId) ?? []), ...l.dates])].sort());
-              }
-            }
-            setMine(m);
-          })
-          .catch(() => {});
-        try {
-          const saved = sessionStorage.getItem(HOLD_KEY);
-          if (saved) {
-            const { holdId, eventId } = JSON.parse(saved) as { holdId: string; eventId: string };
-            if (eventId === d.event.id) {
-              const h = await getHold(holdId);
-              if (!alive) return;
-              if (new Date(h.hold.expiresAt).getTime() > Date.now()) {
-                setHold(h);
-                setCart(h.hold.tables.map((t) => ({ tableId: t.tableId, dates: t.dates })));
-                setRate(h.hold.rate);
-                setStep(2);
-              } else sessionStorage.removeItem(HOLD_KEY);
-            }
+        const m = new Map<string, IsoDate[]>();
+        for (const o of r.orders) {
+          if (o.eventId !== d.event.id || o.status !== 'paid') continue;
+          for (const l of o.lines) {
+            if (l.type !== 'table') continue;
+            m.set(l.tableId, [...new Set([...(m.get(l.tableId) ?? []), ...l.dates])].sort());
           }
-        } catch {
-          sessionStorage.removeItem(HOLD_KEY);
         }
+        setMine(m);
       })
-      .catch(
-        (e: unknown) =>
-          alive && setError(e instanceof Error ? e.message : 'Could not load the floor plan'),
-      );
+      .catch(() => {});
+    void (async () => {
+      try {
+        const saved = sessionStorage.getItem(HOLD_KEY);
+        if (saved) {
+          const { holdId, eventId } = JSON.parse(saved) as { holdId: string; eventId: string };
+          if (eventId === d.event.id) {
+            const h = await getHold(holdId);
+            if (!alive) return;
+            if (new Date(h.hold.expiresAt).getTime() > Date.now()) {
+              setHold(h);
+              setCart(spots(h.hold.tables).map((t) => ({ tableId: t.tableId, dates: t.dates })));
+              setRate(h.hold.rate);
+              setStep(2);
+            } else sessionStorage.removeItem(HOLD_KEY);
+          }
+        }
+      } catch {
+        sessionStorage.removeItem(HOLD_KEY);
+      }
+    })();
     return () => {
       alive = false;
     };
@@ -150,16 +209,16 @@ export function BookFlow() {
 
   // Poll availability every 20s while picking.
   useEffect(() => {
-    if (!slug || step !== 1) return;
+    if (step !== 1) return;
     const id = setInterval(() => {
       getEventFloorPlan(slug)
-        .then((d) => setData((cur) => (cur ? { ...cur, availability: d.availability } : d)))
+        .then((d) => setData((cur) => ({ ...cur, availability: d.availability })))
         .catch(() => {});
     }, 20_000);
     return () => clearInterval(id);
   }, [slug, step]);
 
-  const eventDays = useMemo(() => (data ? data.event.days.map((d) => d.date) : []), [data]);
+  const eventDays = useMemo(() => data.event.days.map((d) => d.date), [data]);
   // Seed the Available checkboxes once per event. Keyed on the dates themselves: the 20s
   // availability poll replaces `data`, which must not reset what the vendor unchecked.
   const dayKey = eventDays.join(',');
@@ -167,10 +226,9 @@ export function BookFlow() {
     setShownDays(new Set(dayKey ? (dayKey.split(',') as IsoDate[]) : []));
   }, [dayKey]);
   const openDays = useMemo(() => {
-    if (!data) return new Map<string, Set<IsoDate>>();
     const m = openDaysByTable(data.floorPlan, data.availability);
     // Our own hold shows as taken in availability; hand those days back so they stay editable.
-    for (const t of hold?.hold.tables ?? []) {
+    for (const t of spots(hold?.hold.tables ?? [])) {
       const set = m.get(t.tableId) ?? new Set<IsoDate>();
       for (const d of t.dates) set.add(d);
       m.set(t.tableId, set);
@@ -184,11 +242,11 @@ export function BookFlow() {
       .map((l) => `${l.tableId}:${[...l.dates].sort().join('+')}`)
       .sort()
       .join('|');
-  const holdMatches = !!hold && hold.hold.rate === rate && key(hold.hold.tables) === key(cart);
+  const holdMatches =
+    !!hold && hold.hold.rate === rate && key(spots(hold.hold.tables)) === key(cart);
 
   // If availability moves under the cart, drop the days (or tables) that went away.
   useEffect(() => {
-    if (!data) return;
     setCart((cur) => {
       let changed = false;
       const next = cur.flatMap((l) => {
@@ -204,7 +262,7 @@ export function BookFlow() {
 
   // Server quote for exact prices (overrides / windows); a local estimate fills in meanwhile.
   useEffect(() => {
-    if (!data || holdMatches || cart.length === 0) {
+    if (holdMatches || cart.length === 0) {
       setQuote(null);
       return;
     }
@@ -219,27 +277,24 @@ export function BookFlow() {
     return () => clearTimeout(t);
   }, [data, cart, rate, holdMatches]);
 
-  const unit = data
-    ? rate === 'poke_bucks'
-      ? data.event.pokeBucksRateCents
-      : data.event.tableRateCents
-    : 0;
+  const unit = rate === 'poke_bucks' ? data.event.pokeBucksRateCents : data.event.tableRateCents;
   const served = holdMatches ? hold.quote : quote;
+  const servedLines = spots(served?.lines ?? []);
   const priced =
     served &&
     served.rate === rate &&
-    served.lines.length === cart.length &&
+    servedLines.length === cart.length &&
     cart.every((l) =>
-      served.lines.some(
+      servedLines.some(
         (x) => x.tableId === l.tableId && x.dates.join() === [...l.dates].sort().join(),
       ),
     )
       ? served
       : null;
-  const lineCents = (l: CartLine) =>
-    priced?.lines.find((x) => x.tableId === l.tableId)?.lineCents ?? unit * l.dates.length;
-  const lineUnit = (l: CartLine) =>
-    priced?.lines.find((x) => x.tableId === l.tableId)?.unitCents ?? unit;
+  const pricedLine = (l: CartLine) =>
+    priced ? servedLines.find((x) => x.tableId === l.tableId) : undefined;
+  const lineCents = (l: CartLine) => pricedLine(l)?.lineCents ?? unit * l.dates.length;
+  const lineUnit = (l: CartLine) => pricedLine(l)?.unitCents ?? unit;
   const subtotal = priced?.subtotalCents ?? cart.reduce((n, l) => n + lineCents(l), 0);
   const total = priced?.totalCents ?? subtotal;
 
@@ -254,7 +309,7 @@ export function BookFlow() {
   }, [cd?.expired, hold, step]);
 
   const availOn = (d: IsoDate) =>
-    data ? data.floorPlan.tables.filter((t) => openDays.get(t.id)?.has(d)).length : 0;
+    data.floorPlan.tables.filter((t) => openDays.get(t.id)?.has(d)).length;
   const toggleShownDay = (d: IsoDate) =>
     setShownDays((cur) => {
       const next = new Set(cur);
@@ -308,8 +363,14 @@ export function BookFlow() {
       }),
     );
 
+  const refresh = () => {
+    getEventFloorPlan(slug)
+      .then((d) => setData((cur) => withPlan(d) ?? cur))
+      .catch(() => {});
+  };
+
   const doHold = async () => {
-    if (!data || cart.length === 0) return;
+    if (cart.length === 0) return;
     setPending(null);
     if (holdMatches) {
       setStep(2);
@@ -334,10 +395,7 @@ export function BookFlow() {
     } catch (e) {
       if (e instanceof ApiError && e.code === 'table_unavailable') {
         setError(`${e.message}. The map is refreshed; check your cart and try again.`);
-        if (slug)
-          getEventFloorPlan(slug)
-            .then((d) => setData(d))
-            .catch(() => {});
+        refresh();
       } else setError(e instanceof Error ? e.message : 'Could not hold those tables');
     } finally {
       setBusy(false);
@@ -357,11 +415,10 @@ export function BookFlow() {
     setQuote(null);
     setExpired(false);
     setStep(1);
-    if (slug)
-      getEventFloorPlan(slug)
-        .then((d) => setData(d))
-        .catch(() => {});
+    refresh();
   };
+
+  useReturnFromCheckout(() => setBusy(false));
 
   /** Save the vendor info on the hold, then hand off to Shopify checkout. */
   const goCheckout = async (info: VendorInfoInput) => {
@@ -400,32 +457,6 @@ export function BookFlow() {
           </div>
         </div>
       </main>
-    );
-  }
-
-  if (error && !data) {
-    return (
-      <main className={styles.page}>
-        <div className={`${a.card} ${a.cardPink} ${styles.expired}`}>
-          <span className={styles.eyebrow}>Hmm</span>
-          <h1 className={styles.stepTitle}>We couldn&apos;t open the floor plan</h1>
-          <p className={a.lead}>{error}</p>
-          <div>
-            <Button href="/#events" variant="yellow" size="md">
-              Back to events
-            </Button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className={a.skeleton} aria-busy="true" aria-label="Loading the floor plan">
-        <span />
-        <span />
-      </div>
     );
   }
 
@@ -538,7 +569,7 @@ export function BookFlow() {
       <span className={styles.holdNote}>
         {holdMatches
           ? 'Still held for you. Change anything here and we hold it fresh when you continue.'
-          : 'Your tables are held for 10 minutes once you continue.'}
+          : 'Your tables are held for 10 minutes once you continue, and 10 more when you open checkout.'}
       </span>
     </>
   );

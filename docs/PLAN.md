@@ -167,6 +167,22 @@ without Sunday. DynamoDB TTL is best-effort (can lag), so reads also treat a hol
 `expiresAt < now` as free. Ticket caps use the same pattern with a conditional `ADD` on the
 `COUNTER` item (`sold < capacity`).
 
+**Events without a floor plan (added 2026-10-11).** `Event.tableBooking` is `floor_plan`
+(default, absent on older events) or `quantity`, for new venues whose table layout isn't known
+yet. A `quantity` event sets `tableCapacity` (tables for sale per day) and ignores any venue floor
+plan. Vendors book a number of tables per day (the booking page has one row per day with its own
+quantity, up to 10 a day; each day is its own cart, order and Shopify line), at the event rate or
+active price window; there are no per-table overrides. Nothing has a table ID: the hold is one
+`HOLD#date#QTY#holdId` item per day carrying `quantity`, the booking is one
+`TABLE#date#QTY#orderId` item per day, and the order lines are `type: unassigned_tables`. The
+mode is per event rather than "venue has no floor plan" so that adding a plan later never flips
+orders already taken. Capacity is race-safe by optimistic lock: read the `EVENT#id` / `CAPACITY`
+version, then holds and booked rows (strongly consistent), check `used + wanted <= capacity`, and
+write with a condition that the version is unchanged, bumping it; retry on conflict. Expired holds
+stop counting at read time, the same as floor-plan holds. A payment that lands after its hold
+expired re-checks capacity and becomes a `conflict` refund if the day has since filled. Assigning
+real spots to these orders once the layout is known is not built (Phase 4, Orders).
+
 **Orders generalized.** `ORDER` has `kind: vendor_table | ticket`, `source: shopify | manual`,
 `amount`, `status: pending_payment | paid | refunded | cancelled | conflict`, and a `lines[]`
 array. Free tickets are `source: manual, amount: 0` orders that skip Shopify and go straight to
@@ -180,14 +196,16 @@ and XP audit rows under `EVENT#` are anonymized (owner replaced with `DELETED`),
 
 ### 3.5 Booking flow end to end
 
-1. `GET /events/{id}/availability` returns, per day, the set of taken and held table IDs.
+1. `GET /events/{id}/availability` returns, per day, the set of taken and held table IDs (on
+   `quantity` events: the number of tables left per day, and the booking page shows a count and
+   day picker instead of the map; the rest of the flow is the same).
 2. Vendor taps a table and confirms its days (up to 10 tables per order). Continue → `POST
 /events/{id}/holds` runs the transaction above and returns a `holdId` with a 10-minute
    `expiresAt`. Going back keeps the map editable: Continue reuses a hold the cart still
    matches, otherwise releases it and holds afresh.
 3. The Pay step saves the vendor info (prefilled from the profile, editable in place) to the hold right before checkout. Rate choice (standard / PokéBucks) is stored on the hold.
 4. `POST /holds/{id}/checkout`:
-   - extends the hold to 30 minutes;
+   - restarts the hold at 10 minutes (`checkoutHoldMinutes`) for the time on Shopify;
    - creates a Shopify draft order: one custom line item titled
      `"{Event} · Table {id} · {days}"`, `price = days × rate`, `taxable: false`,
      `requires_shipping: false`, customer email, note attributes `orderId`, `holdId`, `eventId`;
@@ -356,8 +374,9 @@ cards link to the page from the poster and the name ("See event details →"). V
 `Vendor.sells` (`SellsCategory`, labels in `SELLS_LABEL`), picked on the vendor profile up to
 `MAX_VENDOR_TAGS`. Profile: the logo uploads and saves the moment it's picked (form and the
 dashboard's "Upload a logo" prompt); `lib/useUnsavedChanges.ts` warns before leaving a dirty form.
-Not built (fold into Phase 4): SES emails; PokéBucks toggle endpoint; cleanup of abandoned
-`pending_payment` orders; role grants from the console (refunds are superadmin-only today); a
+Not built (fold into Phase 4): SES emails; PokéBucks toggle endpoint; a sweep of abandoned
+`pending_payment` orders for vendors who never come back (a vendor's own are cancelled, and
+their Shopify drafts deleted, when they start a new hold or open their dashboard); role grants from the console (refunds are superadmin-only today); a
 cancel-request queue with Approve / Decline (vendor requests only flag the order); a separate
 card image per event (the home card and the event page share `posterKey`); a Calendly URL
 setting for the pending screen; the "FGG mobile app" note on the vendor dashboard is a Phase 5
@@ -386,9 +405,11 @@ Build order, smallest payoff first. Start with 1.
    `superadmin` from the console (today only the smoke account can refund).
 2. **Events and venues.** Create / edit / publish → site rebuild; poster upload plus an optional
    card image (landscape crop for the home card); price windows and premium tables; venue and
-   floor-plan editor.
+   floor-plan editor. The event editor sets the booking mode (`floor_plan` / `quantity`) and the
+   per-day table capacity; until then a `quantity` event can only be seeded.
 3. **Orders.** The list exists; add a cancel-request queue (Approve → refund, Decline), manual
-   and comp orders, and cleanup of abandoned `pending_payment` orders.
+   and comp orders, and cleanup of abandoned `pending_payment` orders. Assign spots to
+   `unassigned_tables` orders once a `quantity` event's layout is known.
 4. **Vendors.** List, member management, edit store text / tags / logo on a vendor's behalf; the
    applications queue already exists.
 5. **Gallery, partners, XP/badge config.** Gallery upload with the resize Lambda.
