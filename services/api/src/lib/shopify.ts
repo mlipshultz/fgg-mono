@@ -35,6 +35,8 @@ export type WebhookTopic = 'ORDERS_PAID' | 'REFUNDS_CREATE';
 
 export interface ShopifyClient {
   createDraftOrder(input: DraftOrderInput): Promise<DraftOrderResult>;
+  /** Kills the draft's invoice link, so an abandoned checkout can't be paid later. */
+  deleteDraftOrder(id: string): Promise<void>;
   getOrder(id: string): Promise<ShopifyOrderView | undefined>;
   refundOrder(orderId: string, amountCents: number, note: string): Promise<{ refundId: string }>;
   registerWebhooks(
@@ -120,6 +122,20 @@ export class GraphqlShopifyClient implements ShopifyClient {
       throw new Error(`draftOrderCreate: ${err ?? 'no draft'}`);
     const d = data.draftOrderCreate.draftOrder;
     return { id: gidToId(d.id), name: d.name, invoiceUrl: d.invoiceUrl };
+  }
+
+  async deleteDraftOrder(id: string): Promise<void> {
+    const data = await this.gql<{ draftOrderDelete: { userErrors: { message: string }[] } }>(
+      `mutation($input: DraftOrderDeleteInput!) {
+        draftOrderDelete(input: $input) {
+          deletedId
+          userErrors { field message }
+        }
+      }`,
+      { input: { id: idToGid('DraftOrder', id) } },
+    );
+    const err = userErrors(data.draftOrderDelete);
+    if (err) throw new Error(`draftOrderDelete: ${err}`);
   }
 
   async getOrder(id: string): Promise<ShopifyOrderView | undefined> {
@@ -245,6 +261,7 @@ export class FakeShopifyClient implements ShopifyClient {
   webhooks: { callbackUrl: string; topic: WebhookTopic }[] = [];
   orders = new Map<string, ShopifyOrderView>();
   failRefunds = false;
+  deletedDrafts: string[] = [];
 
   async createDraftOrder(input: DraftOrderInput): Promise<DraftOrderResult> {
     const n = this.drafts.length + 1;
@@ -255,6 +272,9 @@ export class FakeShopifyClient implements ShopifyClient {
     };
     this.drafts.push({ ...input, ...r });
     return r;
+  }
+  async deleteDraftOrder(id: string) {
+    this.deletedDrafts.push(id);
   }
   async getOrder(id: string) {
     return this.orders.get(id);

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  EventFloorPlan,
   EventVendorList,
   HoldResponse,
   CheckoutResponse,
@@ -11,7 +12,17 @@ import {
 } from '@fgg/types';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { FakeDdb } from './fake-ddb.js';
-import { EVENT_ID, event, floorPlan, parse, req as baseReq, venue } from './fixtures.js';
+import {
+  COUNT_EVENT_ID,
+  EVENT_ID,
+  countEvent,
+  countVenue,
+  event,
+  floorPlan,
+  parse,
+  req as baseReq,
+  venue,
+} from './fixtures.js';
 
 process.env.TABLE_NAME = 'fgg-test';
 process.env.MEDIA_BASE_URL = 'https://media.test';
@@ -140,7 +151,7 @@ describe('vendor booking flow', () => {
     );
     expect(held.status).toBe(201);
     const hr = HoldResponse.parse(held.body);
-    expect(hr.quote.lines[0]!.rowLabel).toBe('Row B · Main Hall');
+    expect(hr.quote.lines[0]).toMatchObject({ rowLabel: 'Row B · Main Hall' });
     expect(hr.hold.tables[0]!.dates).toHaveLength(2);
     // Nothing saved yet, so the info step is seeded from the vendor profile.
     expect(hr.vendorInfo).toBeUndefined();
@@ -169,7 +180,10 @@ describe('vendor booking flow', () => {
     });
     // Hold was extended for checkout.
     const holdItem = db.get(`EVENT#${EVENT_ID}`, 'HOLD#2026-10-24#B2')!;
-    expect(new Date(holdItem.expiresAt).getTime()).toBeGreaterThan(Date.now() + 20 * 60_000);
+    expect(new Date(holdItem.expiresAt).getTime()).toBeGreaterThan(
+      new Date(hr.hold.expiresAt).getTime() - 1,
+    );
+    expect(new Date(holdItem.expiresAt).getTime()).toBeLessThan(Date.now() + 11 * 60_000);
     // Second checkout reuses the same draft.
     const again = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
     expect(again.status).toBe(200);
@@ -253,7 +267,7 @@ describe('vendor booking flow', () => {
     );
     expect(held.status).toBe(201);
     const hr = HoldResponse.parse(held.body);
-    expect(hr.hold.tables.map((t) => t.tableId)).toEqual(['B1', 'B3']);
+    expect(hr.hold.tables.map((t) => 'tableId' in t && t.tableId)).toEqual(['B1', 'B3']);
     expect(hr.quote.totalCents).toBe(60000);
     await handler(authed('PATCH', `/vendor/holds/${hr.hold.id}`, { vendorInfo }));
     const co = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
@@ -286,6 +300,142 @@ describe('vendor booking flow', () => {
     const listed = EventVendorList.parse(who.body).vendors;
     expect(listed).toHaveLength(1); // one card per vendor, both tables on it
     expect(listed[0]!.tables.map((t) => t.tableId)).toEqual(['B1', 'B3']);
+  });
+
+  it('books a number of tables on an event with no floor plan', async () => {
+    db.put({ ...keys.eventIndex(countEvent), ...countEvent });
+    db.put({ ...keys.venue(countVenue.id), ...countVenue });
+    // One line per day, each with its own number of tables.
+    const cart = {
+      lines: [
+        { quantity: 3, dates: ['2026-10-24'] },
+        { quantity: 2, dates: ['2026-10-25'] },
+      ],
+      rate: 'standard',
+    };
+
+    // The booking page gets the event and live counts, and no floor plan.
+    const page = parse(
+      await publicHandler(baseReq('GET', `/public/events/${COUNT_EVENT_ID}/floorplan`)),
+    );
+    const plan = EventFloorPlan.parse(page.body);
+    expect(plan.floorPlan).toBeUndefined();
+    expect(plan.event.tableBooking).toBe('quantity');
+    expect(plan.availability.days.map((d) => d.left)).toEqual([4, 4]);
+
+    const bySpot = parse(
+      await handler(
+        authed('POST', `/vendor/events/${COUNT_EVENT_ID}/quote`, {
+          lines: [{ tableId: 'A1', dates: ['2026-10-24'] }],
+          rate: 'standard',
+        }),
+      ),
+    );
+    expect(bySpot.status).toBe(400);
+
+    const held = parse(
+      await handler(authed('POST', `/vendor/events/${COUNT_EVENT_ID}/holds`, cart)),
+    );
+    expect(held.status).toBe(201);
+    const hr = HoldResponse.parse(held.body);
+    expect(hr.hold.tables).toEqual([
+      expect.objectContaining({ quantity: 3, dates: ['2026-10-24'], amountCents: 60000 }),
+      expect.objectContaining({ quantity: 2, dates: ['2026-10-25'], amountCents: 40000 }),
+    ]);
+    expect(hr.quote.totalCents).toBe(100000);
+    const left = parse(
+      await publicHandler(baseReq('GET', `/public/events/${COUNT_EVENT_ID}/availability`)),
+    );
+    expect(left.body.days.map((d: any) => d.left)).toEqual([1, 2]);
+
+    await handler(authed('PATCH', `/vendor/holds/${hr.hold.id}`, { vendorInfo }));
+    const co = parse(await handler(authed('POST', `/vendor/holds/${hr.hold.id}/checkout`)));
+    expect(co.status).toBe(201);
+    expect(shop.drafts[0]!.lineItems).toEqual([
+      { title: 'Winter Fest · 3 tables · Sat Oct 24', cents: 60000 },
+      { title: 'Winter Fest · 2 tables · Sun Oct 25', cents: 40000 },
+    ]);
+    const paid = parse(
+      await webhookHandler(
+        webhook('orders/paid', {
+          id: 778,
+          note_attributes: [{ name: 'orderId', value: co.body.orderId }],
+        }),
+      ),
+    );
+    expect(paid.body.passNumber).toBe('WF26-001');
+    const vo = VendorOrder.parse(
+      parse(await handler(authed('GET', `/vendor/orders/${co.body.orderId}`))).body,
+    );
+    expect(vo.lines).toEqual([
+      expect.objectContaining({ type: 'unassigned_tables', quantity: 3, lineCents: 60000 }),
+      expect.objectContaining({ type: 'unassigned_tables', quantity: 2, lineCents: 40000 }),
+    ]);
+    expect(db.get(`EVENT#${COUNT_EVENT_ID}`, `TABLE#2026-10-25#QTY#${vo.id}`)?.quantity).toBe(2);
+
+    // Listed as vending, with no table numbers to show.
+    const who = EventVendorList.parse(
+      parse(await publicHandler(baseReq('GET', `/public/events/${COUNT_EVENT_ID}/vendors`))).body,
+    );
+    expect(who.vendors).toEqual([expect.objectContaining({ vendorId: VENDOR, tables: [] })]);
+  });
+
+  it('cancels abandoned checkouts instead of leaving them awaiting payment', async () => {
+    const startCheckout = async (tableId: string) => {
+      const held = parse(
+        await handler(
+          authed('POST', `/vendor/events/${EVENT_ID}/holds`, {
+            lines: [{ tableId, dates: ['2026-10-24'] }],
+            rate: 'standard',
+          }),
+        ),
+      );
+      await handler(authed('PATCH', `/vendor/holds/${held.body.hold.id}`, { vendorInfo }));
+      const co = parse(
+        await handler(authed('POST', `/vendor/holds/${held.body.hold.id}/checkout`)),
+      );
+      return { holdId: held.body.hold.id as string, orderId: co.body.orderId as string };
+    };
+    const status = (id: string) => db.get(`ORDER#${id}`, 'META')?.status;
+    const history = async () =>
+      VendorDashboard.parse(parse(await handler(authed('GET', '/vendor/dashboard'))).body);
+
+    // Back from Shopify, pick something else: the first checkout is replaced, not left behind.
+    const first = await startCheckout('A1');
+    const second = await startCheckout('A2');
+    expect(status(first.orderId)).toBe('cancelled');
+    expect(status(second.orderId)).toBe('pending_payment');
+    expect(shop.deletedDrafts).toEqual(['draft-1']);
+
+    // A checkout in progress is left alone, and unpaid orders stay out of the booking history.
+    let dash = await history();
+    expect(status(second.orderId)).toBe('pending_payment');
+    expect(dash.history).toEqual([]);
+    expect(dash.balanceDueCents).toBe(20000);
+
+    // Once its hold lapses it is abandoned too.
+    const item = db.get(`EVENT#${EVENT_ID}`, 'HOLD#2026-10-24#A2')!;
+    db.put({ ...item, expiresAt: new Date(Date.now() - 1000).toISOString() });
+    dash = await history();
+    expect(status(second.orderId)).toBe('cancelled');
+    expect(shop.deletedDrafts).toEqual(['draft-1', 'draft-2']);
+    expect(dash.history).toEqual([]);
+    expect(dash.balanceDueCents).toBe(0);
+
+    // If an old invoice is somehow paid anyway, the money goes straight back.
+    const late = parse(
+      await webhookHandler(
+        webhook('orders/paid', {
+          id: 4242,
+          note_attributes: [{ name: 'orderId', value: first.orderId }],
+        }),
+      ),
+    );
+    expect(late.body).toMatchObject({ ignored: 'cancelled', refunded: true });
+    expect(shop.refunds).toEqual([
+      expect.objectContaining({ orderId: '4242', amountCents: 20000 }),
+    ]);
+    expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#A1')).toBeUndefined();
   });
 
   it('rejects anyone without a vendor and expired holds', async () => {

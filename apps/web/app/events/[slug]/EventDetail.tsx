@@ -43,6 +43,8 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
   const [vendors, setVendors] = useState<EventVendor[] | null>(null);
   const [vendorsError, setVendorsError] = useState(false);
   const [plan, setPlan] = useState<EventFloorPlan | null>(null);
+  /** Missing on events that book by number of tables: there is no map to show. */
+  const floorPlan = plan?.floorPlan;
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState<'all' | SellsCategory>('all');
   const [focus, setFocus] = useState<string | null>(null);
@@ -243,7 +245,7 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
         <p className={styles.about}>{ev.blurb}</p>
       </section>
 
-      {plan && (
+      {floorPlan && (
         <section className={styles.section} id="venue-map" aria-labelledby="map-title">
           <div className={styles.sectionHead}>
             <h2 id="map-title" className={styles.h2}>
@@ -252,7 +254,7 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
             <span className={styles.sectionNote}>Tap a booked table to see who&apos;s there.</span>
           </div>
           <VenueMap
-            plan={plan.floorPlan}
+            plan={floorPlan}
             booked={booked}
             focus={focus}
             flash={flash}
@@ -369,7 +371,7 @@ export function EventDetail({ event: ev }: { event: PublicEvent }) {
                       Website
                     </a>
                   )}
-                  {plan && (
+                  {floorPlan && (
                     <button
                       type="button"
                       className={styles.findLink}

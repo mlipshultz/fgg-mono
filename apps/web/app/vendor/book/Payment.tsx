@@ -5,7 +5,7 @@ import type { HoldResponse, IsoDate, PublicEvent, VendorInfoInput } from '@fgg/t
 import { Button } from '@/components/Button';
 import { Field, authStyles as a } from '@/components/auth/AuthCard';
 import v from '@/components/vendor/vendor.module.css';
-import { RATE_LABEL, daysLabel, daysShort, fmtCents } from '@/lib/booking';
+import { RATE_LABEL, daysLabel, daysShort, fmtCents, tableCountLabel } from '@/lib/booking';
 import styles from './book.module.css';
 
 export interface Info {
@@ -66,6 +66,7 @@ export function Payment({
   const multiDay = eventDays.length > 1;
   const q = hold.quote;
   const allDates = [...new Set(q.lines.flatMap((l) => l.dates))].sort();
+  const tableLines = q.lines.flatMap((l) => ('tableId' in l ? [l] : []));
 
   const saveDraft = (e?: FormEvent) => {
     e?.preventDefault();
@@ -117,24 +118,35 @@ export function Payment({
           )}
           <div>
             <div className={styles.summaryTitle}>
-              {ev.name} · {q.lines.length === 1 ? 'Table' : 'Tables'}{' '}
-              {q.lines.map((l) => l.tableId).join(', ')}
+              {ev.name} ·{' '}
+              {tableLines.length
+                ? `${tableLines.length === 1 ? 'Table' : 'Tables'} ${tableLines.map((l) => l.tableId).join(', ')}`
+                : 'Vendor tables'}
             </div>
             <div className={styles.summarySub}>
               {daysLabel(allDates)} · {ev.venue.name}
             </div>
           </div>
         </div>
-        {q.lines.map((l) => (
-          <div className={styles.line} key={l.tableId}>
-            <span>
-              Table {l.tableId} · {RATE_LABEL[q.rate]} × {l.dates.length}{' '}
-              {l.dates.length === 1 ? 'day' : 'days'}
-              {multiDay ? ` (${daysShort(eventDays, l.dates)})` : ''}
-            </span>
-            <span>{fmtCents(l.lineCents)}</span>
-          </div>
-        ))}
+        {q.lines.map((l) =>
+          'quantity' in l ? (
+            <div className={styles.line} key={l.dates.join()}>
+              <span>
+                {daysLabel(l.dates)} · {tableCountLabel(l.quantity)} × {fmtCents(l.unitCents)}
+              </span>
+              <span>{fmtCents(l.lineCents)}</span>
+            </div>
+          ) : (
+            <div className={styles.line} key={l.tableId}>
+              <span>
+                Table {l.tableId} · {RATE_LABEL[q.rate]} × {l.dates.length}{' '}
+                {l.dates.length === 1 ? 'day' : 'days'}
+                {multiDay ? ` (${daysShort(eventDays, l.dates)})` : ''}
+              </span>
+              <span>{fmtCents(l.lineCents)}</span>
+            </div>
+          ),
+        )}
         {q.feeCents > 0 && (
           <div className={`${styles.line} ${styles.lineMuted}`}>
             <span>Processing fee</span>
@@ -227,6 +239,10 @@ export function Payment({
       <Button type="button" variant="primary" size="lg" block disabled={busy} onClick={submit}>
         {busy ? 'Opening checkout…' : 'Continue to secure checkout →'}
       </Button>
+      <span className={styles.holdNote}>
+        You get a fresh 10 minutes to pay once checkout opens. After that your tables go back on
+        sale.
+      </span>
       <span className={styles.policy}>
         By continuing you agree to the{' '}
         <a href="/vendor/code-of-conduct" target="_blank" rel="noreferrer">
@@ -236,7 +252,7 @@ export function Payment({
       </span>
       <div className={v.footerNav}>
         <button type="button" className={v.back} onClick={onBack}>
-          ← Back to tables
+          {tableLines.length ? '← Back to tables' : '← Back'}
         </button>
       </div>
     </div>

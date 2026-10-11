@@ -6,7 +6,7 @@ export const Settings = z.object({
   processingFeePct: z.number().min(0).max(100).default(0),
   taxPct: z.number().min(0).max(100).default(0),
   holdMinutes: z.number().int().positive().default(10),
-  checkoutHoldMinutes: z.number().int().positive().default(30),
+  checkoutHoldMinutes: z.number().int().positive().default(10),
   maxTablesPerVendorPerEvent: z.number().int().positive().optional(),
   pokeBucksPartnerCap: z.number().int().positive().optional(),
   refundCutoffDays: z.number().int().nonnegative().default(14),

@@ -40,6 +40,8 @@ const TZ = 'America/New_York';
 // ---------------------------------------------------------------- venues
 interface VenueSeed extends Venue {
   seed: number;
+  /** A new venue whose table layout isn't known yet. */
+  noFloorPlan?: true;
 }
 const venues: VenueSeed[] = [
   {
@@ -86,6 +88,16 @@ const venues: VenueSeed[] = [
     city: 'Baltimore',
     state: 'MD',
     timeZone: TZ,
+  },
+  {
+    seed: 6,
+    id: fixedUlid(6),
+    name: 'Frederick Fairgrounds',
+    address: '797 E Patrick St',
+    city: 'Frederick',
+    state: 'MD',
+    timeZone: TZ,
+    noFloorPlan: true,
   },
 ];
 const venueByName = (name: string) => venues.find((v) => v.name === name)!;
@@ -141,6 +153,8 @@ interface EventSeed {
   blurb: string;
   vendorStatus: Event['vendorStatus'];
   poster?: string;
+  /** Books by number of tables (no floor plan): tables for sale per day. */
+  tableCapacity?: number;
 }
 const eventSeeds: EventSeed[] = [
   {
@@ -201,6 +215,18 @@ const eventSeeds: EventSeed[] = [
     blurb: 'Three days, 300+ vendors — the #1 family card show in Maryland.',
     vendorStatus: 'coming_soon',
     poster: 'harbor-fest-og.jpg',
+  },
+  // A new venue with no table layout yet: vendors book a number of tables.
+  {
+    seed: 18,
+    slug: 'winter-fest-2027',
+    seriesId: 'winter-fest',
+    name: 'Winter Fest',
+    venue: 'Frederick Fairgrounds',
+    dates: ['2027-01-23', '2027-01-24'],
+    blurb: 'Our first show in Frederick: snow-day trading, hot cocoa and a winter tournament.',
+    vendorStatus: 'open',
+    tableCapacity: 40,
   },
   // Past events so the gallery and past-events teaser have data.
   {
@@ -276,7 +302,9 @@ function buildEvent(s: EventSeed): Event {
     vendorStatus: s.vendorStatus,
     tableRateCents: 20000,
     pokeBucksRateCents: 10000,
-    floorPlanVersion: 1,
+    ...(s.tableCapacity
+      ? { tableBooking: 'quantity' as const, tableCapacity: s.tableCapacity }
+      : { floorPlanVersion: 1 }),
     createdAt: NOW,
     updatedAt: NOW,
   };
@@ -463,9 +491,9 @@ async function uploadMedia(): Promise<void> {
 async function main(): Promise<void> {
   const items: Record<string, unknown>[] = [];
   for (const v of venues) {
-    const { seed: _s, ...venue } = v;
+    const { seed: _s, noFloorPlan: _n, ...venue } = v;
     items.push({ ...keys.venue(v.id), ...venue });
-    items.push({ ...keys.floorPlan(v.id), ...floorPlan(v.id) });
+    if (!v.noFloorPlan) items.push({ ...keys.floorPlan(v.id), ...floorPlan(v.id) });
   }
   for (const s of eventSeeds) {
     const ev = buildEvent(s);
@@ -481,7 +509,7 @@ async function main(): Promise<void> {
     processingFeePct: 0,
     taxPct: 0,
     holdMinutes: 10,
-    checkoutHoldMinutes: 30,
+    checkoutHoldMinutes: 10,
     refundCutoffDays: 14,
     vendorApprovalMode: 'manual_call',
     updatedAt: NOW,

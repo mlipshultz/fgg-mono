@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type Order } from '@fgg/types';
 import { FakeDdb } from './fake-ddb.js';
-import { EVENT_ID, event, floorPlan, venue } from './fixtures.js';
+import { COUNT_EVENT_ID, EVENT_ID, countEvent, event, floorPlan, venue } from './fixtures.js';
 
 process.env.TABLE_NAME = 'fgg-test';
 process.env.MEDIA_BASE_URL = 'https://media.test';
@@ -97,7 +97,9 @@ describe('holds', () => {
     });
     expect(items).toHaveLength(3);
     const hold = booking.toTableHold(items);
-    expect(hold.tables.map((t) => [t.tableId, t.dates.length, t.amountCents])).toEqual([
+    expect(
+      hold.tables.map((t) => ['tableId' in t && t.tableId, t.dates.length, t.amountCents]),
+    ).toEqual([
       ['A1', 2, 40000],
       ['A2', 1, 20000],
     ]);
@@ -247,6 +249,209 @@ describe('finalizePaidOrder / closeOrder', () => {
       .all()
       .filter((i) => i.PK === `ORDER#${o.id}` && String(i.SK).startsWith('HIST#'));
     expect(hist.map((h) => h.to)).toEqual(['paid', 'refunded']);
+  });
+});
+
+describe('quantity events (no floor plan)', () => {
+  const BOTH = ['2026-10-24', '2026-10-25'];
+  const countQuote = (quantity: number, dates = BOTH) =>
+    resolveQuote({
+      event: countEvent,
+      settings: DEFAULT_SETTINGS,
+      lines: [{ quantity, dates }],
+      rate: 'standard',
+    });
+  const hold = (vendorId: string, quantity: number, dates = BOTH) =>
+    booking.createHold({
+      event: countEvent,
+      vendorId,
+      heldBy: SUB,
+      quote: countQuote(quantity, dates),
+      holdMinutes: 10,
+    });
+  const countOrder = (quantity: number, overrides: Partial<Order> = {}) =>
+    order({
+      eventId: COUNT_EVENT_ID,
+      lines: [
+        {
+          type: 'unassigned_tables',
+          quantity,
+          dates: BOTH,
+          rate: 'standard',
+          unitCents: 20000,
+          lineCents: 20000 * quantity * 2,
+        },
+      ],
+      ...overrides,
+    });
+  const rows = (prefix: string) =>
+    db.all().filter((i) => i.PK === `EVENT#${COUNT_EVENT_ID}` && String(i.SK).startsWith(prefix));
+
+  it('holds a number of tables per day and stops at the capacity', async () => {
+    const items = await hold(VENDOR, 3);
+    expect(items.map((i) => [i.SK, i.quantity])).toEqual([
+      [`HOLD#2026-10-24#QTY#${items[0]!.holdId}`, 3],
+      [`HOLD#2026-10-25#QTY#${items[0]!.holdId}`, 3],
+    ]);
+    expect(booking.toTableHold(items).tables).toEqual([
+      { quantity: 3, dates: BOTH, unitCents: 20000, amountCents: 120000, pricingInputs: {} },
+    ]);
+    // 4 per day: one more fits on a day, two do not.
+    await expect(hold(OTHER, 2, ['2026-10-25'])).rejects.toMatchObject({
+      status: 409,
+      code: 'table_unavailable',
+      message: 'Only 1 table is left for Sun Oct 25',
+    });
+    expect(await hold(OTHER, 1, ['2026-10-25'])).toHaveLength(1);
+    await expect(hold('v3', 1)).rejects.toMatchObject({
+      message: 'Tables are sold out for Sun Oct 25',
+    });
+    expect(rows('HOLD#')).toHaveLength(3);
+  });
+
+  it('holds and books a different number of tables for each day', async () => {
+    const quote = resolveQuote({
+      event: countEvent,
+      settings: DEFAULT_SETTINGS,
+      lines: [
+        { quantity: 3, dates: ['2026-10-24'] },
+        { quantity: 1, dates: ['2026-10-25'] },
+      ],
+      rate: 'standard',
+    });
+    const items = await booking.createHold({
+      event: countEvent,
+      vendorId: VENDOR,
+      heldBy: SUB,
+      quote,
+      holdMinutes: 10,
+    });
+    expect(items.map((i) => [i.date, i.quantity])).toEqual([
+      ['2026-10-24', 3],
+      ['2026-10-25', 1],
+    ]);
+    expect(booking.toTableHold(items).tables).toEqual([
+      expect.objectContaining({ quantity: 3, dates: ['2026-10-24'], amountCents: 60000 }),
+      expect.objectContaining({ quantity: 1, dates: ['2026-10-25'], amountCents: 20000 }),
+    ]);
+    // Each day fills on its own: Saturday has 1 left, Sunday 3.
+    await expect(hold(OTHER, 2, ['2026-10-24'])).rejects.toMatchObject({
+      message: 'Only 1 table is left for Sat Oct 24',
+    });
+    await hold(OTHER, 3, ['2026-10-25']);
+
+    const o = order({
+      eventId: COUNT_EVENT_ID,
+      holdId: items[0]!.holdId,
+      lines: booking.toTableHold(items).tables.map((t) => ({
+        type: 'unassigned_tables' as const,
+        quantity: 'quantity' in t ? t.quantity : 0,
+        dates: t.dates,
+        rate: 'standard' as const,
+        unitCents: t.unitCents,
+        lineCents: t.amountCents,
+      })),
+    });
+    await booking.writeOrder(o, countEvent.startsAt);
+    const paid = await booking.finalizePaidOrder({
+      order: o,
+      event: countEvent,
+      startsAt: countEvent.startsAt,
+      by: 'shopify',
+    });
+    expect(rows('TABLE#').map((r) => [r.date, r.quantity])).toEqual([
+      ['2026-10-24', 3],
+      ['2026-10-25', 1],
+    ]);
+    expect(booking.tablesLabel(paid)).toBe('3 tables Sat Oct 24, 1 table Sun Oct 25');
+    const ics = vendorPassIcs(paid, countEvent, venue, new Date('2026-10-02T00:00:00Z'));
+    expect(ics).toContain('SUMMARY:Winter Fest · Vendor · 3 tables');
+    expect(ics).toContain('SUMMARY:Winter Fest · Vendor · 1 table');
+  });
+
+  it("frees an expired hold's tables and replaces the vendor's own hold", async () => {
+    const first = await hold(OTHER, 4);
+    await expect(hold(VENDOR, 1)).rejects.toMatchObject({ code: 'table_unavailable' });
+    for (const it of first) db.put({ ...it, expiresAt: new Date(Date.now() - 1000).toISOString() });
+    await hold(VENDOR, 2);
+    // Asking again swaps the hold rather than stacking on top of it.
+    const again = await hold(VENDOR, 4);
+    expect(rows('HOLD#').filter((h) => h.vendorId === VENDOR)).toHaveLength(2);
+    expect(again[0]!.quantity).toBe(4);
+  });
+
+  it('re-reads capacity when another booking lands between the read and the write', async () => {
+    await hold(OTHER, 1, ['2026-10-24']);
+    // Three more tables sell on Saturday after we counted but before our hold is written.
+    db.beforeTransact = () => {
+      db.put({
+        ...keys.bookedCount(COUNT_EVENT_ID, '2026-10-24', 'other-order'),
+        quantity: 3,
+        date: '2026-10-24',
+        orderId: 'other-order',
+        vendorId: 'v3',
+      });
+      db.put({ ...keys.capacity(COUNT_EVENT_ID), version: 2 });
+    };
+    await expect(hold(VENDOR, 2, ['2026-10-24'])).rejects.toMatchObject({
+      message: 'Tables are sold out for Sat Oct 24',
+    });
+    expect(rows('HOLD#')).toHaveLength(1);
+    // A race that leaves room is retried and goes through.
+    db.beforeTransact = () => db.put({ ...keys.capacity(COUNT_EVENT_ID), version: 3 });
+    expect(await hold(VENDOR, 2, ['2026-10-25'])).toHaveLength(1);
+    expect(db.get(`EVENT#${COUNT_EVENT_ID}`, 'CAPACITY')?.version).toBe(4);
+  });
+
+  it('books the tables on payment and gives them back on refund', async () => {
+    const items = await hold(VENDOR, 2);
+    const o = countOrder(2, { holdId: items[0]!.holdId });
+    await booking.writeOrder(o, countEvent.startsAt);
+    const paid = await booking.finalizePaidOrder({
+      order: o,
+      event: countEvent,
+      startsAt: countEvent.startsAt,
+      shopifyOrderId: '42',
+      by: 'shopify',
+    });
+    expect(paid.status).toBe('paid');
+    expect(rows('HOLD#')).toHaveLength(0);
+    expect(rows('TABLE#').map((r) => [r.SK, r.quantity])).toEqual([
+      [`TABLE#2026-10-24#QTY#${o.id}`, 2],
+      [`TABLE#2026-10-25#QTY#${o.id}`, 2],
+    ]);
+    expect(booking.tablesLabel(paid)).toBe('2 tables');
+    expect(booking.orderDates(paid)).toEqual(BOTH);
+    // Two of four are gone for good now.
+    await expect(hold(OTHER, 3)).rejects.toMatchObject({ code: 'table_unavailable' });
+    await booking.closeOrder(paid, countEvent, countEvent.startsAt, 'refunded', 'shopify');
+    expect(rows('TABLE#')).toHaveLength(0);
+    expect(await hold(OTHER, 4)).toHaveLength(2);
+  });
+
+  it('refuses a payment that lands after the hold expired and the room sold', async () => {
+    const items = await hold(VENDOR, 2);
+    const o = countOrder(2, { holdId: items[0]!.holdId });
+    await booking.writeOrder(o, countEvent.startsAt);
+    for (const it of items) db.put({ ...it, expiresAt: new Date(Date.now() - 1000).toISOString() });
+    await hold(OTHER, 3);
+    await expect(
+      booking.finalizePaidOrder({
+        order: o,
+        event: countEvent,
+        startsAt: countEvent.startsAt,
+        by: 'shopify',
+      }),
+    ).rejects.toBeInstanceOf(booking.TableTakenError);
+    expect(rows('TABLE#')).toHaveLength(0);
+  });
+
+  it('writes the pass calendar and receipt without table numbers', async () => {
+    const paid = countOrder(2, { status: 'paid', passNumber: 'WF27-001' });
+    const ics = vendorPassIcs(paid, countEvent, venue, new Date('2026-10-02T00:00:00Z'));
+    expect(ics).toContain('SUMMARY:Winter Fest · Vendor · 2 tables');
+    const bytes = await receiptPdf(paid, countEvent, venue);
+    expect(Buffer.from(bytes.slice(0, 5)).toString()).toBe('%PDF-');
   });
 });
 

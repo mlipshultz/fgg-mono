@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeAvailability, fmtTime, hoursLabel } from '../src/lib/events.js';
-import { event, floorPlan } from './fixtures.js';
+import { countEvent, event, floorPlan } from './fixtures.js';
 
 describe('hoursLabel', () => {
   it('collapses identical days', () => {
@@ -40,5 +40,26 @@ describe('computeAvailability', () => {
   });
   it('has zero capacity without a floor plan', () => {
     expect(computeAvailability(event, undefined, [], []).tablesLeft).toBe(0);
+  });
+  it('counts tables left per day on a quantity event, ignoring expired holds', () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const later = new Date(Date.now() + 60_000).toISOString();
+    const a = computeAvailability(
+      countEvent,
+      undefined,
+      [
+        { quantity: 1, date: '2026-10-24', expiresAt: later },
+        { quantity: 2, date: '2026-10-24', expiresAt: past },
+      ],
+      [
+        { quantity: 2, date: '2026-10-24' },
+        { quantity: 4, date: '2026-10-25' },
+      ],
+    );
+    expect(a.days).toEqual([
+      { date: '2026-10-24', unavailable: [], left: 1 },
+      { date: '2026-10-25', unavailable: [], left: 0 },
+    ]);
+    expect(a.tablesLeft).toBe(1);
   });
 });

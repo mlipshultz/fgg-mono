@@ -14,8 +14,12 @@ import {
   fmtCents,
   tableDaysCount,
   tableDaysSummary,
+  orderRate,
+  tableCount,
   tableLinesOf,
   tablesLabel,
+  tablesPhrase,
+  unassignedTables,
 } from '@/lib/booking';
 import { daysUntil, shortDateLabel, year } from '@/lib/dates';
 import { ProfileCard } from './ProfileCard';
@@ -39,15 +43,16 @@ const STATUS_CLASS: Record<VendorOrder['status'], string | undefined> = {
 function tableOf(o: VendorOrder): string {
   return tablesLabel(o) || '—';
 }
+/** Empty for tables booked by number, whose label already reads "2 tables". */
 function tablesWord(o: VendorOrder): string {
+  if (unassignedTables(o)) return '';
   return tableLinesOf(o).length === 1 ? 'Table' : 'Tables';
 }
 function passesOf(o: VendorOrder): number {
-  return 2 * Math.max(1, tableLinesOf(o).length);
+  return 2 * Math.max(1, tableCount(o));
 }
 function rateOf(o: VendorOrder): string {
-  const l = tableLinesOf(o)[0];
-  return l?.rate === 'poke_bucks' ? ' · PokéBucks' : '';
+  return orderRate(o) === 'poke_bucks' ? ' · PokéBucks' : '';
 }
 
 export function VendorDashboardView() {
@@ -67,7 +72,7 @@ export function VendorDashboardView() {
   }, []);
 
   const download = (o: VendorOrder, kind: 'pass.ics' | 'receipt.pdf') => {
-    const base = `${o.event.slug}-table-${tableOf(o).replace(/, /g, '-')}`;
+    const base = `${o.event.slug}-table-${tableOf(o).replace(/[, ]+/g, '-')}`;
     void downloadVendorFile(
       o.id,
       kind,
@@ -80,8 +85,8 @@ export function VendorDashboardView() {
     const days = daysUntil(o.event.startDate);
     const msg =
       days >= cutoff
-        ? `Request a cancellation for ${tablesWord(o)} ${tableOf(o)} at ${o.event.name}? You're ${days} days out, so the refund is in full once staff approve it.`
-        : `Request a cancellation for ${tablesWord(o)} ${tableOf(o)} at ${o.event.name}? The show is in ${days} days, inside the ${cutoff}-day refund window, so staff decide the refund.`;
+        ? `Request a cancellation for ${tablesPhrase(o)} at ${o.event.name}? You're ${days} days out, so the refund is in full once staff approve it.`
+        : `Request a cancellation for ${tablesPhrase(o)} at ${o.event.name}? The show is in ${days} days, inside the ${cutoff}-day refund window, so staff decide the refund.`;
     if (!window.confirm(msg)) return;
     setBusyId(o.id);
     try {
@@ -230,12 +235,8 @@ export function VendorDashboardView() {
           <div className={styles.card}>
             <span className={styles.cardTitle}>Payments</span>
             <div className={styles.payRow}>
-              <span>Balance due</span>
-              <b className={styles.payBig}>{fmtCents(data.balanceDueCents)}</b>
-            </div>
-            <div className={`${styles.payRow} ${styles.payRowMuted}`}>
               <span>Paid in {thisYear}</span>
-              <span>{fmtCents(data.paidThisYearCents)}</span>
+              <b className={styles.payBig}>{fmtCents(data.paidThisYearCents)}</b>
             </div>
             <div className={`${styles.payRow} ${styles.payRowMuted}`}>
               <span>Payments</span>

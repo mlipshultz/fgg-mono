@@ -4,6 +4,13 @@ import { Cents, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
 export const VendorTableStatus = z.enum(['open', 'closed', 'coming_soon']);
 export type VendorTableStatus = z.infer<typeof VendorTableStatus>;
 
+/**
+ * How vendors book tables. `floor_plan`: pick specific tables on the venue map. `quantity`: say
+ * how many tables and which days, for venues whose layout isn't known yet; FGG assigns the spots.
+ */
+export const TableBooking = z.enum(['floor_plan', 'quantity']);
+export type TableBooking = z.infer<typeof TableBooking>;
+
 export const EventDay = z.object({
   date: IsoDate,
   /** Local times, HH:MM. */
@@ -61,6 +68,10 @@ export const Event = z.object({
   tableRateCents: Cents,
   pokeBucksRateCents: Cents,
   floorPlanVersion: z.number().int().positive().optional(),
+  /** Absent means `floor_plan`. */
+  tableBooking: TableBooking.optional(),
+  /** `quantity` events: tables for sale per day. */
+  tableCapacity: z.number().int().positive().optional(),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

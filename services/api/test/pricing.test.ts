@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '@fgg/types';
 import { nearbyText, resolveQuote } from '../src/lib/pricing.js';
-import { event, floorPlan } from './fixtures.js';
+import { countEvent, event, floorPlan } from './fixtures.js';
 
 const base = { event, floorPlan, settings: DEFAULT_SETTINGS };
 const one = (tableId: string, dates: string[]) => [{ tableId, dates }];
@@ -16,7 +16,7 @@ describe('resolveQuote', () => {
     expect(q).toMatchObject({ subtotalCents: 40000, feeCents: 0, taxCents: 0, totalCents: 40000 });
     expect(q.lines[0]).toMatchObject({ unitCents: 20000, lineCents: 40000 });
     expect(q.lines[0]!.dates).toEqual(['2026-10-24', '2026-10-25']);
-    expect(q.lines[0]!.rowLabel).toBe('Row A · Main Hall');
+    expect(q.lines[0]).toMatchObject({ rowLabel: 'Row A · Main Hall' });
   });
 
   it('prices several tables with their own days and sums them', () => {
@@ -115,5 +115,60 @@ describe('resolveQuote', () => {
     expect(nearbyText(floorPlan.tables[0]!, floorPlan)).toBe(
       'Right by the stage and tournaments, next to the Art Station.',
     );
+  });
+
+  it('prices a number of tables on a quantity event without a floor plan', () => {
+    const q = resolveQuote({
+      event: countEvent,
+      settings: DEFAULT_SETTINGS,
+      lines: [{ quantity: 3, dates: ['2026-10-25', '2026-10-24'] }],
+      rate: 'poke_bucks',
+    });
+    expect(q.lines).toEqual([
+      {
+        quantity: 3,
+        dates: ['2026-10-24', '2026-10-25'],
+        unitCents: 10000,
+        lineCents: 60000,
+        pricingInputs: {},
+      },
+    ]);
+    expect(q.totalCents).toBe(60000);
+  });
+
+  it('prices a different number of tables for each day', () => {
+    const q = resolveQuote({
+      event: countEvent,
+      settings: DEFAULT_SETTINGS,
+      lines: [
+        { quantity: 2, dates: ['2026-10-24'] },
+        { quantity: 1, dates: ['2026-10-25'] },
+      ],
+      rate: 'standard',
+    });
+    expect(q.lines.map((l) => l.lineCents)).toEqual([40000, 20000]);
+    expect(q.totalCents).toBe(60000);
+    expect(() =>
+      resolveQuote({
+        event: countEvent,
+        settings: DEFAULT_SETTINGS,
+        lines: [
+          { quantity: 2, dates: ['2026-10-24'] },
+          { quantity: 1, dates: ['2026-10-24'] },
+        ],
+        rate: 'standard',
+      }),
+    ).toThrow(/in the cart twice/);
+  });
+
+  it('keeps the two ways of booking apart', () => {
+    const dates = ['2026-10-24'];
+    const args = { settings: DEFAULT_SETTINGS, rate: 'standard' as const };
+    expect(() =>
+      resolveQuote({ ...args, event: countEvent, lines: [{ tableId: 'A1', dates }] }),
+    ).toThrow(/by number/);
+    expect(() =>
+      resolveQuote({ ...args, event, floorPlan, lines: [{ quantity: 1, dates }] }),
+    ).toThrow(/on the map/);
   });
 });

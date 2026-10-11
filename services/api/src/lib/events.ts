@@ -42,7 +42,8 @@ export function tablesFromCents(
 ): number {
   const win = activeWindow(windows, now);
   const base = win ? win.tableRateCents : ev.tableRateCents;
-  const prices = (plan?.tables ?? []).map((t) =>
+  const tables = ev.tableBooking === 'quantity' ? [] : (plan?.tables ?? []);
+  const prices = tables.map((t) =>
     t.priceOverrideCents !== undefined
       ? t.priceOverrideCents
       : Math.max(0, base + (t.premiumDeltaCents ?? 0)),
@@ -73,6 +74,7 @@ export function toPublicEvent(
     ...(ev.posterKey ? { posterUrl: mediaUrl(ev.posterKey) } : {}),
     vendorStatus: ev.vendorStatus,
     ...(ev.vendorOpensAt ? { vendorOpensAt: ev.vendorOpensAt } : {}),
+    ...(ev.tableBooking === 'quantity' ? { tableBooking: ev.tableBooking } : {}),
     ...(tablesLeft !== undefined ? { tablesLeft } : {}),
     ...(fromCents !== undefined ? { tablesFromCents: fromCents } : {}),
     tableRateCents: ev.tableRateCents,
@@ -81,9 +83,33 @@ export function toPublicEvent(
 }
 
 interface Unavailable {
-  tableId: string;
+  tableId?: string;
+  quantity?: number;
   date: string;
   expiresAt?: string;
+  holdId?: string;
+  orderId?: string;
+}
+
+/**
+ * Tables in use per day on a `quantity` event: booked rows plus live holds. `except` leaves out
+ * one hold or order, so a booking being finalized doesn't count against itself.
+ */
+export function tablesUsedByDay(
+  holds: Unavailable[],
+  booked: Unavailable[],
+  now = new Date(),
+  except: { holdId?: string | undefined; orderId?: string | undefined } = {},
+): Map<string, number> {
+  const used = new Map<string, number>();
+  const add = (u: Unavailable) => used.set(u.date, (used.get(u.date) ?? 0) + (u.quantity ?? 1));
+  for (const b of booked) if (!except.orderId || b.orderId !== except.orderId) add(b);
+  for (const h of holds) {
+    if (h.expiresAt && new Date(h.expiresAt).getTime() < now.getTime()) continue;
+    if (except.holdId && h.holdId === except.holdId) continue;
+    add(h);
+  }
+  return used;
 }
 
 /** Pure availability math, shared by the handler and tests. Expired holds are free. */
@@ -94,11 +120,27 @@ export function computeAvailability(
   booked: Unavailable[],
   now = new Date(),
 ): EventAvailability {
+  if (ev.tableBooking === 'quantity') {
+    const capacity = ev.tableCapacity ?? 0;
+    const used = tablesUsedByDay(holds, booked, now);
+    const days = ev.days.map((d) => ({
+      date: d.date,
+      unavailable: [],
+      left: Math.max(0, capacity - (used.get(d.date) ?? 0)),
+    }));
+    return {
+      eventId: ev.id,
+      vendorStatus: ev.vendorStatus,
+      // The most a vendor could still book on some day.
+      tablesLeft: Math.max(0, ...days.map((d) => d.left)),
+      days,
+    };
+  }
   const tableIds = new Set((plan?.tables ?? []).map((t) => t.id));
   const perDay = new Map<string, Set<string>>(ev.days.map((d) => [d.date, new Set<string>()]));
   const take = (u: Unavailable) => {
     const set = perDay.get(u.date);
-    if (set && tableIds.has(u.tableId)) set.add(u.tableId);
+    if (set && u.tableId && tableIds.has(u.tableId)) set.add(u.tableId);
   };
   for (const b of booked) take(b);
   for (const h of holds) {

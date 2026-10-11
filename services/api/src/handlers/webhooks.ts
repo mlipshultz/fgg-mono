@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Order } from '@fgg/types';
-import { TableTakenError, closeOrder, finalizePaidOrder } from '../lib/booking.js';
+import { TableTakenError, closeOrder, finalizePaidOrder, tablesLabel } from '../lib/booking.js';
 import { getEvent, getOrder, getOrderByShopifyId, updateVendor } from '../lib/db.js';
 import { Router, type Req, type Res } from '../lib/http.js';
 import { loadShopifyConfig } from '../lib/shopify-secret.js';
@@ -72,6 +72,20 @@ async function onOrdersPaid(p: PaidPayload): Promise<Res> {
   }
   if (order.status === 'paid' && order.shopifyOrderId === shopifyOrderId)
     return ok({ ok: true, idempotent: true });
+  if (order.status === 'cancelled' && !order.paidAt) {
+    // An abandoned checkout whose invoice was paid anyway: nothing is booked, so give it back.
+    console.error(`order ${order.id} was cancelled before payment; refunding ${shopifyOrderId}`);
+    try {
+      await shopify().refundOrder(
+        shopifyOrderId,
+        order.totalCents,
+        'FGG: this checkout had expired, so nothing was booked',
+      );
+    } catch (err) {
+      console.error('automatic refund failed; staff must refund manually', err);
+    }
+    return ok({ ok: true, ignored: order.status, refunded: true });
+  }
   if (order.status !== 'pending_payment') {
     console.warn(`orders/paid: order ${order.id} is ${order.status}; ignoring`);
     return ok({ ok: true, ignored: order.status });
@@ -88,7 +102,7 @@ async function onOrdersPaid(p: PaidPayload): Promise<Res> {
       by: 'shopify',
     });
     const line = paid.lines[0];
-    if (line?.type === 'table' && line.rate === 'poke_bucks') {
+    if (line && line.type !== 'ticket' && line.rate === 'poke_bucks') {
       await updateVendor(paid.ownerId, { pokeBucksPartner: true });
     }
     return ok({ ok: true, orderId: paid.id, passNumber: paid.passNumber });
@@ -109,7 +123,7 @@ async function onOrdersPaid(p: PaidPayload): Promise<Res> {
       await shopify().refundOrder(
         shopifyOrderId,
         order.totalCents,
-        `FGG: table ${order.lines[0]?.type === 'table' ? order.lines[0].tableId : ''} was no longer available`,
+        `FGG: ${order.lines[0]?.type === 'table' ? `table ${order.lines[0].tableId} was` : `${tablesLabel(order)} were`} no longer available`,
       );
     } catch (err) {
       console.error('automatic refund failed; staff must refund manually', err);

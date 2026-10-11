@@ -459,9 +459,13 @@ router
     const [ev, vendor] = await Promise.all([getEvent(input.eventId), getVendor(input.vendorId)]);
     if (!ev) throw new HttpError(404, 'event_not_found', 'Event not found');
     if (!vendor) throw new HttpError(404, 'vendor_not_found', 'Vendor not found');
-    const plan = await getFloorPlan(ev.venueId);
-    if (!plan?.tables.some((t) => t.id === input.tableId)) {
-      throw new HttpError(404, 'table_not_found', 'Table is not on the floor plan');
+    const byCount = ev.tableBooking === 'quantity';
+    if (!byCount) {
+      if (!input.tableId) throw new HttpError(400, 'table_required', 'Say which table to comp');
+      const plan = await getFloorPlan(ev.venueId);
+      if (!plan?.tables.some((t) => t.id === input.tableId)) {
+        throw new HttpError(404, 'table_not_found', 'Table is not on the floor plan');
+      }
     }
     const eventDates = new Set(ev.days.map((d) => d.date));
     for (const d of input.dates) {
@@ -479,8 +483,9 @@ router
       status: 'pending_payment',
       lines: [
         {
-          type: 'table',
-          tableId: input.tableId,
+          ...(byCount
+            ? { type: 'unassigned_tables' as const, quantity: input.quantity ?? 1 }
+            : { type: 'table' as const, tableId: input.tableId! }),
           dates: [...input.dates].sort(),
           rate: 'standard',
           unitCents: 0,
@@ -517,7 +522,9 @@ router
       throw new HttpError(
         409,
         'table_unavailable',
-        'That table is already booked on one of those days',
+        byCount
+          ? 'There are not that many tables left on one of those days'
+          : 'That table is already booked on one of those days',
       );
     }
   })

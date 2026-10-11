@@ -1,5 +1,13 @@
 import type { VendorOrder } from '@fgg/types';
-import { daysLabel, fmtCents, orderDates, tableLinesOf, tablesLabel } from '@/lib/booking';
+import {
+  daysLabel,
+  fmtCents,
+  orderDates,
+  tableCount,
+  tableLinesOf,
+  tablesLabel,
+  unassignedTables,
+} from '@/lib/booking';
 import { dayOfWeek } from '@/lib/dates';
 import styles from '@/app/vendor/orders/done/done.module.css';
 
@@ -8,7 +16,8 @@ export function PassCard({ order, large = false }: { order: VendorOrder; large?:
   const lines = tableLinesOf(order);
   const tableId = tablesLabel(order) || '—';
   const dates = orderDates(order);
-  const many = lines.length > 1;
+  const unassigned = unassignedTables(order);
+  const many = tableCount(order) > 1;
   const key = (d: string[]) => [...d].sort().join();
   const sameDays = lines.every((l) => key(l.dates) === key(lines[0]?.dates ?? []));
   return (
@@ -24,7 +33,9 @@ export function PassCard({ order, large = false }: { order: VendorOrder; large?:
         </div>
         <div>
           <div className={styles.passLabel}>{many ? 'Tables' : 'Table'}</div>
-          {many && !sameDays ? (
+          {unassigned ? (
+            <b>{tableId} · assigned by FGG</b>
+          ) : many && !sameDays ? (
             <b>
               {lines.map((l) => (
                 <span key={l.tableId} style={{ display: 'block' }}>

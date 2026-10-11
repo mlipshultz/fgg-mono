@@ -14,7 +14,7 @@ describe('schemas', () => {
       processingFeePct: 0,
       taxPct: 0,
       holdMinutes: 10,
-      checkoutHoldMinutes: 30,
+      checkoutHoldMinutes: 10,
       vendorApprovalMode: 'manual_call',
     });
   });
