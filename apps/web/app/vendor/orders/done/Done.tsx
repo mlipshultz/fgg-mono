@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { VendorOrder } from '@fgg/types';
 import { Button } from '@/components/Button';
+import { useAuth } from '@/components/Providers';
 import { PassCard } from '@/components/vendor/PassCard';
 import { downloadVendorFile, getVendorOrder } from '@/lib/api';
 import { tableCount, tableDaysSummary, tablesLabel, unassignedTables } from '@/lib/booking';
@@ -14,12 +15,22 @@ export function Done() {
   const [order, setOrder] = useState<VendorOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  /** Arrived without a checkout behind them. */
+  const [noOrder, setNoOrder] = useState(false);
+  const { status } = useAuth();
+
+  // The Shopify storefront redirects here (its "Continue shopping" button has nowhere else to
+  // go). Someone with no order to show is sent on: vendors to their dashboard, anyone else home.
+  useEffect(() => {
+    if (!noOrder || status === 'loading') return;
+    window.location.replace(status === 'signed-in' ? '/vendor/' : '/');
+  }, [noOrder, status]);
 
   useEffect(() => {
     const id =
       new URLSearchParams(window.location.search).get('id') ?? sessionStorage.getItem('fgg.order');
     if (!id) {
-      setError('We could not find that order.');
+      setNoOrder(true);
       return;
     }
     let alive = true;
