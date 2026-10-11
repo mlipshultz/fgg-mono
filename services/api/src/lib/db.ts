@@ -576,6 +576,35 @@ export async function getSettings(): Promise<Settings> {
   return Settings.parse(rest);
 }
 
+/** Set the given settings; a `null` value removes the attribute. */
+export async function updateSettings(
+  patch: Record<string, string | number | null>,
+  updatedAt: string,
+): Promise<Settings> {
+  const sets = ['#updatedAt = :updatedAt'];
+  const removes: string[] = [];
+  const names: Record<string, string> = { '#updatedAt': 'updatedAt' };
+  const values: Record<string, unknown> = { ':updatedAt': updatedAt };
+  for (const [k, v] of Object.entries(patch)) {
+    names[`#${k}`] = k;
+    if (v === null) removes.push(`#${k}`);
+    else {
+      sets.push(`#${k} = :${k}`);
+      values[`:${k}`] = v;
+    }
+  }
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE,
+      Key: keys.settings(),
+      UpdateExpression: `SET ${sets.join(', ')}${removes.length ? ` REMOVE ${removes.join(', ')}` : ''}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    }),
+  );
+  return getSettings();
+}
+
 export async function getVendorApplication(sub: string): Promise<VendorApplication | undefined> {
   const res = await ddb.send(
     new GetCommand({ TableName: TABLE, Key: keys.vendorApplication(sub) }),

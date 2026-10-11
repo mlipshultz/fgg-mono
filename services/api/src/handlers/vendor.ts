@@ -418,7 +418,7 @@ const router = new Router()
     const ev = await getEvent(order.eventId);
     const venue = ev ? await venueFor(ev.venueId) : undefined;
     if (!ev || !venue) throw new HttpError(500, 'event_missing', 'Event missing');
-    const bytes = await receiptPdf(order, ev, venue);
+    const bytes = await receiptPdf(order, ev, venue, (await getSettings()).refundCutoffDays);
     const res: Res = {
       statusCode: 200,
       headers: {

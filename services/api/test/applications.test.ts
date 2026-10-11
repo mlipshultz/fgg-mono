@@ -266,6 +266,43 @@ describe('admin orders', () => {
     expect(tooMany.status).toBe(409);
   });
 
+  it('reads and saves settings for superadmin only, and clears the Calendly link', async () => {
+    const before = parse(await handler(staff('GET', '/admin/settings')));
+    expect(before.body).toEqual({
+      processingFeePct: 0,
+      taxPct: 0,
+      holdMinutes: 10,
+      checkoutHoldMinutes: 10,
+      refundCutoffDays: 14,
+    });
+    const next = {
+      processingFeePct: 3,
+      taxPct: 6,
+      holdMinutes: 15,
+      checkoutHoldMinutes: 12,
+      refundCutoffDays: 21,
+      calendlyUrl: 'https://calendly.com/fgg/vendor-call',
+    };
+    const saved = parse(await handler(staff('PUT', '/admin/settings', next)));
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual(next);
+    // Stored on the settings record without touching the rest of it.
+    expect(db.get('CONFIG', 'SETTINGS')).toMatchObject({ ...next, updatedAt: expect.any(String) });
+
+    const cleared = parse(
+      await handler(staff('PUT', '/admin/settings', { ...next, calendlyUrl: null })),
+    );
+    expect(cleared.body.calendlyUrl).toBeUndefined();
+    expect(db.get('CONFIG', 'SETTINGS')).not.toHaveProperty('calendlyUrl');
+
+    const bad = parse(await handler(staff('PUT', '/admin/settings', { ...next, holdMinutes: 0 })));
+    expect(bad.status).toBe(400);
+    expect(parse(await handler(as(SUB, ['staff'])('GET', '/admin/settings'))).status).toBe(403);
+    expect(parse(await handler(as(SUB, ['staff'])('PUT', '/admin/settings', next))).status).toBe(
+      403,
+    );
+  });
+
   it('registers webhooks for superadmin only', async () => {
     const res = parse(await handler(staff('POST', '/admin/shopify/register-webhooks')));
     expect(res.status).toBe(200);

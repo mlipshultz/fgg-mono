@@ -6,6 +6,8 @@ import {
 import { DEFAULT_BADGES, levelFromXp } from '@fgg/game';
 import { ulid } from 'ulid';
 import {
+  AdminSettings,
+  UpdateSettingsInput,
   CompOrderInput,
   RefundInput,
   ReviewInput,
@@ -33,6 +35,7 @@ import {
   getFloorPlan,
   getOrder,
   getSettings,
+  updateSettings,
   getUser,
   getUserByEmail,
   getVendor,
@@ -527,6 +530,18 @@ router
           : 'That table is already booked on one of those days',
       );
     }
+  })
+  .add('GET', '/admin/settings', async (req) => {
+    requireCan(claimsFrom(req), 'admin_settings');
+    return json(req, AdminSettings.parse(await getSettings()), 200, {
+      'cache-control': 'no-store',
+    });
+  })
+  .add('PUT', '/admin/settings', async (req) => {
+    requireCan(claimsFrom(req), 'admin_settings');
+    const input = parseBody(req, UpdateSettingsInput);
+    const saved = await updateSettings(input, new Date().toISOString());
+    return json(req, AdminSettings.parse(saved), 200, { 'cache-control': 'no-store' });
   })
   .add('POST', '/admin/shopify/register-webhooks', async (req) => {
     const actor = claimsFrom(req);

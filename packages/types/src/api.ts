@@ -11,6 +11,7 @@ import {
   SellsCategory,
 } from './vendor.js';
 import { FloorPlan, Venue } from './venue.js';
+import { Settings } from './settings.js';
 import {
   Order,
   PricingInputs,
@@ -265,6 +266,28 @@ export type AdminUserList = z.infer<typeof AdminUserList>;
 export const SetRolesInput = z.object({ roles: z.array(Role).min(1) });
 export type SetRolesInput = z.infer<typeof SetRolesInput>;
 
+/** GET /admin/settings — what the settings screen edits. Superadmin only. */
+export const AdminSettings = Settings.pick({
+  processingFeePct: true,
+  taxPct: true,
+  holdMinutes: true,
+  checkoutHoldMinutes: true,
+  refundCutoffDays: true,
+  calendlyUrl: true,
+});
+export type AdminSettings = z.infer<typeof AdminSettings>;
+
+/** PUT /admin/settings — every field is sent; a null Calendly link clears it. */
+export const UpdateSettingsInput = z.object({
+  processingFeePct: z.number().min(0).max(100),
+  taxPct: z.number().min(0).max(100),
+  holdMinutes: z.number().int().min(1).max(120),
+  checkoutHoldMinutes: z.number().int().min(1).max(120),
+  refundCutoffDays: z.number().int().min(0).max(365),
+  calendlyUrl: z.string().url().max(500).nullable(),
+});
+export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
+
 // ---------------------------------------------------------------------------
 // Vendor application (attendee → vendor_applicant → vendor).
 // ---------------------------------------------------------------------------
@@ -297,6 +320,12 @@ export const EventFloorPlan = z.object({
   /** Absent on `quantity` events. */
   floorPlan: FloorPlan.optional(),
   availability: EventAvailability,
+  /** The booking terms in force (Settings), for the wording on the booking pages. */
+  terms: Settings.pick({
+    holdMinutes: true,
+    checkoutHoldMinutes: true,
+    refundCutoffDays: true,
+  }).optional(),
 });
 export type EventFloorPlan = z.infer<typeof EventFloorPlan>;
 

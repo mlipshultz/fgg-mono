@@ -97,6 +97,8 @@ export class FakeDdb {
           const [l, r] = part.split('=').map((s) => s.trim());
           item[resolve(l!)] = values[r!];
         }
+      } else if (verb === 'REMOVE') {
+        for (const part of body.split(',')) delete item[resolve(part.trim())];
       } else if (verb === 'ADD') {
         for (const part of body.split(',')) {
           const [l, r] = part.trim().split(/\s+/);

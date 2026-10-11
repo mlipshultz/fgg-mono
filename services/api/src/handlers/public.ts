@@ -18,6 +18,7 @@ import {
   getEvent,
   getEventBySlug,
   getFloorPlan,
+  getSettings,
   getSettingsItem,
   getVendor,
   keys,
@@ -178,10 +179,11 @@ export const router = new Router()
   })
   .add('GET', '/public/events/{id}/floorplan', async (req, { id }) => {
     const ev = await resolveEvent(id!);
-    const [venue, floorPlan, availability] = await Promise.all([
+    const [venue, floorPlan, availability, settings] = await Promise.all([
       venueFor(ev.venueId),
       getFloorPlan(ev.venueId),
       loadAvailability(ev),
+      getSettings(),
     ]);
     if (!venue) throw new HttpError(500, 'venue_missing', 'Venue missing');
     const byCount = ev.tableBooking === 'quantity';
@@ -192,6 +194,11 @@ export const router = new Router()
       venue,
       ...(floorPlan && !byCount ? { floorPlan } : {}),
       availability,
+      terms: {
+        holdMinutes: settings.holdMinutes,
+        checkoutHoldMinutes: settings.checkoutHoldMinutes,
+        refundCutoffDays: settings.refundCutoffDays,
+      },
     };
     return json(req, body, 200, { 'cache-control': 'no-store' });
   })
