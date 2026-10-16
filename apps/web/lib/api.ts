@@ -7,6 +7,8 @@ import {
   AdminEvent,
   AdminVendor,
   AdminVendorList,
+  AdminVendorMemberList,
+  type AdminVendorMember,
   type AdminVendorInput,
   CancelRequestList,
   type ApproveCancelInput,
@@ -550,10 +552,13 @@ export const adminReject = (id: string, input: ReviewInput) =>
 export async function adminListOrders(q?: {
   eventId?: string;
   status?: string;
+  /** Only this vendor's orders (from the vendors page). */
+  vendorId?: string;
   cursor?: string;
 }): Promise<AdminOrderList> {
   if (!hasApi) {
     let items = adminOrdersFixture.items;
+    if (q?.vendorId) items = items.filter((o) => o.ownerId === q.vendorId);
     if (q?.eventId) items = items.filter((o) => o.eventId === q.eventId);
     if (q?.status) items = items.filter((o) => o.status === q.status);
     return fake(localize({ items }));
@@ -561,6 +566,7 @@ export async function adminListOrders(q?: {
   const params = new URLSearchParams();
   if (q?.eventId) params.set('eventId', q.eventId);
   if (q?.status) params.set('status', q.status);
+  if (q?.vendorId) params.set('vendorId', q.vendorId);
   if (q?.cursor) params.set('cursor', q.cursor);
   const qs = params.toString();
   return AdminOrderList.parse(await authedRequest<unknown>(`/admin/orders${qs ? `?${qs}` : ''}`));
@@ -755,6 +761,85 @@ export async function adminUpdateVendor(id: string, input: AdminVendorInput): Pr
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  );
+}
+
+let fixtureMembers: Record<string, AdminVendorMember[]> = {};
+const membersFixture = (vendorId: string): AdminVendorMember[] =>
+  (fixtureMembers[vendorId] ??= [
+    {
+      userId: '2f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d',
+      email: 'maya@cardcorner.com',
+      displayName: 'Maya Johnson',
+      role: 'owner',
+      addedAt: '2026-04-12T15:00:00Z',
+    },
+  ]);
+
+export async function adminListVendorMembers(vendorId: string): Promise<AdminVendorMemberList> {
+  if (!hasApi) return fake({ items: membersFixture(vendorId) });
+  return AdminVendorMemberList.parse(
+    await authedRequest<unknown>(`/admin/vendors/${encodeURIComponent(vendorId)}/members`),
+  );
+}
+
+/** Add someone who already has an account; they get the vendor role. */
+export async function adminAddVendorMember(
+  vendorId: string,
+  email: string,
+): Promise<AdminVendorMemberList> {
+  if (!hasApi) {
+    const items = membersFixture(vendorId);
+    if (!email.endsWith('@example.com'))
+      throw new ApiError(
+        `No account uses ${email}. Ask them to sign up on the site first, then add them.`,
+        404,
+        'no_account',
+      );
+    fixtureMembers = {
+      ...fixtureMembers,
+      [vendorId]: [
+        ...items,
+        {
+          userId: '5f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d',
+          email,
+          displayName: email.split('@')[0]!,
+          role: 'member',
+          addedAt: new Date().toISOString(),
+        },
+      ],
+    };
+    return fake({ items: fixtureMembers[vendorId]! });
+  }
+  return AdminVendorMemberList.parse(
+    await authedRequest<unknown>(`/admin/vendors/${encodeURIComponent(vendorId)}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+  );
+}
+
+/** Remove a member; they lose the vendor role. The last member can't be removed. */
+export async function adminRemoveVendorMember(
+  vendorId: string,
+  userId: string,
+): Promise<AdminVendorMemberList> {
+  if (!hasApi) {
+    const items = membersFixture(vendorId);
+    if (items.length === 1)
+      throw new ApiError(
+        'This is the only member; add someone else first so the vendor keeps an account',
+        409,
+        'last_member',
+      );
+    fixtureMembers = { ...fixtureMembers, [vendorId]: items.filter((m) => m.userId !== userId) };
+    return fake({ items: fixtureMembers[vendorId]! });
+  }
+  return AdminVendorMemberList.parse(
+    await authedRequest<unknown>(
+      `/admin/vendors/${encodeURIComponent(vendorId)}/members/${encodeURIComponent(userId)}`,
+      { method: 'DELETE' },
+    ),
   );
 }
 

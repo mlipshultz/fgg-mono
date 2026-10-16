@@ -582,6 +582,24 @@ export const AdminVendorInput = VendorProfileInput.extend({
 }).partial();
 export type AdminVendorInput = z.infer<typeof AdminVendorInput>;
 
+/** A person attached to a vendor, with their account details. */
+export const AdminVendorMember = z.object({
+  userId: CognitoSub,
+  email: z.string(),
+  displayName: z.string(),
+  role: z.enum(['owner', 'member']),
+  addedAt: IsoDateTime,
+});
+export type AdminVendorMember = z.infer<typeof AdminVendorMember>;
+
+/** GET /admin/vendors/{id}/members */
+export const AdminVendorMemberList = z.object({ items: z.array(AdminVendorMember) });
+export type AdminVendorMemberList = z.infer<typeof AdminVendorMemberList>;
+
+/** POST /admin/vendors/{id}/members — someone who already has an account on the site. */
+export const AddVendorMemberInput = z.object({ email: Email });
+export type AddVendorMemberInput = z.infer<typeof AddVendorMemberInput>;
+
 export const VendorDashboard = z.object({
   vendor: VendorProfile,
   upcoming: z.array(VendorOrder),

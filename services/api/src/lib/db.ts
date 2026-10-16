@@ -491,22 +491,28 @@ export async function createUserIfMissing(user: User): Promise<boolean> {
 
 export async function updateUser(
   sub: string,
-  patch: Partial<Pick<User, 'displayName' | 'roles' | 'vendorId'>>,
+  /** `vendorId: null` removes the link (the user left their vendor). */
+  patch: Partial<Pick<User, 'displayName' | 'roles'>> & { vendorId?: string | null },
 ): Promise<User> {
   const sets: string[] = ['#u = :u'];
+  const removes: string[] = [];
   const names: Record<string, string> = { '#u': 'updatedAt' };
   const values: Record<string, unknown> = { ':u': new Date().toISOString() };
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
-    sets.push(`#${k} = :${k}`);
     names[`#${k}`] = k;
+    if (v === null) {
+      removes.push(`#${k}`);
+      continue;
+    }
+    sets.push(`#${k} = :${k}`);
     values[`:${k}`] = v;
   }
   const res = await ddb.send(
     new UpdateCommand({
       TableName: TABLE,
       Key: keys.user(sub),
-      UpdateExpression: `SET ${sets.join(', ')}`,
+      UpdateExpression: `SET ${sets.join(', ')}${removes.length ? ` REMOVE ${removes.join(', ')}` : ''}`,
       ExpressionAttributeNames: names,
       ExpressionAttributeValues: values,
       ConditionExpression: 'attribute_exists(PK)',

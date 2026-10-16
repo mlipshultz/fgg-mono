@@ -71,27 +71,38 @@ export function OrdersAdmin() {
       .catch(() => {});
   }, []);
 
-  const load = useCallback(async (ev: string, st: '' | OrderStatus, next?: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const page = await adminListOrders({
-        ...(ev ? { eventId: ev } : {}),
-        ...(st ? { status: st } : {}),
-        ...(next ? { cursor: next } : {}),
-      });
-      setRows((cur) => (next ? [...cur, ...page.items] : page.items));
-      setCursor(page.nextCursor);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load orders');
-    } finally {
-      setBusy(false);
-    }
+  /** From the vendors page: `?vendor=ID` shows one vendor's orders. */
+  const [vendorId, setVendorId] = useState<string | null>(null);
+  useEffect(() => {
+    setVendorId(new URLSearchParams(window.location.search).get('vendor') || '');
   }, []);
 
+  const load = useCallback(
+    async (ev: string, st: '' | OrderStatus, next?: string) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const page = await adminListOrders({
+          ...(vendorId ? { vendorId } : {}),
+          ...(ev ? { eventId: ev } : {}),
+          ...(st ? { status: st } : {}),
+          ...(next ? { cursor: next } : {}),
+        });
+        setRows((cur) => (next ? [...cur, ...page.items] : page.items));
+        setCursor(page.nextCursor);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not load orders');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [vendorId],
+  );
+
   useEffect(() => {
+    if (vendorId === null) return; // wait until the URL has been read
     void load(eventId, status);
-  }, [eventId, status, load]);
+  }, [eventId, status, load, vendorId]);
 
   const refund = async (o: VendorOrder) => {
     if (
@@ -219,6 +230,14 @@ export function OrdersAdmin() {
           )}
         </div>
       </div>
+
+      {vendorId && (
+        <div className={styles.toast} role="status">
+          Showing one vendor&apos;s orders
+          {rows[0]?.vendorInfo?.tableName ? ` (${rows[0].vendorInfo.tableName})` : ''}.{' '}
+          <a href="/admin/orders/">Show all orders</a>
+        </div>
+      )}
 
       <CancelRequests
         superAdmin={superAdmin}

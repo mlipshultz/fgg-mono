@@ -45,6 +45,7 @@ import {
   getVendorApplication,
   getVendorForUser,
   listOrdersByStatus,
+  listOrdersForOwner,
   listOrdersForEvent,
   listSavedEventIds,
   listUserItems,
@@ -421,7 +422,13 @@ router
     const limit = Math.min(Math.max(Number(q.limit) || 25, 1), 100);
     const cursor = decodeCursor<Record<string, unknown>>(q.cursor);
     let page;
-    if (q.status && (ORDER_STATUSES as readonly string[]).includes(q.status)) {
+    if (q.vendorId) {
+      // One vendor's orders (from the vendors page): few enough to return in one go.
+      const items = (await listOrdersForOwner(q.vendorId)).filter(
+        (o) => (!q.status || o.status === q.status) && (!q.eventId || o.eventId === q.eventId),
+      );
+      page = { items };
+    } else if (q.status && (ORDER_STATUSES as readonly string[]).includes(q.status)) {
       page = await listOrdersByStatus(q.status as Order['status'], limit, cursor);
       if (q.eventId) page.items = page.items.filter((o) => o.eventId === q.eventId);
     } else if (q.eventId) {
