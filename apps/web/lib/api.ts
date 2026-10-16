@@ -5,6 +5,9 @@ import {
   type CancelRequestInput,
   CheckoutResponse,
   AdminEvent,
+  CancelRequestList,
+  type ApproveCancelInput,
+  type DeclineCancelInput,
   AdminEventList,
   AdminSettings,
   AdminVenue,
@@ -54,6 +57,7 @@ import {
   applicationsFixture,
   eventVendorsFixture,
   adminEventsFixture,
+  cancelRequestsFixture,
   countEventFixture,
   countResponseFixture,
   floorPlanResponseFixture,
@@ -384,6 +388,7 @@ export async function requestCancel(
       ...localize(paidOrderFixture),
       id: orderId,
       cancelRequestedAt: new Date().toISOString(),
+      ...(input.reason ? { cancelReason: input.reason } : {}),
     });
   }
   return VendorOrder.parse(
@@ -555,6 +560,66 @@ export async function adminListOrders(q?: {
   if (q?.cursor) params.set('cursor', q.cursor);
   const qs = params.toString();
   return AdminOrderList.parse(await authedRequest<unknown>(`/admin/orders${qs ? `?${qs}` : ''}`));
+}
+
+/** Fixture mode keeps the queue in memory so approve / decline behave like the real ones. */
+let fixtureCancels: CancelRequestList | null = null;
+const cancelFixture = () => (fixtureCancels ??= localize(cancelRequestsFixture));
+
+export async function adminListCancelRequests(): Promise<CancelRequestList> {
+  if (!hasApi) return fake(cancelFixture());
+  return CancelRequestList.parse(await authedRequest<unknown>('/admin/orders/cancel-requests'));
+}
+
+export async function adminApproveCancel(
+  orderId: string,
+  input: ApproveCancelInput,
+): Promise<VendorOrder> {
+  if (!hasApi) {
+    const q = cancelFixture();
+    const o = q.items.find((x) => x.id === orderId)!;
+    fixtureCancels = { ...q, items: q.items.filter((x) => x.id !== orderId) };
+    return fake({
+      ...o,
+      status: 'refunded' as const,
+      refundedAt: new Date().toISOString(),
+      ...(input.amountCents !== undefined && input.amountCents < o.totalCents
+        ? { refundedCents: input.amountCents }
+        : {}),
+    });
+  }
+  return VendorOrder.parse(
+    await authedRequest<unknown>(
+      `/admin/orders/${encodeURIComponent(orderId)}/cancel-request/approve`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  );
+}
+
+export async function adminDeclineCancel(
+  orderId: string,
+  input: DeclineCancelInput,
+): Promise<VendorOrder> {
+  if (!hasApi) {
+    const q = cancelFixture();
+    const {
+      cancelRequestedAt: _r,
+      cancelReason: _c,
+      ...o
+    } = q.items.find((x) => x.id === orderId)!;
+    fixtureCancels = { ...q, items: q.items.filter((x) => x.id !== orderId) };
+    return fake({
+      ...o,
+      cancelDeclinedAt: new Date().toISOString(),
+      ...(input.note ? { cancelDeclineNote: input.note } : {}),
+    });
+  }
+  return VendorOrder.parse(
+    await authedRequest<unknown>(
+      `/admin/orders/${encodeURIComponent(orderId)}/cancel-request/decline`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  );
 }
 
 export async function adminRefund(orderId: string, reason?: string): Promise<VendorOrder> {

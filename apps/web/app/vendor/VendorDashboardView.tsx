@@ -87,10 +87,12 @@ export function VendorDashboardView() {
       days >= cutoff
         ? `Request a cancellation for ${tablesPhrase(o)} at ${o.event.name}? You're ${days} days out, so the refund is in full once staff approve it.`
         : `Request a cancellation for ${tablesPhrase(o)} at ${o.event.name}? The show is in ${days} days, inside the ${cutoff}-day refund window, so staff decide the refund.`;
-    if (!window.confirm(msg)) return;
+    // The reason goes to staff with the request; cancelling the prompt keeps the booking.
+    const reason = window.prompt(`${msg}\n\nReason for staff (optional):`, '');
+    if (reason === null) return;
     setBusyId(o.id);
     try {
-      const updated = await requestCancel(o.id, {});
+      const updated = await requestCancel(o.id, reason.trim() ? { reason: reason.trim() } : {});
       setData((cur) =>
         cur
           ? {
@@ -211,7 +213,15 @@ export function VendorDashboardView() {
                     {o.cancelRequestedAt && (
                       <span className={`${v.statusPill} ${v.pending}`}>Cancellation requested</span>
                     )}
+                    {o.cancelDeclinedAt && (
+                      <span className={`${v.statusPill} ${v.cancelled}`}>
+                        Cancellation declined
+                      </span>
+                    )}
                   </div>
+                  {o.cancelDeclinedAt && o.cancelDeclineNote && (
+                    <div className={styles.showMeta}>From FGG: {o.cancelDeclineNote}</div>
+                  )}
                 </div>
                 <div className={styles.showLinks}>
                   <Link href={`/vendor/orders/pass?id=${o.id}`} className={styles.primaryLink}>

@@ -1,0 +1,49 @@
+.request {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--space-12);
+  padding-top: var(--space-12);
+  border-top: var(--border-width) solid var(--border-color);
+}
+.reason {
+  margin: 6px 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+}
+.inside {
+  background: var(--color-yellow);
+}
+.requestActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.buttons {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+}
+.field input {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-input);
+  padding: 8px 10px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+  max-width: 100%;
+}
+@media (max-width: 767px) {
+  .request {
+    grid-template-columns: 1fr;
+  }
+}

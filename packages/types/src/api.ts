@@ -538,7 +538,6 @@ export const VendorOrder = Order.extend({
   }),
   /** "Sat Oct 24 · 8:30am" when the event defines a load-in time. */
   loadInLabel: z.string().optional(),
-  cancelRequestedAt: IsoDateTime.optional(),
 });
 export type VendorOrder = z.infer<typeof VendorOrder>;
 
@@ -589,6 +588,27 @@ export type AdminOrderList = z.infer<typeof AdminOrderList>;
 
 export const RefundInput = z.object({ reason: z.string().max(1000).optional() });
 export type RefundInput = z.infer<typeof RefundInput>;
+
+/** GET /admin/orders/cancel-requests — paid orders whose vendor asked to cancel, oldest first. */
+export const CancelRequestList = z.object({
+  items: z.array(VendorOrder),
+  refundCutoffDays: z.number().int().nonnegative(),
+});
+export type CancelRequestList = z.infer<typeof CancelRequestList>;
+
+/**
+ * POST /admin/orders/{id}/cancel-request/approve — refund and free the tables. `amountCents`
+ * defaults to the full total; less is allowed (inside the refund window staff decide).
+ */
+export const ApproveCancelInput = z.object({
+  amountCents: z.number().int().nonnegative().optional(),
+  note: z.string().max(1000).optional(),
+});
+export type ApproveCancelInput = z.infer<typeof ApproveCancelInput>;
+
+/** POST /admin/orders/{id}/cancel-request/decline — the booking stays; the vendor sees the note. */
+export const DeclineCancelInput = z.object({ note: z.string().max(1000).optional() });
+export type DeclineCancelInput = z.infer<typeof DeclineCancelInput>;
 
 /**
  * POST /admin/orders/comp — staff assign a table without payment (source: manual, $0). Send
