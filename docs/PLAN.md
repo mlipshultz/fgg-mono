@@ -297,12 +297,21 @@ EAS Update with a channel per stage.
 
 - `ci.yml` on every PR: install, lint, typecheck, test, `cdk synth`, `cdk diff` as a PR comment.
   `turbo --filter=...[origin/main]` limits work to what changed.
-- `deploy.yml`: push to `main` → `cdk deploy` all `*-dev` stacks, then build and sync the web app to
-  the dev bucket. Prod runs on manual approval via a GitHub Environment with a required reviewer.
+- `deploy.yml`: `cdk deploy` all stacks for a stage, then build and sync the web app. Manual only
+  (`workflow_dispatch`, dev or prod) while the site is in development (since 2026-10-15). Before prod
+  goes live, restore the push-to-`main` trigger for dev. Prod runs on manual approval via a GitHub
+  Environment with a required reviewer.
 - `rebuild-site.yml`: triggered by `repository_dispatch` from the admin publish action; builds the
   web app against the given stage and syncs it.
 - `mobile.yml`: EAS Build on release tags, EAS Update on `main`.
 - AWS access via GitHub OIDC with one deploy role. No long-lived keys.
+
+During development, `pnpm dev:deploy` (`scripts/dev-deploy.sh`) deploys the working tree straight to
+dev from a laptop: `cdk deploy --hotswap-fallback` (Lambda code swaps in seconds; IAM, env or route
+changes fall back to CloudFormation) and the same S3 sync and CloudFront invalidation as the web
+workflow. Dev only. The GitHub deploy passes `--revert-drift`, so running it puts back anything
+hotswapped from a branch. The admin "Rebuild site" button still rebuilds the site through GitHub
+from `main`'s code, so after a rebuild the dev site matches `main`, not your branch.
 
 ## 4. Build phases
 

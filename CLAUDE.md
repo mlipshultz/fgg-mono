@@ -18,7 +18,9 @@ spec is `docs/handoff/README.md` and the canvas `docs/handoff/FGG Site.dc.html`.
 ## Commands
 
 - `pnpm install`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (Turborepo).
-- `pnpm --filter @fgg/web dev` for the site. `pnpm --filter @fgg/infra deploy:dev` to deploy dev.
+- `pnpm --filter @fgg/web dev` for the site. `pnpm dev:deploy [all|api|web]` deploys the working tree
+  straight to dev (Lambda code hotswaps in about 10 s, the site in a minute or two). This is how dev
+  gets deployed during development.
 - Browser tests (Playwright, `apps/web/e2e`): `pnpm --filter @fgg/web e2e:build && pnpm --filter @fgg/web e2e`
   runs against the fixture export (what CI runs); `pnpm --filter @fgg/web e2e:dev` runs the `@live`
   specs against dev, signing in with the smoke account from `.env.dev-smoke`. `e2e:ui` to watch.
@@ -31,7 +33,8 @@ spec is `docs/handoff/README.md` and the canvas `docs/handoff/FGG Site.dc.html`.
 - Roles are Cognito groups; every API route checks `can()` from the permissions module.
 - Styling: CSS modules + token variables. No Tailwind. Sticker look = 2px ink border + hard offset
   shadow, only on interactive and hero elements.
-- Changes land via PR to `main`; CI must pass. `main` auto-deploys dev; prod is a manual dispatch.
+- Changes land via PR to `main`; CI must pass. Merging does not deploy: the GitHub "Deploy" workflow
+  is manual-only (dev or prod) until prod goes live; use `pnpm dev:deploy` for dev.
 
 ## Gotchas
 
