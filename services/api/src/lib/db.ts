@@ -322,6 +322,15 @@ async function listEventPrefix<T>(
   return items as unknown as T[];
 }
 
+/** Every item stored under an event: META, price windows, holds, bookings, orders, counters. */
+export async function listEventItems(eventId: string): Promise<Keys[]> {
+  const items = await queryAll({
+    KeyConditionExpression: 'PK = :pk',
+    ExpressionAttributeValues: { ':pk': `EVENT#${eventId}` },
+  });
+  return items as unknown as Keys[];
+}
+
 export const listHolds = (eventId: string, consistent = false) =>
   listEventPrefix<HoldItem>(eventId, 'HOLD#', consistent);
 export const listBookedTables = (eventId: string, consistent = false) =>

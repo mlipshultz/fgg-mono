@@ -722,6 +722,16 @@ export async function adminSaveEvent(input: EventInput, id?: string): Promise<Ad
   );
 }
 
+/** Delete an unpublished event that has no orders, bookings or sign-ups. */
+export async function adminDeleteEvent(id: string): Promise<void> {
+  if (!hasApi) {
+    const list = adminFixture();
+    fixtureAdmin = { ...list, events: list.events.filter((e) => e.id !== id) };
+    return fake(undefined, 200);
+  }
+  await authedRequest(`/admin/events/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 /** Create (no id) or update a venue. */
 export async function adminSaveVenue(input: VenueInput, id?: string): Promise<AdminVenue> {
   if (!hasApi) {

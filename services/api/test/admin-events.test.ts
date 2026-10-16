@@ -223,6 +223,63 @@ describe('admin events', () => {
   });
 });
 
+describe('deleting events', () => {
+  it('deletes an unpublished event with no activity, along with its price windows', async () => {
+    const ev = AdminEvent.parse(
+      parse(
+        await handler(
+          staff('POST', '/admin/events', {
+            ...input,
+            published: true,
+            priceWindows: [
+              {
+                kind: 'early_bird',
+                startsAt: '2026-09-01T04:00:00.000Z',
+                endsAt: '2026-11-01T04:00:00.000Z',
+                tableRateCents: 15000,
+                pokeBucksRateCents: 7500,
+              },
+            ],
+          }),
+        ),
+      ).body,
+    );
+    const del = () => handler(staff('DELETE', `/admin/events/${ev.id}`));
+    expect(parse(await del()).body.error.code).toBe('published');
+    await handler(staff('PUT', `/admin/events/${ev.id}`, { ...input, published: false }));
+    // An expired hold is a leftover, not activity.
+    db.put({
+      ...keys.hold(ev.id, '2027-01-23', 'A1'),
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    expect(parse(await del()).status).toBe(200);
+    expect(db.all().filter((i) => i.PK === `EVENT#${ev.id}`)).toEqual([]);
+    expect(parse(await del()).status).toBe(404);
+    expect(parse(await handler(vendor('DELETE', `/admin/events/${EVENT_ID}`))).status).toBe(403);
+  });
+
+  it('keeps events with orders, bookings, live holds or sign-ups', async () => {
+    const kinds = [
+      'ORDER#x',
+      'TABLE#2027-01-23#A1',
+      'WAIT#2026#x@example.com',
+      'HOLD#2027-01-23#A2',
+    ];
+    for (const [i, sk] of kinds.entries()) {
+      const ev = AdminEvent.parse(
+        parse(await handler(staff('POST', '/admin/events', { ...input, slug: `kept-${i}` }))).body,
+      );
+      db.put({
+        PK: `EVENT#${ev.id}`,
+        SK: sk,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const res = parse(await handler(staff('DELETE', `/admin/events/${ev.id}`)));
+      expect(res.body.error?.code, sk).toBe('has_activity');
+    }
+  });
+});
+
 describe('price windows', () => {
   const early = {
     kind: 'early_bird',

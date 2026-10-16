@@ -68,6 +68,10 @@
   text-decoration: underline;
   cursor: pointer;
 }
+/* Delete sits apart from Save and Cancel, at the far end of the row. */
+.danger {
+  margin-left: auto;
+}
 .formActions {
   display: flex;
   gap: var(--space-12);
