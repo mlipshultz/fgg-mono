@@ -72,6 +72,7 @@ export function toPublicEvent(
     hoursLabel: hoursLabel(ev.days),
     venue: { id: venue.id, name: venue.name, city: venue.city, state: venue.state },
     ...(ev.posterKey ? { posterUrl: mediaUrl(ev.posterKey) } : {}),
+    ...(ev.cardKey ? { cardUrl: mediaUrl(ev.cardKey) } : {}),
     vendorStatus: ev.vendorStatus,
     ...(ev.vendorOpensAt ? { vendorOpensAt: ev.vendorOpensAt } : {}),
     ...(ev.tableBooking === 'quantity' ? { tableBooking: ev.tableBooking } : {}),
@@ -172,14 +173,15 @@ export async function loadAvailability(ev: Event): Promise<EventAvailability> {
   return computeAvailability(ev, plan, holds, booked);
 }
 
-const venueCache = new Map<string, Promise<Venue | undefined>>();
+/** Venues change rarely but are editable in admin, so a warm Lambda re-reads them every minute. */
+const VENUE_TTL_MS = 60_000;
+const venueCache = new Map<string, { at: number; venue: Promise<Venue | undefined> }>();
 export function venueFor(id: string): Promise<Venue | undefined> {
-  let p = venueCache.get(id);
-  if (!p) {
-    p = getVenue(id);
-    venueCache.set(id, p);
-  }
-  return p;
+  const hit = venueCache.get(id);
+  if (hit && Date.now() - hit.at < VENUE_TTL_MS) return hit.venue;
+  const venue = getVenue(id);
+  venueCache.set(id, { at: Date.now(), venue });
+  return venue;
 }
 export function clearVenueCache(): void {
   venueCache.clear();
@@ -196,6 +198,31 @@ export async function toPublicEvents(events: Event[]): Promise<PublicEvent[]> {
     out.push(toPublicEvent(ev, venue, left, tablesFromCents(ev, plan, windows)));
   }
   return out;
+}
+
+/** A wall-clock time in an IANA zone as a UTC instant: ("2026-10-24", "11:00", New York) → 15:00Z. */
+export function zonedToUtcIso(date: string, hhmm: string, timeZone: string): string {
+  const [y, mo, d] = date.split('-').map(Number) as [number, number, number];
+  const [h, mi] = hhmm.split(':').map(Number) as [number, number];
+  const wall = Date.UTC(y, mo - 1, d, h, mi);
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+  });
+  /** What the zone's clock reads at a UTC instant, as if that reading were UTC. */
+  const readingAt = (utc: number) => {
+    const p = Object.fromEntries(fmt.formatToParts(new Date(utc)).map((x) => [x.type, x.value]));
+    return Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!);
+  };
+  // Start from the wall time as UTC and correct by the zone's offset; twice, for DST edges.
+  let utc = wall - (readingAt(wall) - wall);
+  utc = wall - (readingAt(utc) - utc);
+  return new Date(utc).toISOString();
 }
 
 export function todayIso(now = new Date()): string {

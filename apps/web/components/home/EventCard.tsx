@@ -13,6 +13,8 @@ const TILE = { pink: styles.tilePink, aqua: styles.tileAqua, yellow: styles.tile
 export function EventCard({ ev, index }: { ev: PublicEvent; index: number }) {
   const color = stubColor(index);
   const thisYear = new Date().getFullYear();
+  /** The landscape card image when the event has one, else the poster. */
+  const image = ev.cardUrl ?? ev.posterUrl;
   return (
     <article
       id={`event-${ev.slug}`}
@@ -24,10 +26,10 @@ export function EventCard({ ev, index }: { ev: PublicEvent; index: number }) {
         className={styles.poster}
         aria-label={`${ev.name} event details`}
       >
-        {ev.posterUrl ? (
+        {image ? (
           <>
-            <img src={ev.posterUrl} alt="" aria-hidden="true" className={styles.posterBlur} />
-            <img src={ev.posterUrl} alt="" className={styles.posterImg} />
+            <img src={image} alt="" aria-hidden="true" className={styles.posterBlur} />
+            <img src={image} alt="" className={styles.posterImg} />
           </>
         ) : (
           <span className={styles.posterEmpty}>Poster coming soon</span>

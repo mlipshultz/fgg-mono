@@ -4,7 +4,14 @@ import {
   AdminUserRow,
   type CancelRequestInput,
   CheckoutResponse,
+  AdminEvent,
+  AdminEventList,
   AdminSettings,
+  AdminVenue,
+  EventImageUploadResponse,
+  type EventImageUploadInput,
+  type EventInput,
+  type VenueInput,
   type CompOrderInput,
   type UpdateSettingsInput,
   type ContactSubmissionInput,
@@ -45,6 +52,7 @@ import {
   adminOrdersFixture,
   applicationsFixture,
   eventVendorsFixture,
+  adminEventsFixture,
   countEventFixture,
   countResponseFixture,
   floorPlanResponseFixture,
@@ -593,6 +601,96 @@ export async function adminComp(input: CompOrderInput): Promise<VendorOrder> {
       body: JSON.stringify(input),
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Admin events and venues. Fixture mode keeps edits in memory.
+// ---------------------------------------------------------------------------
+
+let fixtureAdmin: AdminEventList | null = null;
+const adminFixture = (): AdminEventList => (fixtureAdmin ??= localize(adminEventsFixture));
+
+export async function adminListEvents(): Promise<AdminEventList> {
+  if (!hasApi) return fake(adminFixture());
+  return AdminEventList.parse(await authedRequest<unknown>('/admin/events'));
+}
+
+/** Create (no id) or update an event. */
+export async function adminSaveEvent(input: EventInput, id?: string): Promise<AdminEvent> {
+  if (!hasApi) {
+    const list = adminFixture();
+    const old = list.events.find((e) => e.id === id);
+    const now = new Date().toISOString();
+    const first = input.days[0]!;
+    const last = input.days[input.days.length - 1]!;
+    const saved: AdminEvent = {
+      ...input,
+      id: old?.id ?? `01JEVT${String(Date.now()).padStart(20, '0').slice(-20)}`,
+      timeZone: 'America/New_York',
+      startsAt: `${first.date}T${first.opens}:00-05:00`,
+      endsAt: `${last.date}T${last.closes}:00-05:00`,
+      createdAt: old?.createdAt ?? now,
+      updatedAt: now,
+      ...(old?.posterUrl && input.posterKey === old.posterKey ? { posterUrl: old.posterUrl } : {}),
+      ...(old?.cardUrl && input.cardKey === old.cardKey ? { cardUrl: old.cardUrl } : {}),
+    };
+    fixtureAdmin = { ...list, events: [saved, ...list.events.filter((e) => e.id !== saved.id)] };
+    return fake(saved);
+  }
+  return AdminEvent.parse(
+    await authedRequest<unknown>(id ? `/admin/events/${encodeURIComponent(id)}` : '/admin/events', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Create (no id) or update a venue. */
+export async function adminSaveVenue(input: VenueInput, id?: string): Promise<AdminVenue> {
+  if (!hasApi) {
+    const list = adminFixture();
+    const old = list.venues.find((v) => v.id === id);
+    const saved: AdminVenue = {
+      ...input,
+      id: old?.id ?? `01JVEN${String(Date.now()).padStart(20, '0').slice(-20)}`,
+      hasFloorPlan: old?.hasFloorPlan ?? false,
+    };
+    fixtureAdmin = { ...list, venues: [...list.venues.filter((v) => v.id !== saved.id), saved] };
+    return fake(saved);
+  }
+  return AdminVenue.parse(
+    await authedRequest<unknown>(id ? `/admin/venues/${encodeURIComponent(id)}` : '/admin/venues', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Presign, PUT the image straight to S3, and hand back the key to save on the event. */
+export async function adminUploadEventImage(
+  file: Blob,
+  input: EventImageUploadInput,
+): Promise<{ key: string; url: string }> {
+  if (!hasApi) return fake({ key: `events/${input.kind}-fixture`, url: URL.createObjectURL(file) });
+  const up = EventImageUploadResponse.parse(
+    await authedRequest<unknown>('/admin/events/image-upload', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+  const res = await fetch(up.uploadUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'content-type': input.contentType },
+  });
+  if (!res.ok) throw new ApiError(`Upload failed (${res.status})`, res.status);
+  return { key: up.key, url: up.url };
+}
+
+/** Ask for the public site to be rebuilt so published changes show up. */
+export async function adminRebuildSite(): Promise<void> {
+  if (!hasApi) return fake(undefined, 300);
+  await authedRequest('/admin/site/rebuild', { method: 'POST' });
 }
 
 /** Fixture mode keeps what was saved so the settings screen behaves like the real one. */

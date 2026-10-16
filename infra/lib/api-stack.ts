@@ -194,6 +194,21 @@ export class ApiStack extends Stack {
     this.accountFn.addEnvironment('SHOPIFY_SECRET_ID', shopifySecretName);
     this.accountFn.addToRolePolicy(secretRead);
 
+    // Admin events: poster and card uploads (presigned PUTs under events/), and the site rebuild,
+    // which reads a GitHub token staff store as `fgg/{stage}/github` ({ token, repo }).
+    this.accountFn.addEnvironment('MEDIA_BUCKET', props.mediaBucket.bucketName);
+    props.mediaBucket.grantPut(this.accountFn, 'events/*');
+    const githubSecretName = `fgg/${config.stage}/github`;
+    this.accountFn.addEnvironment('GITHUB_SECRET_ID', githubSecretName);
+    this.accountFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${githubSecretName}-*`,
+        ],
+      }),
+    );
+
     new CfnOutput(this, 'ApiUrl', { value: this.api.apiEndpoint });
     new CfnOutput(this, 'ShopifyWebhookUrl', { value: `${this.api.apiEndpoint}/webhooks/shopify` });
     new CfnOutput(this, 'ShopifyInstallUrl', { value: `${this.api.apiEndpoint}/shopify/install` });

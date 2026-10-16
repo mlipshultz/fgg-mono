@@ -49,11 +49,19 @@ export const keys = {
   event: (id: string): Keys => ({ PK: `EVENT#${id}`, SK: 'META' }),
   eventIndex: (ev: Pick<Event, 'id' | 'slug' | 'startsAt' | 'published'>): Keys => ({
     ...keys.event(ev.id),
-    ...(ev.published ? { GSI1PK: 'EVENTS#published', GSI1SK: ev.startsAt } : {}),
+    // Drafts sit in their own partition so the admin list can find them.
+    GSI1PK: ev.published ? 'EVENTS#published' : 'EVENTS#draft',
+    GSI1SK: ev.startsAt,
     GSI2PK: `SLUG#${ev.slug}`,
     GSI2SK: `EVENT#${ev.id}`,
   }),
   venue: (id: string): Keys => ({ PK: `VENUE#${id}`, SK: 'META' }),
+  /** Venues saved from the admin console are listed through GSI1. */
+  venueIndex: (v: Pick<Venue, 'id' | 'name'>): Keys => ({
+    ...keys.venue(v.id),
+    GSI1PK: 'VENUES',
+    GSI1SK: v.name.toLowerCase(),
+  }),
   floorPlan: (venueId: string): Keys => ({ PK: `VENUE#${venueId}`, SK: 'FLOORPLAN' }),
   hold: (eventId: string, date: string, tableId: string): Keys => ({
     PK: `EVENT#${eventId}`,
@@ -269,6 +277,26 @@ export async function listPublishedEvents(): Promise<Event[]> {
     ExpressionAttributeValues: { ':pk': 'EVENTS#published' },
   });
   return items as unknown as Event[];
+}
+
+/** Unpublished events, which only the admin console lists. */
+export async function listDraftEvents(): Promise<Event[]> {
+  const items = await queryAll({
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'GSI1PK = :pk',
+    ExpressionAttributeValues: { ':pk': 'EVENTS#draft' },
+  });
+  return items as unknown as Event[];
+}
+
+/** Venues that have been saved from the admin console (seeded ones join on their first save). */
+export async function listIndexedVenues(): Promise<Venue[]> {
+  const items = await queryAll({
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'GSI1PK = :pk',
+    ExpressionAttributeValues: { ':pk': 'VENUES' },
+  });
+  return items.map((i) => stripKeys<Venue>(i));
 }
 
 export async function getVenue(id: string): Promise<Venue | undefined> {

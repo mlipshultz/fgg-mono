@@ -124,32 +124,32 @@ are checked. Every handler calls it.
 Event, venue and vendor IDs are ULIDs. Slugs are attributes with an index for URL lookup, so a
 rename never re-keys. Everything a user earns is keyed by their Cognito sub.
 
-| Entity                                 | PK                 | SK                                                        | GSI1                                                                |
-| -------------------------------------- | ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------- |
-| User                                   | `USER#sub`         | `META`                                                    | `EMAIL#email` / `USER#sub` (lookup by email)                        |
-| User list entry (admin paging)         | `USER#sub`         | `META`                                                    | also `GSI2PK = USERS#<shard 0-9>` / `createdAt`                     |
-| XP total, badges, saved events         | `USER#sub`         | `STATS` / `BADGE#id` / `SAVED#eventId`                    |                                                                     |
-| Per-event XP total                     | `USER#sub`         | `EVENTXP#eventId`                                         | (future leaderboard index)                                          |
-| XP transaction / scan                  | `USER#sub`         | `XP#ts#scanId`                                            | `EVENT#eventId` / `XP#ts` (per-event audit, check-in list)          |
-| Vendor                                 | `VENDOR#id`        | `META`                                                    | `VENDORS#status` / `businessName`                                   |
-| Vendor member                          | `VENDOR#id`        | `MEMBER#sub`                                              | `USER#sub` / `VENDOR#id` (my vendor)                                |
-| Vendor application                     | `USER#sub`         | `VENDORAPP`                                               | `VENDORAPPS#status` / `ts` (review queue)                           |
-| Event                                  | `EVENT#id`         | `META`                                                    | `EVENTS#published` / `startsAt` (list); `SLUG#slug` on GSI2         |
-| Event day                              | `EVENT#id`         | `DAY#date`                                                |                                                                     |
-| Price window (early bird etc.)         | `EVENT#id`         | `PRICE#kind#startsAt`                                     |                                                                     |
-| Ticket type                            | `EVENT#id`         | `TICKETTYPE#id`                                           |                                                                     |
-| Venue + floor plan                     | `VENUE#id`         | `META` / `FLOORPLAN`                                      |                                                                     |
-| Table hold                             | `EVENT#id`         | `HOLD#date#tableId`                                       | `VENDOR#id` / `HOLD#...` (my holds). `ttl` set.                     |
-| Order (table booking or tickets)       | `EVENT#id`         | `ORDER#id`                                                | `OWNER#vendorId or sub` / `ORDER#startsAt`; `ORDERS#status` on GSI2 |
-| Order history                          | `EVENT#id`         | `ORDER#id#HIST#ts`                                        |                                                                     |
-| Booked table (one per day)             | `EVENT#id`         | `TABLE#date#tableId`                                      |                                                                     |
-| Issued ticket (one per seat)           | `EVENT#id`         | `TICKET#id`                                               | `USER#sub` / `TICKET#eventId` (my tickets)                          |
-| Counters (pass numbers, sold counts)   | `EVENT#id`         | `COUNTER`                                                 |                                                                     |
-| Waitlist / notify-me                   | `EVENT#id`         | `WAIT#ts#email` / `NOTIFY#sub`                            |                                                                     |
-| Subscriber / contact submission        | `LIST` / `CONTACT` | `SUB#email` / `MSG#ts`                                    |                                                                     |
-| Gallery item                           | `GALLERY`          | `ITEM#eventId#sort`                                       | `EVENT#eventId` / `GALLERY#sort`                                    |
-| Partner, activity, level, badge config | `CONFIG`           | `PARTNER#sort` / `ACTIVITY#sort` / `LEVEL#n` / `BADGE#id` |                                                                     |
-| Settings                               | `CONFIG`           | `SETTINGS`                                                |                                                                     |
+| Entity                                 | PK                 | SK                                                        | GSI1                                                                   |
+| -------------------------------------- | ------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| User                                   | `USER#sub`         | `META`                                                    | `EMAIL#email` / `USER#sub` (lookup by email)                           |
+| User list entry (admin paging)         | `USER#sub`         | `META`                                                    | also `GSI2PK = USERS#<shard 0-9>` / `createdAt`                        |
+| XP total, badges, saved events         | `USER#sub`         | `STATS` / `BADGE#id` / `SAVED#eventId`                    |                                                                        |
+| Per-event XP total                     | `USER#sub`         | `EVENTXP#eventId`                                         | (future leaderboard index)                                             |
+| XP transaction / scan                  | `USER#sub`         | `XP#ts#scanId`                                            | `EVENT#eventId` / `XP#ts` (per-event audit, check-in list)             |
+| Vendor                                 | `VENDOR#id`        | `META`                                                    | `VENDORS#status` / `businessName`                                      |
+| Vendor member                          | `VENDOR#id`        | `MEMBER#sub`                                              | `USER#sub` / `VENDOR#id` (my vendor)                                   |
+| Vendor application                     | `USER#sub`         | `VENDORAPP`                                               | `VENDORAPPS#status` / `ts` (review queue)                              |
+| Event                                  | `EVENT#id`         | `META`                                                    | `EVENTS#published` or `EVENTS#draft` / `startsAt`; `SLUG#slug` on GSI2 |
+| Event day                              | `EVENT#id`         | `DAY#date`                                                |                                                                        |
+| Price window (early bird etc.)         | `EVENT#id`         | `PRICE#kind#startsAt`                                     |                                                                        |
+| Ticket type                            | `EVENT#id`         | `TICKETTYPE#id`                                           |                                                                        |
+| Venue + floor plan                     | `VENUE#id`         | `META` / `FLOORPLAN`                                      | `VENUES` / name, once saved from admin                                 |
+| Table hold                             | `EVENT#id`         | `HOLD#date#tableId`                                       | `VENDOR#id` / `HOLD#...` (my holds). `ttl` set.                        |
+| Order (table booking or tickets)       | `EVENT#id`         | `ORDER#id`                                                | `OWNER#vendorId or sub` / `ORDER#startsAt`; `ORDERS#status` on GSI2    |
+| Order history                          | `EVENT#id`         | `ORDER#id#HIST#ts`                                        |                                                                        |
+| Booked table (one per day)             | `EVENT#id`         | `TABLE#date#tableId`                                      |                                                                        |
+| Issued ticket (one per seat)           | `EVENT#id`         | `TICKET#id`                                               | `USER#sub` / `TICKET#eventId` (my tickets)                             |
+| Counters (pass numbers, sold counts)   | `EVENT#id`         | `COUNTER`                                                 |                                                                        |
+| Waitlist / notify-me                   | `EVENT#id`         | `WAIT#ts#email` / `NOTIFY#sub`                            |                                                                        |
+| Subscriber / contact submission        | `LIST` / `CONTACT` | `SUB#email` / `MSG#ts`                                    |                                                                        |
+| Gallery item                           | `GALLERY`          | `ITEM#eventId#sort`                                       | `EVENT#eventId` / `GALLERY#sort`                                       |
+| Partner, activity, level, badge config | `CONFIG`           | `PARTNER#sort` / `ACTIVITY#sort` / `LEVEL#n` / `BADGE#id` |                                                                        |
+| Settings                               | `CONFIG`           | `SETTINGS`                                                |                                                                        |
 
 Two GSIs from the start: `GSI1` for owner lookups, `GSI2` for admin list and status views.
 
@@ -432,7 +432,7 @@ placeholder. QR on the vendor pass is Phase 5.
 
 ### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
-Build order, smallest payoff first. 1 is built; 2 is next.
+Build order, smallest payoff first. 1 is built; 2 is in progress.
 
 1. **Settings and roles.** Built 2026-10-11: `/admin/settings` (superadmin) edits fee, tax, hold
    minutes, checkout hold minutes, refund cutoff and the Calendly link through `GET` / `PUT
@@ -441,10 +441,25 @@ Build order, smallest payoff first. 1 is built; 2 is next.
    the smoke account can make another account `superadmin` there. Not on the screen yet: vendor
    approval mode, per-vendor table cap, PokéBucks partner cap, contact and social links. The
    static `/terms` page still says 14 days.
-2. **Events and venues.** Create / edit / publish → site rebuild; poster upload plus an optional
-   card image (landscape crop for the home card); price windows and premium tables; venue and
-   floor-plan editor. The event editor sets the booking mode (`floor_plan` / `quantity`) and the
-   per-day table capacity; until then a `quantity` event can only be seeded.
+2. **Events and venues.** In slices.
+   - _A, built 2026-10-11:_ `/admin/events` (staff and superadmin) lists every event, drafts
+     included, and creates / edits / publishes them: name, link, venue, days and hours, vendor
+     status, rates, booking mode (`floor_plan` / `quantity`) with per-day capacity, poster and an
+     optional card image (`cardKey`; the home card uses it over the poster). A Venues tab creates
+     and edits venue details. "Rebuild site" calls `POST /admin/site/rebuild`. Edits are refused
+     when they would pull something out from under a vendor: removing a day with booked or held
+     tables, or changing the venue or booking mode once tables are booked or held. Map booking
+     can't open at a venue with no floor plan.
+   - _B, next:_ price windows and premium tables.
+   - _C:_ floor-plan editor (row generator plus validated JSON first; no drag canvas).
+   - Needs Matt for automatic rebuilds: a fine-grained GitHub token for this repo (Contents:
+     read and write, which `repository_dispatch` requires) stored in Secrets Manager as
+     `fgg/{stage}/github` = `{"token":"github_pat_…","repo":"mlipshultz/fgg-mono"}`. Until then
+     the button explains that the "Rebuild site" workflow can be run from the Actions tab.
+   - Re-running the full seed on dev now overwrites events and venues edited in admin.
+   - Not built: deleting an event (unpublish instead); re-timing existing events when a venue's
+     time zone is edited (only new events and re-saves pick it up); "opens for booking" is
+     entered in the admin's own time zone, not the venue's.
 3. **Orders.** The list exists; add a cancel-request queue (Approve → refund, Decline), manual
    and comp orders, and cleanup of abandoned `pending_payment` orders. Assign spots to
    `unassigned_tables` orders once a `quantity` event's layout is known.
