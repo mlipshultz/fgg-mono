@@ -14,6 +14,7 @@ import { Button } from '@/components/Button';
 import styles from '@/components/admin/admin.module.css';
 import ui from '@/components/ui.module.css';
 import {
+  adminDeleteEvent,
   adminListEvents,
   adminRebuildSite,
   adminSaveEvent,
@@ -230,6 +231,8 @@ export function EventsAdmin() {
   }, []);
 
   const venueOf = (id: string) => venues.find((v) => v.id === id);
+  /** The event as last saved (deleting goes by the saved state, not unsaved edits). */
+  const stored = (id: string) => events?.find((e) => e.id === id);
   const fail = (e: unknown, fallback: string) =>
     setError(e instanceof Error ? e.message : fallback);
   const say = (msg: string) => {
@@ -268,6 +271,24 @@ export function EventsAdmin() {
       );
     } catch (e) {
       fail(e, 'Could not save the event');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Unpublished events with no activity can be deleted; the server checks the rest. */
+  const deleteEvent = async () => {
+    if (!draft?.id) return;
+    if (!window.confirm(`Delete ${draft.name}? This can't be undone.`)) return;
+    setBusy('delete');
+    setError(null);
+    try {
+      await adminDeleteEvent(draft.id);
+      setEvents((cur) => (cur ?? []).filter((e) => e.id !== draft.id));
+      say(`Deleted ${draft.name}.`);
+      setDraft(null);
+    } catch (e) {
+      fail(e, 'Could not delete the event');
     } finally {
       setBusy(null);
     }
@@ -776,6 +797,22 @@ export function EventsAdmin() {
             <button type="button" className={local.link} onClick={() => setDraft(null)}>
               Cancel
             </button>
+            {draft.id && (
+              <span className={local.danger}>
+                {stored(draft.id)?.published ? (
+                  <span className={styles.muted}>Unpublish and save to be able to delete it.</span>
+                ) : (
+                  <button
+                    type="button"
+                    className={local.link}
+                    disabled={busy !== null}
+                    onClick={() => void deleteEvent()}
+                  >
+                    {busy === 'delete' ? 'Deleting…' : 'Delete event'}
+                  </button>
+                )}
+              </span>
+            )}
           </div>
         </form>
       )}

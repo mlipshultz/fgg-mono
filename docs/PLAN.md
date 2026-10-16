@@ -486,10 +486,16 @@ Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan
      default or less (stored as `refundedCents`), and frees the tables; comped orders are
      cancelled. Decline (staff) keeps the booking, clears the request and shows the vendor the
      note; they can ask again. Vendors give an optional reason when asking.
-   - Still to do: cleanup of abandoned `pending_payment` orders for vendors who never come back,
-     a delete for events with no orders, manual orders, and assigning real table numbers to
-     `unassigned_tables` orders once a `quantity` event's layout is known (waits on the
-     floor-plan editor).
+   - _Abandoned-checkout sweep, built 2026-10-16:_ `SweepFn` runs every 15 minutes (EventBridge)
+     and cancels unpaid Shopify checkouts whose hold is gone or expired, deleting their drafts,
+     for vendors who never return (the dashboard and booking page already clean up their own).
+     Shared logic in `lib/checkouts.ts`.
+   - _Delete events, built 2026-10-16:_ `DELETE /admin/events/{id}` and a Delete button in the
+     editor, for unpublished events only, and only when nothing happened on them (no orders,
+     booked tables, live holds, tickets, waitlist or notify-me entries). Removes everything under
+     `EVENT#id`; uploaded images and other users' saved-event markers stay.
+   - Deferred (2026-10-16, Matt: the first show won't use a floor plan): manual orders, and
+     assigning real table numbers to `unassigned_tables` orders, both with the floor-plan editor.
 4. **Vendors.** List, member management, edit store text / tags / logo on a vendor's behalf; the
    applications queue already exists.
 5. **Gallery, partners, XP/badge config.** Gallery upload with the resize Lambda.

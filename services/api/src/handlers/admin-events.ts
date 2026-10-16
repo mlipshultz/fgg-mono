@@ -23,7 +23,9 @@ import {
   getVenue,
   keys,
   listBookedTables,
+  deleteItem,
   listDraftEvents,
+  listEventItems,
   listHolds,
   listIndexedVenues,
   listPriceWindows,
@@ -294,6 +296,30 @@ export function addEventAdminRoutes(router: Router): void {
       const input = parseBody(req, EventInput);
       const ev = await buildEvent(input, existing);
       return json(req, await saveWithWindows(ev, input));
+    })
+    .add('DELETE', '/admin/events/{id}', async (req, { id }) => {
+      requireCan(claimsFrom(req), 'manage_events');
+      const ev = await getEvent(id!);
+      if (!ev) throw new HttpError(404, 'event_not_found', 'Event not found');
+      if (ev.published)
+        throw new HttpError(409, 'published', 'Unpublish the event before deleting it');
+      const items = await listEventItems(ev.id);
+      // Anything a vendor or attendee did keeps the event: orders, bookings, live holds,
+      // tickets, waitlist and notify-me sign-ups. Expired holds are just leftovers.
+      const now = new Date();
+      const kept = items.filter(
+        (i) =>
+          /^(ORDER#|TABLE#|TICKET#|WAIT#|NOTIFY#)/.test(i.SK) ||
+          (i.SK.startsWith('HOLD#') && !isExpired(i as unknown as { expiresAt: string }, now)),
+      );
+      if (kept.length)
+        throw new HttpError(
+          409,
+          'has_activity',
+          'This event has orders, bookings or sign-ups, so it can only be unpublished',
+        );
+      for (const i of items) await deleteItem(i);
+      return json(req, { ok: true });
     })
     .add('POST', '/admin/venues', async (req) => {
       requireCan(claimsFrom(req), 'manage_events');

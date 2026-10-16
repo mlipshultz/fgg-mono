@@ -102,4 +102,23 @@ test.describe('admin events', () => {
     await page.getByRole('button', { name: 'Edit Frederick Fairgrounds' }).click();
     await expect(page.getByText('Premium tables')).toHaveCount(0);
   });
+
+  test('deletes an unpublished event, but not a published one', async ({ page }) => {
+    await page.goto(url('/admin/events/'));
+    await page.getByRole('button', { name: 'Edit Halloween Fest' }).click();
+    await expect(page.getByText('Unpublish and save to be able to delete it.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Delete event' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.getByRole('button', { name: 'New event' }).click();
+    await page.getByLabel('Name').fill('Scratch Fest');
+    await page.getByLabel('Date').first().fill('2027-02-06');
+    await page.getByRole('button', { name: 'Create event' }).click();
+    await expect(page.getByRole('row').filter({ hasText: 'Scratch Fest' })).toContainText('Draft');
+    await page.getByRole('button', { name: 'Edit Scratch Fest' }).click();
+    page.once('dialog', (d) => void d.accept());
+    await page.getByRole('button', { name: 'Delete event' }).click();
+    await expect(page.getByText('Deleted Scratch Fest.')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'Scratch Fest' })).toHaveCount(0);
+  });
 });

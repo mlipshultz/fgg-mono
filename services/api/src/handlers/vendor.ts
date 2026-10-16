@@ -23,10 +23,8 @@ import {
 } from '@fgg/types';
 import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
 import {
-  closeOrder,
   createHold,
   heldTables,
-  isExpired,
   history,
   loadHold,
   quoteFromHold,
@@ -42,7 +40,6 @@ import {
   getEvent,
   getEventBySlug,
   getFloorPlan,
-  getHoldItems,
   getOrder,
   getSettings,
   getUser,
@@ -53,6 +50,7 @@ import {
   updateVendor,
   type HoldItem,
 } from '../lib/db.js';
+import { cancelAbandonedCheckout, checkoutIsLive, isUnpaidCheckout } from '../lib/checkouts.js';
 import { receiptPdf, vendorPassIcs } from '../lib/documents.js';
 import { todayIso, toPublicEvents, venueFor } from '../lib/events.js';
 import { HttpError, Router, json, parseBody, type Req, type Res } from '../lib/http.js';
@@ -164,34 +162,12 @@ async function cancelAbandonedCheckouts(
   vendor: Vendor,
   replacingEventId?: string,
 ): Promise<Order[]> {
-  const orders = await listOrdersForOwner(vendor.id);
   const kept: Order[] = [];
-  for (const order of orders) {
-    const unpaid = order.status === 'pending_payment' && order.source === 'shopify';
-    const live =
-      unpaid &&
-      order.eventId !== replacingEventId &&
-      !!order.holdId &&
-      (await getHoldItems(vendor.id, order.holdId)).some((h) => !isExpired(h));
-    if (!unpaid || live) {
-      kept.push(order);
-      continue;
-    }
-    const ev = await getEvent(order.eventId);
-    if (!ev) {
-      kept.push(order);
-      continue;
-    }
-    if (order.shopifyDraftOrderId) {
-      try {
-        await shopify().deleteDraftOrder(order.shopifyDraftOrderId);
-      } catch (e) {
-        console.warn(`could not delete draft order for abandoned checkout ${order.id}`, e);
-      }
-    }
-    kept.push(
-      await closeOrder(order, ev, ev.startsAt, 'cancelled', 'system', 'checkout abandoned'),
-    );
+  for (const order of await listOrdersForOwner(vendor.id)) {
+    const abandoned =
+      isUnpaidCheckout(order) &&
+      (order.eventId === replacingEventId || !(await checkoutIsLive(order)));
+    kept.push(abandoned ? await cancelAbandonedCheckout(order) : order);
   }
   return kept;
 }

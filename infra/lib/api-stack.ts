@@ -4,6 +4,8 @@ import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import type * as cognito from 'aws-cdk-lib/aws-cognito';
 import type * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -208,6 +210,20 @@ export class ApiStack extends Stack {
         ],
       }),
     );
+
+    // Every 15 minutes: cancel unpaid checkouts whose hold ran out (and delete their Shopify
+    // drafts) for vendors who never come back to clean up after themselves.
+    const sweepFn = this.lambda('SweepFn', 'handlers/sweep.ts', {
+      TABLE_NAME: table.tableName,
+      STAGE: config.stage,
+      SHOPIFY_SECRET_ID: shopifySecretName,
+    });
+    table.grantReadWriteData(sweepFn);
+    sweepFn.addToRolePolicy(secretRead);
+    new events.Rule(this, 'SweepSchedule', {
+      schedule: events.Schedule.rate(Duration.minutes(15)),
+      targets: [new targets.LambdaFunction(sweepFn)],
+    });
 
     new CfnOutput(this, 'ApiUrl', { value: this.api.apiEndpoint });
     new CfnOutput(this, 'ShopifyWebhookUrl', { value: `${this.api.apiEndpoint}/webhooks/shopify` });
