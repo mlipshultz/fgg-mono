@@ -74,7 +74,7 @@ export function BookFlow() {
     const s = new URLSearchParams(window.location.search).get('event');
     setSlug(s);
     if (!s) {
-      // No show chosen: the dashboard's quick-register list is the place to pick one.
+      // No show chosen: send the vendor to their dashboard.
       router.replace('/vendor');
       return;
     }

@@ -222,7 +222,6 @@ describe('vendor booking flow', () => {
     const d = VendorDashboard.parse(dash.body);
     expect(d.upcoming).toHaveLength(1);
     expect(d.paidThisYearCents).toBe(20000);
-    expect(d.events.map((e) => e.id)).not.toContain(EVENT_ID);
 
     const cancel = parse(
       await handler(

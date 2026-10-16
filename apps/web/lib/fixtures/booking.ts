@@ -342,7 +342,6 @@ export const vendorDashboardFixture: VendorDashboard = VendorDashboard.parse({
   history: [paidOrderFixture, refundedOrderFixture],
   paidThisYearCents: 70000,
   balanceDueCents: 0,
-  events: fixtureEvents.slice(1),
   refundCutoffDays: 14,
 });
 
