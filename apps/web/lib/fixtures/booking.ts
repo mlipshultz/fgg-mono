@@ -1,5 +1,6 @@
 import {
   AdminEventList,
+  CancelRequestList,
   AdminOrderList,
   EventFloorPlan,
   EventVendorList,
@@ -477,4 +478,29 @@ export const adminEventsFixture: AdminEventList = AdminEventList.parse({
     tableIds: v.id === venue.id ? floorPlanFixture.tables.map((t) => t.id) : [],
     premiumTables: v.id === venue.id ? [{ tableId: 'F10', premiumDeltaCents: 5000 }] : [],
   })),
+});
+
+/** Two vendors asking to cancel: one well before the show, one inside the refund window. */
+export const cancelRequestsFixture: CancelRequestList = CancelRequestList.parse({
+  items: [
+    {
+      ...paidOrderFixture,
+      id: fid('01JORD', 4),
+      passNumber: 'HF26-021',
+      vendorInfo: { ...paidOrderFixture.vendorInfo!, tableName: 'Pocket Monsters MD' },
+      cancelRequestedAt: '2026-10-02T15:00:00Z',
+      cancelReason: 'Our van is in the shop that weekend.',
+    },
+    {
+      ...paidOrderFixture,
+      id: fid('01JORD', 5),
+      passNumber: 'HF26-030',
+      lines: [paidOrderFixture.lines[1]],
+      subtotalCents: 40000,
+      totalCents: 40000,
+      vendorInfo: { ...paidOrderFixture.vendorInfo!, tableName: 'Plush Pals' },
+      cancelRequestedAt: '2026-10-05T12:00:00Z',
+    },
+  ],
+  refundCutoffDays: 14,
 });

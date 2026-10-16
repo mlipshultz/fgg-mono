@@ -134,6 +134,13 @@ export const Order = z.object({
   checkedInAt: IsoDateTime.optional(),
   paidAt: IsoDateTime.optional(),
   refundedAt: IsoDateTime.optional(),
+  /** Set when a refund gave back less than the total (staff choice inside the refund window). */
+  refundedCents: Cents.optional(),
+  /** The vendor asked to cancel; staff approve (refund) or decline from the admin queue. */
+  cancelRequestedAt: IsoDateTime.optional(),
+  cancelReason: z.string().max(1000).optional(),
+  cancelDeclinedAt: IsoDateTime.optional(),
+  cancelDeclineNote: z.string().max(1000).optional(),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

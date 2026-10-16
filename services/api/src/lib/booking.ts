@@ -621,11 +621,14 @@ export async function closeOrder(
   status: Extract<OrderStatus, 'refunded' | 'cancelled' | 'conflict'>,
   by: OrderHistoryEntry['by'],
   note?: string,
+  /** Extra fields to store with the closed order (e.g. a partial `refundedCents`). */
+  patch: Partial<Order> = {},
 ): Promise<Order> {
   const lines = tableLines(order);
   const at = nowIso();
   const next: Order = {
     ...order,
+    ...patch,
     status,
     updatedAt: at,
     ...(status === 'refunded' ? { refundedAt: at } : {}),

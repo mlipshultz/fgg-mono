@@ -29,6 +29,7 @@ import {
   type VendorStanding,
 } from '@fgg/types';
 import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
+import { addCancelRequestRoutes, refundOrCancel } from './admin-cancel-requests.js';
 import { addEventAdminRoutes } from './admin-events.js';
 import {
   createUserIfMissing,
@@ -441,20 +442,8 @@ router
     if (!order) throw new HttpError(404, 'order_not_found', 'Order not found');
     const ev = await getEvent(order.eventId);
     if (!ev) throw new HttpError(500, 'event_missing', 'Event missing');
-    if (order.status === 'paid' && order.source === 'shopify' && order.shopifyOrderId) {
-      await shopify().refundOrder(
-        order.shopifyOrderId,
-        order.totalCents,
-        input.reason ?? 'Refunded by FGG staff',
-      );
-      const next = await closeOrder(order, ev, ev.startsAt, 'refunded', actor.sub, input.reason);
-      return json(req, await adminOrderView(next));
-    }
-    if (order.status === 'paid' || order.status === 'pending_payment') {
-      const next = await closeOrder(order, ev, ev.startsAt, 'cancelled', actor.sub, input.reason);
-      return json(req, await adminOrderView(next));
-    }
-    throw new HttpError(409, 'bad_status', `Order is already ${order.status}`);
+    const next = await refundOrCancel(order, ev, actor.sub, input.reason);
+    return json(req, await adminOrderView(next));
   })
   .add('POST', '/admin/orders/comp', async (req) => {
     const actor = claimsFrom(req);
@@ -553,5 +542,6 @@ router
   });
 
 addEventAdminRoutes(router);
+addCancelRequestRoutes(router);
 
 export const handler = (req: Req) => router.handle(req);

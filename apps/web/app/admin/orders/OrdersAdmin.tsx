@@ -27,6 +27,7 @@ import {
 } from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import styles from '@/components/admin/admin.module.css';
+import { CancelRequests } from './CancelRequests';
 
 const STATUSES: OrderStatus[] = ['pending_payment', 'paid', 'refunded', 'cancelled', 'conflict'];
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -218,6 +219,15 @@ export function OrdersAdmin() {
           )}
         </div>
       </div>
+
+      <CancelRequests
+        superAdmin={superAdmin}
+        onResolved={(o, message) => {
+          setRows((cur) => cur.map((r) => (r.id === o.id ? o : r)));
+          setError(null);
+          setToast(message);
+        }}
+      />
 
       {showComp && (
         <form className={styles.card} onSubmit={submitComp}>

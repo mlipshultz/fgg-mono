@@ -441,7 +441,8 @@ placeholder. QR on the vendor pass is Phase 5.
 
 ### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
-Build order, smallest payoff first. 1 is built; 2 is in progress.
+Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan editor (on hold);
+3 is in progress.
 
 1. **Settings and roles.** Built 2026-10-11: `/admin/settings` (superadmin) edits fee, tax, hold
    minutes, checkout hold minutes, refund cutoff and the Calendly link through `GET` / `PUT
@@ -468,7 +469,8 @@ Build order, smallest payoff first. 1 is built; 2 is in progress.
      a table costs on a given date from admin (the picker is the preview); window times are
      entered in the admin's browser zone; the home card's "Tables from" is baked at build time,
      so it only follows a window change after a rebuild.
-   - _C, next:_ floor-plan editor (row generator plus validated JSON first; no drag canvas).
+   - _C, on hold (2026-10-16, Matt's call):_ floor-plan editor (row generator plus validated JSON
+     first; no drag canvas).
    - Needs Matt for automatic rebuilds: a fine-grained GitHub token for this repo (Contents:
      read and write, which `repository_dispatch` requires) stored in Secrets Manager as
      `fgg/{stage}/github` = `{"token":"github_pat_…","repo":"mlipshultz/fgg-mono"}`. Until then
@@ -477,9 +479,17 @@ Build order, smallest payoff first. 1 is built; 2 is in progress.
    - Not built: deleting an event (unpublish instead); re-timing existing events when a venue's
      time zone is edited (only new events and re-saves pick it up); "opens for booking" is
      entered in the admin's own time zone, not the venue's.
-3. **Orders.** The list exists; add a cancel-request queue (Approve → refund, Decline), manual
-   and comp orders, and cleanup of abandoned `pending_payment` orders. Assign spots to
-   `unassigned_tables` orders once a `quantity` event's layout is known.
+3. **Orders.**
+   - _Cancel-request queue, built 2026-10-16:_ the top of `/admin/orders` lists paid orders whose
+     vendor asked to cancel, oldest first, with the vendor's reason and whether the show is inside
+     the refund cutoff. Approve (superadmin, `admin_refunds`) refunds through Shopify, in full by
+     default or less (stored as `refundedCents`), and frees the tables; comped orders are
+     cancelled. Decline (staff) keeps the booking, clears the request and shows the vendor the
+     note; they can ask again. Vendors give an optional reason when asking.
+   - Still to do: cleanup of abandoned `pending_payment` orders for vendors who never come back,
+     a delete for events with no orders, manual orders, and assigning real table numbers to
+     `unassigned_tables` orders once a `quantity` event's layout is known (waits on the
+     floor-plan editor).
 4. **Vendors.** List, member management, edit store text / tags / logo on a vendor's behalf; the
    applications queue already exists.
 5. **Gallery, partners, XP/badge config.** Gallery upload with the resize Lambda.

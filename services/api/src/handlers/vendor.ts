@@ -436,10 +436,16 @@ const router = new Router()
     const input = parseBody(req, CancelRequestInput);
     if (order.status !== 'paid')
       throw new HttpError(409, 'not_paid', 'Only paid orders can be cancelled');
+    if (order.cancelRequestedAt)
+      throw new HttpError(409, 'already_requested', 'A cancellation is already waiting for staff');
     const ev = await getEvent(order.eventId);
     const at = new Date().toISOString();
-    const next = { ...order, cancelRequestedAt: at, updatedAt: at } as Order & {
-      cancelRequestedAt: string;
+    const { cancelDeclinedAt: _d, cancelDeclineNote: _n, ...rest } = order;
+    const next: Order = {
+      ...rest,
+      cancelRequestedAt: at,
+      ...(input.reason?.trim() ? { cancelReason: input.reason.trim() } : {}),
+      updatedAt: at,
     };
     await writeOrder(next, ev?.startsAt ?? order.createdAt);
     await history(
