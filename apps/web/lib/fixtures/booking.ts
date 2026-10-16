@@ -1,5 +1,6 @@
 import {
   AdminEventList,
+  AdminVendorList,
   CancelRequestList,
   AdminOrderList,
   EventFloorPlan,
@@ -503,4 +504,37 @@ export const cancelRequestsFixture: CancelRequestList = CancelRequestList.parse(
     },
   ],
   refundCutoffDays: 14,
+});
+
+/** Vendors as staff see them: Maya's booked shows, a second active vendor, a suspended one. */
+export const adminVendorsFixture: AdminVendorList = AdminVendorList.parse({
+  items: [
+    { ...vendorProfileFixture, memberCount: 1, paidOrderCount: 1 },
+    {
+      ...vendorFixture,
+      id: fid('01JVND', 2),
+      businessName: 'Pocket Monsters MD',
+      contactName: 'Sam Rivera',
+      email: 'sam@pocketmonsters.example',
+      sells: ['pokemon_cards', 'singles', 'sealed'],
+      sellsDescription: 'Modern singles, a $1 bulk bin and a few sealed ETBs.',
+      socials: { instagram: 'pocketmonstersmd' },
+      pokeBucksPartner: true,
+      memberCount: 2,
+      paidOrderCount: 3,
+    },
+    {
+      ...vendorFixture,
+      id: fid('01JVND', 3),
+      businessName: 'Plush Pals',
+      contactName: 'Dana Lee',
+      email: 'dana@plushpals.example',
+      sells: ['plush'],
+      sellsDescription: 'Handmade plush and embroidered hats.',
+      socials: {},
+      status: 'suspended',
+      memberCount: 1,
+      paidOrderCount: 0,
+    },
+  ],
 });

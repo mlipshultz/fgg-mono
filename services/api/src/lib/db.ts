@@ -708,6 +708,32 @@ export async function getVendorForUser(sub: string): Promise<Vendor | undefined>
   return m ? getVendor(m.vendorId) : undefined;
 }
 
+/** Every vendor, active and suspended, sorted by name. */
+export async function listVendors(): Promise<Vendor[]> {
+  const lists = await Promise.all(
+    (['active', 'suspended'] as const).map((status) =>
+      queryAll({
+        IndexName: 'GSI1',
+        KeyConditionExpression: 'GSI1PK = :pk',
+        ExpressionAttributeValues: { ':pk': `VENDORS#${status}` },
+      }),
+    ),
+  );
+  return lists
+    .flat()
+    .map((i) => stripKeys<Vendor>(i))
+    .sort((a, b) => a.businessName.localeCompare(b.businessName, 'en', { sensitivity: 'base' }));
+}
+
+/** The people attached to a vendor. */
+export async function listVendorMembers(vendorId: string): Promise<VendorMember[]> {
+  const items = await queryAll({
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `VENDOR#${vendorId}`, ':sk': 'MEMBER#' },
+  });
+  return items.map((i) => stripKeys<VendorMember>(i));
+}
+
 export async function updateVendor(
   id: string,
   patch: Partial<Omit<Vendor, 'id' | 'createdAt' | 'updatedAt'>>,

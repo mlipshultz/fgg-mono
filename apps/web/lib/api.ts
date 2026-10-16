@@ -5,6 +5,9 @@ import {
   type CancelRequestInput,
   CheckoutResponse,
   AdminEvent,
+  AdminVendor,
+  AdminVendorList,
+  type AdminVendorInput,
   CancelRequestList,
   type ApproveCancelInput,
   type DeclineCancelInput,
@@ -57,6 +60,7 @@ import {
   applicationsFixture,
   eventVendorsFixture,
   adminEventsFixture,
+  adminVendorsFixture,
   cancelRequestsFixture,
   countEventFixture,
   countResponseFixture,
@@ -720,6 +724,63 @@ export async function adminSaveEvent(input: EventInput, id?: string): Promise<Ad
       body: JSON.stringify(input),
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Admin vendors. Fixture mode keeps edits in memory.
+// ---------------------------------------------------------------------------
+
+let fixtureVendors: AdminVendorList | null = null;
+const vendorsFixture = () => (fixtureVendors ??= localize(adminVendorsFixture));
+
+export async function adminListVendors(): Promise<AdminVendorList> {
+  if (!hasApi) return fake(vendorsFixture());
+  return AdminVendorList.parse(await authedRequest<unknown>('/admin/vendors'));
+}
+
+export async function adminUpdateVendor(id: string, input: AdminVendorInput): Promise<AdminVendor> {
+  if (!hasApi) {
+    const list = vendorsFixture();
+    const old = list.items.find((v) => v.id === id)!;
+    const saved: AdminVendor = {
+      ...old,
+      ...input,
+      ...(input.logoKey && fixtureLogoUrl ? { logoUrl: fixtureLogoUrl } : {}),
+    };
+    fixtureVendors = { items: list.items.map((v) => (v.id === id ? saved : v)) };
+    return fake(saved);
+  }
+  return AdminVendor.parse(
+    await authedRequest<unknown>(`/admin/vendors/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Presign, PUT the logo straight to S3, and hand back the key to save on the vendor. */
+export async function adminUploadVendorLogo(
+  vendorId: string,
+  blob: Blob,
+  contentType: LogoContentType,
+): Promise<{ key: string; logoUrl: string }> {
+  if (!hasApi) {
+    fixtureLogoUrl = URL.createObjectURL(blob);
+    return fake({ key: `vendors/${vendorId}/logo-new.webp`, logoUrl: fixtureLogoUrl });
+  }
+  const up = LogoUploadResponse.parse(
+    await authedRequest<unknown>(`/admin/vendors/${encodeURIComponent(vendorId)}/logo-upload`, {
+      method: 'POST',
+      body: JSON.stringify({ contentType }),
+    }),
+  );
+  const res = await fetch(up.uploadUrl, {
+    method: 'PUT',
+    body: blob,
+    headers: { 'content-type': contentType },
+  });
+  if (!res.ok) throw new ApiError(`Upload failed (${res.status})`, res.status);
+  return { key: up.key, logoUrl: up.logoUrl };
 }
 
 /** Delete an unpublished event that has no orders, bookings or sign-ups. */

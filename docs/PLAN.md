@@ -442,7 +442,7 @@ placeholder. QR on the vendor pass is Phase 5.
 ### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
 Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan editor (on hold);
-3 is in progress.
+3 is built except the floor-plan items (deferred); 4 is in progress.
 
 1. **Settings and roles.** Built 2026-10-11: `/admin/settings` (superadmin) edits fee, tax, hold
    minutes, checkout hold minutes, refund cutoff and the Calendly link through `GET` / `PUT
@@ -496,8 +496,17 @@ Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan
      `EVENT#id`; uploaded images and other users' saved-event markers stay.
    - Deferred (2026-10-16, Matt: the first show won't use a floor plan): manual orders, and
      assigning real table numbers to `unassigned_tables` orders, both with the floor-plan editor.
-4. **Vendors.** List, member management, edit store text / tags / logo on a vendor's behalf; the
-   applications queue already exists.
+4. **Vendors.**
+   - _List and edit, built 2026-10-16:_ `/admin/vendors` (staff) lists every vendor, active and
+     suspended, with member count, PokéBucks partner and paid bookings, searchable and
+     filterable. The editor changes a vendor's details on its behalf (business and contact
+     name, email, phone, store description, tags, socials, logo), suspends or reactivates it
+     (suspended vendors can't book), and turns the PokéBucks partner flag on or off (the
+     Phase 3 "PokéBucks toggle"). `GET /admin/vendors`, `PATCH /admin/vendors/{id}`,
+     `POST /admin/vendors/{id}/logo-upload`.
+   - Next: members (see, add by account email, remove; one vendor per person) and a link from a
+     vendor to its orders.
+   - The applications queue already exists.
 5. **Gallery, partners, XP/badge config.** Gallery upload with the resize Lambda.
 6. **Emails (SES).** Order confirmation, application received / approved, refund issued. Dev can
    send to verified addresses now; production access is a Phase 6 item.

@@ -8,6 +8,8 @@ import {
   Vendor,
   VendorApplication,
   VendorApprovalMode,
+  VendorProfileInput,
+  VendorStatus,
   SellsCategory,
 } from './vendor.js';
 import { FloorPlan, Venue } from './venue.js';
@@ -551,6 +553,34 @@ export type CancelRequestInput = z.infer<typeof CancelRequestInput>;
 /** GET/PATCH /vendor/profile — the vendor record with its logo resolved to a URL. */
 export const VendorProfile = Vendor.extend({ logoUrl: z.string().url().optional() });
 export type VendorProfile = z.infer<typeof VendorProfile>;
+
+// ---------------------------------------------------------------------------
+// Admin vendors (staff / superadmin).
+// ---------------------------------------------------------------------------
+
+/** A vendor in the admin list: the profile plus how many people and bookings it has. */
+export const AdminVendor = VendorProfile.extend({
+  memberCount: z.number().int().nonnegative(),
+  /** Orders that are paid now (refunded and cancelled ones don't count). */
+  paidOrderCount: z.number().int().nonnegative(),
+});
+export type AdminVendor = z.infer<typeof AdminVendor>;
+
+/** GET /admin/vendors — active and suspended, by name. */
+export const AdminVendorList = z.object({ items: z.array(AdminVendor) });
+export type AdminVendorList = z.infer<typeof AdminVendorList>;
+
+/**
+ * PATCH /admin/vendors/{id} — staff edit a vendor on its behalf: everything the vendor can edit
+ * on its own profile, plus the contact details, status and PokéBucks partner flag.
+ */
+export const AdminVendorInput = VendorProfileInput.extend({
+  contactName: z.string().trim().min(1).max(120),
+  email: Email,
+  status: VendorStatus,
+  pokeBucksPartner: z.boolean(),
+}).partial();
+export type AdminVendorInput = z.infer<typeof AdminVendorInput>;
 
 export const VendorDashboard = z.object({
   vendor: VendorProfile,

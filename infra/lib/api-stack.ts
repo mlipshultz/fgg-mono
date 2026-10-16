@@ -200,6 +200,8 @@ export class ApiStack extends Stack {
     // which reads a GitHub token staff store as `fgg/{stage}/github` ({ token, repo }).
     this.accountFn.addEnvironment('MEDIA_BUCKET', props.mediaBucket.bucketName);
     props.mediaBucket.grantPut(this.accountFn, 'events/*');
+    // Staff upload a vendor's logo on its behalf (presigned PUT under vendors/{id}/).
+    props.mediaBucket.grantPut(this.accountFn, 'vendors/*');
     const githubSecretName = `fgg/${config.stage}/github`;
     this.accountFn.addEnvironment('GITHUB_SECRET_ID', githubSecretName);
     this.accountFn.addToRolePolicy(
