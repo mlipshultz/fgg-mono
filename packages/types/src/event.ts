@@ -61,6 +61,8 @@ export const Event = z.object({
   startsAt: IsoDateTime,
   endsAt: IsoDateTime,
   posterKey: z.string().optional(),
+  /** Optional landscape image for the home card; the card falls back to the poster. */
+  cardKey: z.string().optional(),
   published: z.boolean(),
   vendorStatus: VendorTableStatus,
   vendorOpensAt: IsoDateTime.optional(),

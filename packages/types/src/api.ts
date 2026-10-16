@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Activity, Partner } from './content.js';
-import { EventDay, TableBooking, VendorTableStatus } from './event.js';
+import { Event, EventDay, TableBooking, VendorTableStatus } from './event.js';
 import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
 import { Me, Role } from './user.js';
 import {
@@ -59,6 +59,8 @@ export const PublicEvent = z.object({
   hoursLabel: z.string(),
   venue: z.object({ id: Ulid, name: z.string(), city: z.string(), state: z.string() }),
   posterUrl: z.string().url().optional(),
+  /** Landscape image for the home card, when the event has one. */
+  cardUrl: z.string().url().optional(),
   vendorStatus: VendorTableStatus,
   vendorOpensAt: IsoDateTime.optional(),
   /** Absent means `floor_plan`. */
@@ -287,6 +289,79 @@ export const UpdateSettingsInput = z.object({
   calendlyUrl: z.string().url().max(500).nullable(),
 });
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
+
+// ---------------------------------------------------------------------------
+// Admin events and venues (staff / superadmin).
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /admin/events, PUT /admin/events/{id} — the whole event as the editor holds it.
+ * `startsAt` / `endsAt` are derived from the days on the server.
+ */
+export const EventInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  slug: Slug,
+  seriesId: z.string().trim().max(60).optional(),
+  blurb: z.string().trim().max(600),
+  venueId: Ulid,
+  days: z.array(EventDay).min(1).max(7),
+  vendorStatus: VendorTableStatus,
+  vendorOpensAt: IsoDateTime.optional(),
+  tableRateCents: z.number().int().nonnegative(),
+  pokeBucksRateCents: z.number().int().nonnegative(),
+  tableBooking: TableBooking,
+  /** Required when `tableBooking` is `quantity`: tables for sale per day. */
+  tableCapacity: z.number().int().positive().max(1000).optional(),
+  posterKey: z.string().max(300).optional(),
+  cardKey: z.string().max(300).optional(),
+  published: z.boolean(),
+});
+export type EventInput = z.infer<typeof EventInput>;
+
+/** An event as the admin editor sees it: every stored field, with image URLs resolved. */
+export const AdminEvent = Event.extend({
+  posterUrl: z.string().url().optional(),
+  cardUrl: z.string().url().optional(),
+});
+export type AdminEvent = z.infer<typeof AdminEvent>;
+
+/** POST /admin/venues, PUT /admin/venues/{id} */
+export const VenueInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  address: z.string().trim().max(300),
+  city: z.string().trim().min(1).max(100),
+  state: z.string().trim().min(1).max(50),
+  timeZone: TimeZone,
+});
+export type VenueInput = z.infer<typeof VenueInput>;
+
+/** A venue in the admin list; `hasFloorPlan` says whether events there can use the map picker. */
+export const AdminVenue = Venue.extend({ hasFloorPlan: z.boolean() });
+export type AdminVenue = z.infer<typeof AdminVenue>;
+
+/** GET /admin/events — every event, drafts included, newest first, plus the venues to pick from. */
+export const AdminEventList = z.object({
+  events: z.array(AdminEvent),
+  venues: z.array(AdminVenue),
+});
+export type AdminEventList = z.infer<typeof AdminEventList>;
+
+export const EventImageKind = z.enum(['poster', 'card']);
+export type EventImageKind = z.infer<typeof EventImageKind>;
+
+/** POST /admin/events/{id}/image-upload → PUT the file, then save the key on the event. */
+export const EventImageUploadInput = z.object({
+  kind: EventImageKind,
+  contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+});
+export type EventImageUploadInput = z.infer<typeof EventImageUploadInput>;
+export const EventImageUploadResponse = z.object({
+  /** Presigned S3 PUT; send the file with the same content-type. */
+  uploadUrl: z.string().url(),
+  key: z.string(),
+  url: z.string().url(),
+});
+export type EventImageUploadResponse = z.infer<typeof EventImageUploadResponse>;
 
 // ---------------------------------------------------------------------------
 // Vendor application (attendee → vendor_applicant → vendor).

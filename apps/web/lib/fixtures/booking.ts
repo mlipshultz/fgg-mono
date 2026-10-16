@@ -1,4 +1,5 @@
 import {
+  AdminEventList,
   AdminOrderList,
   EventFloorPlan,
   EventVendorList,
@@ -417,4 +418,35 @@ export const adminOrdersFixture: AdminOrderList = AdminOrderList.parse({
     }),
     refundedOrderFixture,
   ],
+});
+
+/** Every fixture event as the admin editor sees it, plus the venues to pick from. */
+export const adminEventsFixture: AdminEventList = AdminEventList.parse({
+  events: fixtureEvents.map((e) => ({
+    id: e.id,
+    slug: e.slug,
+    name: e.name,
+    blurb: e.blurb,
+    venueId: e.venue.id,
+    timeZone: e.timeZone,
+    days: e.days,
+    startsAt: e.startsAt,
+    endsAt: e.endsAt,
+    published: true,
+    vendorStatus: e.vendorStatus,
+    ...(e.vendorOpensAt ? { vendorOpensAt: e.vendorOpensAt } : {}),
+    tableRateCents: e.tableRateCents,
+    pokeBucksRateCents: e.pokeBucksRateCents,
+    tableBooking: e.tableBooking ?? 'floor_plan',
+    ...(e.tableBooking === 'quantity' ? { tableCapacity: 40 } : {}),
+    ...(e.posterUrl ? { posterKey: `events/${e.slug}/poster.jpg`, posterUrl: e.posterUrl } : {}),
+    createdAt: '2026-09-01T00:00:00Z',
+    updatedAt: '2026-09-01T00:00:00Z',
+  })),
+  venues: [...new Map(fixtureEvents.map((e) => [e.venue.id, e.venue])).values()].map((v) => ({
+    ...v,
+    address: '2200 York Rd',
+    timeZone: 'America/New_York',
+    hasFloorPlan: v.id !== countEventFixture.venue.id,
+  })),
 });

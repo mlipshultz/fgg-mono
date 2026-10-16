@@ -29,6 +29,7 @@ import {
   type VendorStanding,
 } from '@fgg/types';
 import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
+import { addEventAdminRoutes } from './admin-events.js';
 import {
   createUserIfMissing,
   getEvent,
@@ -550,5 +551,7 @@ router
     const result = await shopify().registerWebhooks(callbackUrl, ['ORDERS_PAID', 'REFUNDS_CREATE']);
     return json(req, { callbackUrl, ...result });
   });
+
+addEventAdminRoutes(router);
 
 export const handler = (req: Req) => router.handle(req);
