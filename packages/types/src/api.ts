@@ -521,8 +521,6 @@ export const VendorDashboard = z.object({
   history: z.array(VendorOrder),
   paidThisYearCents: z.number().int().nonnegative(),
   balanceDueCents: z.number().int().nonnegative(),
-  /** Other events for "Quick register". */
-  events: z.array(PublicEvent),
   refundCutoffDays: z.number().int().nonnegative(),
 });
 export type VendorDashboard = z.infer<typeof VendorDashboard>;

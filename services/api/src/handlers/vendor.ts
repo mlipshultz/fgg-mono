@@ -50,7 +50,6 @@ import {
   getVendorForUser,
   listOrdersForOwner,
   listPriceWindows,
-  listPublishedEvents,
   updateVendor,
   type HoldItem,
 } from '../lib/db.js';
@@ -455,26 +454,13 @@ const router = new Router()
   .add('GET', '/vendor/dashboard', async (req) => {
     const actor = claimsFrom(req);
     const vendor = await vendorFor(actor);
-    const [orders, settings, published] = await Promise.all([
-      cancelAbandonedCheckouts(vendor),
-      getSettings(),
-      listPublishedEvents(),
-    ]);
+    const [orders, settings] = await Promise.all([cancelAbandonedCheckouts(vendor), getSettings()]);
     const views = await Promise.all(orders.map(vendorOrderView));
     const today = todayIso();
     const year = today.slice(0, 4);
     const upcoming = views
       .filter((o) => o.status === 'paid' && o.event.endDate >= today)
       .sort((a, b) => a.event.startDate.localeCompare(b.event.startDate));
-    const bookedEventIds = new Set(upcoming.map((o) => o.eventId));
-    const others = published.filter(
-      (ev) =>
-        !bookedEventIds.has(ev.id) &&
-        [...ev.days]
-          .map((d) => d.date)
-          .sort()
-          .at(-1)! >= today,
-    );
     const body: VendorDashboard = {
       vendor: profileView(vendor),
       upcoming,
@@ -485,7 +471,6 @@ const router = new Router()
       balanceDueCents: views
         .filter((o) => o.status === 'pending_payment')
         .reduce((n, o) => n + o.totalCents, 0),
-      events: await toPublicEvents(others),
       refundCutoffDays: settings.refundCutoffDays,
     };
     return json(req, body, 200, { 'cache-control': 'no-store' });
