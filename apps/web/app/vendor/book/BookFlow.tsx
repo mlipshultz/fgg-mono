@@ -29,7 +29,13 @@ import {
   releaseHold,
   updateHold,
 } from '@/lib/api';
-import { fmtCents, openDaysByTable, tableById } from '@/lib/booking';
+import {
+  fmtCents,
+  openDaysByTable,
+  priceWindowNote,
+  tableById,
+  tableUnitCents,
+} from '@/lib/booking';
 import { shortDateLabel } from '@/lib/dates';
 import { type CartLine, CartBody } from './Cart';
 import { CountFlow } from './CountFlow';
@@ -285,7 +291,10 @@ function MapFlow({
     return () => clearTimeout(t);
   }, [data, cart, rate, holdMatches]);
 
-  const unit = rate === 'poke_bucks' ? data.event.pokeBucksRateCents : data.event.tableRateCents;
+  /** The per-day rate in force now (price window or base); tables add their own premium. */
+  const pricing = data.pricing ?? data.event;
+  const unit = rate === 'poke_bucks' ? pricing.pokeBucksRateCents : pricing.tableRateCents;
+  const unitOf = (id: string) => tableUnitCents(tableById(data.floorPlan, id), unit);
   const served = holdMatches ? hold.quote : quote;
   const servedLines = spots(served?.lines ?? []);
   const priced =
@@ -301,8 +310,8 @@ function MapFlow({
       : null;
   const pricedLine = (l: CartLine) =>
     priced ? servedLines.find((x) => x.tableId === l.tableId) : undefined;
-  const lineCents = (l: CartLine) => pricedLine(l)?.lineCents ?? unit * l.dates.length;
-  const lineUnit = (l: CartLine) => pricedLine(l)?.unitCents ?? unit;
+  const lineCents = (l: CartLine) => pricedLine(l)?.lineCents ?? unitOf(l.tableId) * l.dates.length;
+  const lineUnit = (l: CartLine) => pricedLine(l)?.unitCents ?? unitOf(l.tableId);
   const subtotal = priced?.subtotalCents ?? cart.reduce((n, l) => n + lineCents(l), 0);
   const total = priced?.totalCents ?? subtotal;
 
@@ -495,7 +504,7 @@ function MapFlow({
 
   // Step 1
   const frozen = busy;
-  const pokeBucksCents = ev.pokeBucksRateCents;
+  const pokeBucksCents = pricing.pokeBucksRateCents;
   const summaryLine = cart.length
     ? `${cart.length} ${tablesWord} · ${cartLabel}`
     : 'Nothing picked yet';
@@ -549,7 +558,7 @@ function MapFlow({
           return shown.length ? shown : eventDays.filter((d) => pendingOpen.has(d));
         })()
       }
-      unitCents={unit}
+      unitCents={unitOf(pending)}
       inCart={!!pendingLine}
       onConfirm={(dates) => confirmTable(pending, dates)}
       onRemove={() => removeLine(pending)}
@@ -606,6 +615,7 @@ function MapFlow({
       ) : (
         <Picker
           eyebrow={eyebrow}
+          priceNote={priceWindowNote(data.pricing)}
           plan={data.floorPlan}
           eventDays={eventDays}
           openDays={openDays}

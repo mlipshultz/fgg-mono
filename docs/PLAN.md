@@ -459,8 +459,16 @@ Build order, smallest payoff first. 1 is built; 2 is in progress.
      when they would pull something out from under a vendor: removing a day with booked or held
      tables, or changing the venue or booking mode once tables are booked or held. Map booking
      can't open at a venue with no floor plan.
-   - _B, next:_ price windows and premium tables.
-   - _C:_ floor-plan editor (row generator plus validated JSON first; no drag canvas).
+   - _B, built 2026-10-16:_ price windows (early bird / standard / late, saved with the event,
+     no overlaps) and premium tables (per venue floor plan: a surcharge on the rate or a fixed
+     price, `PUT /admin/venues/{id}/premium-tables`). The booking page payload carries
+     `pricing` (the rates in force now), so the picker shows a premium table's real price and
+     an "Early-bird pricing until …" note before the server quote arrives. Prices are still fixed
+     at hold time, so changes never touch held or paid tables. Not built: a way to preview what
+     a table costs on a given date from admin (the picker is the preview); window times are
+     entered in the admin's browser zone; the home card's "Tables from" is baked at build time,
+     so it only follows a window change after a rebuild.
+   - _C, next:_ floor-plan editor (row generator plus validated JSON first; no drag canvas).
    - Needs Matt for automatic rebuilds: a fine-grained GitHub token for this repo (Contents:
      read and write, which `repository_dispatch` requires) stored in Secrets Manager as
      `fgg/{stage}/github` = `{"token":"github_pat_…","repo":"mlipshultz/fgg-mono"}`. Until then

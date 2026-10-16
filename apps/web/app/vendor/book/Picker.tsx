@@ -42,6 +42,7 @@ function placePopover(cell: HTMLElement, plan: HTMLElement, pop: HTMLElement) {
  */
 export function Picker({
   eyebrow,
+  priceNote,
   plan,
   eventDays,
   openDays,
@@ -64,6 +65,8 @@ export function Picker({
   sheetError,
 }: {
   eyebrow: string;
+  /** "Early-bird pricing until Oct 1" while a price window is in force. */
+  priceNote?: string | undefined;
   plan: FloorPlan;
   eventDays: IsoDate[];
   openDays: ReadonlyMap<string, ReadonlySet<IsoDate>>;
@@ -124,6 +127,7 @@ export function Picker({
             <div>
               <span className={styles.eyebrow}>{eyebrow}</span>
               <h1 className={styles.h2}>Pick your tables</h1>
+              {priceNote && <span className={styles.priceNote}>{priceNote}</span>}
             </div>
             <span className={styles.avail}>
               {shownLabel

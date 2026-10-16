@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Activity, Partner } from './content.js';
-import { Event, EventDay, TableBooking, VendorTableStatus } from './event.js';
+import { Event, EventDay, PriceWindow, TableBooking, VendorTableStatus } from './event.js';
 import { CognitoSub, Email, IsoDate, IsoDateTime, Slug, TimeZone, Ulid } from './common.js';
 import { Me, Role } from './user.js';
 import {
@@ -315,6 +315,14 @@ export const EventInput = z.object({
   posterKey: z.string().max(300).optional(),
   cardKey: z.string().max(300).optional(),
   published: z.boolean(),
+  /**
+   * Dated rates (early bird, late). The whole list is replaced on save; omit it to leave the
+   * windows as they are. A window without an id is new.
+   */
+  priceWindows: z
+    .array(PriceWindow.partial({ id: true }))
+    .max(10)
+    .optional(),
 });
 export type EventInput = z.infer<typeof EventInput>;
 
@@ -322,6 +330,7 @@ export type EventInput = z.infer<typeof EventInput>;
 export const AdminEvent = Event.extend({
   posterUrl: z.string().url().optional(),
   cardUrl: z.string().url().optional(),
+  priceWindows: z.array(PriceWindow),
 });
 export type AdminEvent = z.infer<typeof AdminEvent>;
 
@@ -335,8 +344,24 @@ export const VenueInput = z.object({
 });
 export type VenueInput = z.infer<typeof VenueInput>;
 
+/** A table that costs something other than the event rate: a fixed price or a surcharge. */
+export const PremiumTable = z.union([
+  z.object({ tableId: z.string(), priceOverrideCents: z.number().int().nonnegative() }),
+  z.object({ tableId: z.string(), premiumDeltaCents: z.number().int().positive() }),
+]);
+export type PremiumTable = z.infer<typeof PremiumTable>;
+
+/** PUT /admin/venues/{id}/premium-tables — the full list; tables left out go back to normal. */
+export const PremiumTablesInput = z.object({ tables: z.array(PremiumTable).max(500) });
+export type PremiumTablesInput = z.infer<typeof PremiumTablesInput>;
+
 /** A venue in the admin list; `hasFloorPlan` says whether events there can use the map picker. */
-export const AdminVenue = Venue.extend({ hasFloorPlan: z.boolean() });
+export const AdminVenue = Venue.extend({
+  hasFloorPlan: z.boolean(),
+  /** Every table on the floor plan, in plan order (empty without one). */
+  tableIds: z.array(z.string()).default([]),
+  premiumTables: z.array(PremiumTable).default([]),
+});
 export type AdminVenue = z.infer<typeof AdminVenue>;
 
 /** GET /admin/events — every event, drafts included, newest first, plus the venues to pick from. */
@@ -401,6 +426,19 @@ export const EventFloorPlan = z.object({
     checkoutHoldMinutes: true,
     refundCutoffDays: true,
   }).optional(),
+  /**
+   * The per-day rates right now (the active price window, else the event's base rates), so the
+   * picker can price a table before the server quote arrives. Table overrides and surcharges
+   * apply on top, from the floor plan.
+   */
+  pricing: z
+    .object({
+      tableRateCents: z.number().int().nonnegative(),
+      pokeBucksRateCents: z.number().int().nonnegative(),
+      windowKind: PriceWindow.shape.kind.optional(),
+      windowEndsAt: IsoDateTime.optional(),
+    })
+    .optional(),
 });
 export type EventFloorPlan = z.infer<typeof EventFloorPlan>;
 

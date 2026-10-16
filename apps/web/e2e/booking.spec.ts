@@ -36,6 +36,14 @@ test.describe('booking picker', () => {
     await expect(page.getByText('B2 · Sat, C4 · All days')).toBeVisible();
   });
 
+  test('a premium table shows its own price before it is added', async ({ page }) => {
+    await gotoBooking(page);
+    await table(page, 'F10').click();
+    const dlg = page.getByRole('dialog', { name: 'Table F10' });
+    await expect(dlg.getByText('Row F · $250/day')).toBeVisible();
+    await expect(dlg.getByText('2 days · $500')).toBeVisible();
+  });
+
   test('tapping a table asks for its days before it joins the cart', async ({ page }) => {
     await gotoBooking(page);
     await expect(page.getByText('Nothing picked yet').first()).toBeVisible();

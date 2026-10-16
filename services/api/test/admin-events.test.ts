@@ -223,6 +223,141 @@ describe('admin events', () => {
   });
 });
 
+describe('price windows', () => {
+  const early = {
+    kind: 'early_bird',
+    startsAt: '2026-09-01T04:00:00.000Z',
+    endsAt: '2026-11-01T04:00:00.000Z',
+    tableRateCents: 15000,
+    pokeBucksRateCents: 7500,
+  };
+  const late = {
+    kind: 'late',
+    startsAt: '2027-01-10T05:00:00.000Z',
+    endsAt: '2027-01-23T05:00:00.000Z',
+    tableRateCents: 25000,
+    pokeBucksRateCents: 12500,
+  };
+  const windowRows = (id: string) =>
+    db.all().filter((i) => i.PK === `EVENT#${id}` && String(i.SK).startsWith('PRICE#'));
+
+  it("saves, lists, replaces and removes an event's windows", async () => {
+    const created = parse(
+      await handler(staff('POST', '/admin/events', { ...input, priceWindows: [late, early] })),
+    );
+    expect(created.status).toBe(201);
+    const ev = AdminEvent.parse(created.body);
+    expect(ev.priceWindows.map((w) => w.kind)).toEqual(['early_bird', 'late']);
+    expect(windowRows(ev.id).map((i) => i.SK)).toEqual([
+      'PRICE#early_bird#2026-09-01T04:00:00.000Z',
+      'PRICE#late#2027-01-10T05:00:00.000Z',
+    ]);
+    const listed = AdminEventList.parse(parse(await handler(staff('GET', '/admin/events'))).body);
+    expect(listed.events.find((e) => e.id === ev.id)?.priceWindows).toHaveLength(2);
+
+    // Keep the early bird (same id), move the late window's start, which re-keys it.
+    const kept = ev.priceWindows[0]!;
+    const moved = { ...late, startsAt: '2027-01-12T05:00:00.000Z' };
+    const edited = AdminEvent.parse(
+      parse(
+        await handler(
+          staff('PUT', `/admin/events/${ev.id}`, { ...input, priceWindows: [kept, moved] }),
+        ),
+      ).body,
+    );
+    expect(edited.priceWindows[0]!.id).toBe(kept.id);
+    expect(windowRows(ev.id).map((i) => i.SK)).toEqual([
+      'PRICE#early_bird#2026-09-01T04:00:00.000Z',
+      'PRICE#late#2027-01-12T05:00:00.000Z',
+    ]);
+
+    // Leaving the list out keeps the windows; an empty list removes them.
+    await handler(staff('PUT', `/admin/events/${ev.id}`, input));
+    expect(windowRows(ev.id)).toHaveLength(2);
+    await handler(staff('PUT', `/admin/events/${ev.id}`, { ...input, priceWindows: [] }));
+    expect(windowRows(ev.id)).toHaveLength(0);
+  });
+
+  it('refuses windows that end before they start or overlap', async () => {
+    const post = async (priceWindows: object[]) =>
+      parse(await handler(staff('POST', '/admin/events', { ...input, priceWindows })));
+    expect((await post([{ ...early, endsAt: early.startsAt }])).body.error.code).toBe(
+      'bad_price_window',
+    );
+    expect(
+      (await post([early, { ...late, startsAt: '2026-10-15T04:00:00.000Z' }])).body.error.code,
+    ).toBe('overlapping_price_windows');
+  });
+
+  it('the booking page gets the rates in force now', async () => {
+    const plan = async () =>
+      parse(await publicHandler(baseReq('GET', `/public/events/${EVENT_ID}/floorplan`))).body;
+    expect((await plan()).pricing).toEqual({ tableRateCents: 20000, pokeBucksRateCents: 10000 });
+    const now = Date.now();
+    db.put({
+      ...keys.priceWindow(EVENT_ID, 'early_bird', new Date(now - 86_400_000).toISOString()),
+      id: '01HZX3V9K7Q2M4N8P6R5T1W0ZZ',
+      kind: 'early_bird',
+      startsAt: new Date(now - 86_400_000).toISOString(),
+      endsAt: new Date(now + 86_400_000).toISOString(),
+      tableRateCents: 15000,
+      pokeBucksRateCents: 7500,
+    });
+    expect((await plan()).pricing).toMatchObject({
+      tableRateCents: 15000,
+      pokeBucksRateCents: 7500,
+      windowKind: 'early_bird',
+    });
+  });
+});
+
+describe('premium tables', () => {
+  it("sets fixed prices and surcharges on a venue's floor plan, replacing the old set", async () => {
+    const put = async (tables: object[], id = VENUE_ID) =>
+      parse(await handler(staff('PUT', `/admin/venues/${id}/premium-tables`, { tables })));
+    const res = await put([
+      { tableId: 'A1', priceOverrideCents: 30000 },
+      { tableId: 'B2', premiumDeltaCents: 5000 },
+    ]);
+    expect(res.status).toBe(200);
+    expect(res.body.premiumTables).toEqual([
+      { tableId: 'A1', priceOverrideCents: 30000 },
+      { tableId: 'B2', premiumDeltaCents: 5000 },
+    ]);
+    expect(res.body.tableIds).toEqual(['A1', 'A2', 'A3', 'B1', 'B2', 'B3']);
+    const stored = db.get(`VENUE#${VENUE_ID}`, 'FLOORPLAN')!;
+    expect(stored.version).toBe(2);
+    expect(stored.tables.find((t: any) => t.id === 'A1').priceOverrideCents).toBe(30000);
+
+    // The next save replaces the set: A1 goes back to the event rate.
+    await put([{ tableId: 'B2', premiumDeltaCents: 2500 }]);
+    const again = db.get(`VENUE#${VENUE_ID}`, 'FLOORPLAN')!;
+    expect(again.tables.find((t: any) => t.id === 'A1')).not.toHaveProperty('priceOverrideCents');
+    expect(again.tables.find((t: any) => t.id === 'B2').premiumDeltaCents).toBe(2500);
+
+    expect((await put([{ tableId: 'Z9', premiumDeltaCents: 100 }])).body.error.code).toBe(
+      'table_not_found',
+    );
+    const bare = parse(
+      await handler(
+        staff('POST', '/admin/venues', {
+          name: 'Frederick Fairgrounds',
+          address: '',
+          city: 'Frederick',
+          state: 'MD',
+          timeZone: 'America/New_York',
+        }),
+      ),
+    );
+    expect((await put([], bare.body.id)).status).toBe(409);
+    expect(
+      parse(
+        await handler(vendor('PUT', `/admin/venues/${VENUE_ID}/premium-tables`, { tables: [] })),
+      ).status,
+    ).toBe(403);
+  });
+});
+
 describe('admin venues', () => {
   it('edits a venue and events follow its time zone', async () => {
     const saved = parse(

@@ -11,6 +11,7 @@ import {
   EventImageUploadResponse,
   type EventImageUploadInput,
   type EventInput,
+  type PremiumTable,
   type VenueInput,
   type CompOrderInput,
   type UpdateSettingsInput,
@@ -623,8 +624,19 @@ export async function adminSaveEvent(input: EventInput, id?: string): Promise<Ad
     const now = new Date().toISOString();
     const first = input.days[0]!;
     const last = input.days[input.days.length - 1]!;
+    const { priceWindows, ...rest } = input;
     const saved: AdminEvent = {
-      ...input,
+      ...rest,
+      priceWindows: priceWindows
+        ? priceWindows.map((w, i) => ({
+            ...w,
+            id:
+              w.id ??
+              `01JPRC${String(Date.now() + i)
+                .padStart(20, '0')
+                .slice(-20)}`,
+          }))
+        : (old?.priceWindows ?? []),
       id: old?.id ?? `01JEVT${String(Date.now()).padStart(20, '0').slice(-20)}`,
       timeZone: 'America/New_York',
       startsAt: `${first.date}T${first.opens}:00-05:00`,
@@ -654,6 +666,8 @@ export async function adminSaveVenue(input: VenueInput, id?: string): Promise<Ad
       ...input,
       id: old?.id ?? `01JVEN${String(Date.now()).padStart(20, '0').slice(-20)}`,
       hasFloorPlan: old?.hasFloorPlan ?? false,
+      tableIds: old?.tableIds ?? [],
+      premiumTables: old?.premiumTables ?? [],
     };
     fixtureAdmin = { ...list, venues: [...list.venues.filter((v) => v.id !== saved.id), saved] };
     return fake(saved);
@@ -662,6 +676,26 @@ export async function adminSaveVenue(input: VenueInput, id?: string): Promise<Ad
     await authedRequest<unknown>(id ? `/admin/venues/${encodeURIComponent(id)}` : '/admin/venues', {
       method: id ? 'PUT' : 'POST',
       body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** Replace a venue's premium tables (fixed prices and surcharges on its floor plan). */
+export async function adminSavePremiumTables(
+  venueId: string,
+  tables: PremiumTable[],
+): Promise<AdminVenue> {
+  if (!hasApi) {
+    const list = adminFixture();
+    const old = list.venues.find((v) => v.id === venueId)!;
+    const saved: AdminVenue = { ...old, premiumTables: tables };
+    fixtureAdmin = { ...list, venues: list.venues.map((v) => (v.id === venueId ? saved : v)) };
+    return fake(saved);
+  }
+  return AdminVenue.parse(
+    await authedRequest<unknown>(`/admin/venues/${encodeURIComponent(venueId)}/premium-tables`, {
+      method: 'PUT',
+      body: JSON.stringify({ tables }),
     }),
   );
 }
