@@ -442,7 +442,7 @@ placeholder. QR on the vendor pass is Phase 5.
 ### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
 Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan editor (on hold);
-3 is built except the floor-plan items (deferred); 4 is in progress.
+3 is built except the floor-plan items (deferred); 4 is built; 5 is next.
 
 1. **Settings and roles.** Built 2026-10-11: `/admin/settings` (superadmin) edits fee, tax, hold
    minutes, checkout hold minutes, refund cutoff and the Calendly link through `GET` / `PUT
@@ -504,8 +504,14 @@ Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan
      (suspended vendors can't book), and turns the PokéBucks partner flag on or off (the
      Phase 3 "PokéBucks toggle"). `GET /admin/vendors`, `PATCH /admin/vendors/{id}`,
      `POST /admin/vendors/{id}/logo-upload`.
-   - Next: members (see, add by account email, remove; one vendor per person) and a link from a
-     vendor to its orders.
+   - _Members and orders link, built 2026-10-16:_ the vendor editor lists who can sign in for the
+     vendor and lets staff add someone by the email of an existing account (they get the
+     `vendor` group and `vendorId`) or remove them (they lose both). One vendor per person:
+     adding someone who belongs to another vendor is refused, and so is removing a vendor's
+     last member. A new member's token picks up the group on their next sign-in or refresh.
+     "See … orders" opens `/admin/orders/?vendor=ID` (`GET /admin/orders?vendorId=`).
+   - Not built: vendors inviting their own members; owner vs member permissions (the roles
+     exist but behave the same).
    - The applications queue already exists.
 5. **Gallery, partners, XP/badge config.** Gallery upload with the resize Lambda.
 6. **Emails (SES).** Order confirmation, application received / approved, refund issued. Dev can

@@ -14,6 +14,7 @@ import { Button } from '@/components/Button';
 import styles from '@/components/admin/admin.module.css';
 import ui from '@/components/ui.module.css';
 import { adminListVendors, adminUpdateVendor, adminUploadVendorLogo } from '@/lib/api';
+import { Members } from './Members';
 import local from './vendors.module.css';
 
 const LOGO_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'image/webp'];
@@ -331,7 +332,26 @@ export function VendorsAdmin() {
             </button>
           </div>
         </form>
-      ) : (
+      ) : null}
+      {draft && editing && (
+        <>
+          <Members
+            vendorId={editing}
+            vendorName={draft.businessName}
+            onCountChange={(count) =>
+              setVendors((cur) =>
+                (cur ?? []).map((v) => (v.id === editing ? { ...v, memberCount: count } : v)),
+              )
+            }
+          />
+          <p>
+            <a className={local.link} href={`/admin/orders/?vendor=${editing}`}>
+              See {draft.businessName}&apos;s orders →
+            </a>
+          </p>
+        </>
+      )}
+      {draft ? null : (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>

@@ -1,9 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AdminVendor, AdminVendorList } from '@fgg/types';
+import {
+  AdminAddUserToGroupCommand,
+  AdminRemoveUserFromGroupCommand,
+  CognitoIdentityProviderClient,
+} from '@aws-sdk/client-cognito-identity-provider';
+import { mockClient } from 'aws-sdk-client-mock';
+import { AdminVendor, AdminVendorList, AdminVendorMemberList } from '@fgg/types';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { FakeDdb } from './fake-ddb.js';
-import { EVENT_ID, parse, req as baseReq } from './fixtures.js';
+import { EVENT_ID, event, parse, req as baseReq, venue } from './fixtures.js';
 
 process.env.TABLE_NAME = 'fgg-test';
 process.env.MEDIA_BASE_URL = 'https://media.test';
@@ -11,6 +17,7 @@ process.env.WEB_ORIGINS = 'http://localhost:3000';
 process.env.USER_POOL_ID = 'us-east-1_test';
 
 const db = new FakeDdb();
+const cognito = mockClient(CognitoIdentityProviderClient);
 const { keys } = await import('../src/lib/db.js');
 const { setPresigner } = await import('../src/lib/media.js');
 const { handler } = await import('../src/handlers/account.js');
@@ -76,8 +83,32 @@ function order(id: string, ownerId: string, status: string) {
   });
 }
 
+const OWNER = '2f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d';
+const SECOND = '3f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d';
+const SAM = '4f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d';
+function user(sub: string, email: string, roles: string[], vendorId?: string) {
+  db.put({
+    ...keys.userIndex({ sub, email, createdAt: '2026-04-01T00:00:00Z' }),
+    sub,
+    email,
+    displayName: email.split('@')[0],
+    birthYear: 1990,
+    roles,
+    ...(vendorId ? { vendorId } : {}),
+    memberSince: '2026-04-01T00:00:00Z',
+    createdAt: '2026-04-01T00:00:00Z',
+    updatedAt: '2026-04-01T00:00:00Z',
+  });
+}
+
 beforeEach(() => {
   db.reset();
+  cognito.reset();
+  cognito.on(AdminAddUserToGroupCommand).resolves({});
+  cognito.on(AdminRemoveUserFromGroupCommand).resolves({});
+  user(OWNER, 'maya@cardcorner.com', ['attendee', 'vendor'], MAYA);
+  user(SECOND, 'jo@cardcorner.com', ['attendee', 'vendor'], MAYA);
+  user(SAM, 'sam@example.com', ['attendee']);
   vendor(MAYA, "Maya's Card Corner", 'active');
   vendor(PLUSH, 'Plush Pals', 'suspended');
   member(MAYA, '2f1a3a1e-6b2a-4c0e-9d1c-0f3c2b1a9e8d');
@@ -162,5 +193,115 @@ describe('admin vendors', () => {
     );
     expect(saved.body.logoUrl).toBe(`https://media.test/${res.body.key}`);
     setPresigner(undefined);
+  });
+
+  it('lists members, adds one by account email and removes one, keeping their roles in step', async () => {
+    const members = async () =>
+      AdminVendorMemberList.parse(
+        parse(await handler(staff('GET', `/admin/vendors/${MAYA}/members`))).body,
+      ).items.map((m) => [m.email, m.role]);
+    // Owners first, then by when they joined (both seeded as owners here).
+    expect(await members()).toEqual([
+      ['maya@cardcorner.com', 'owner'],
+      ['jo@cardcorner.com', 'owner'],
+    ]);
+
+    const add = (email: string, vendorId = MAYA) =>
+      handler(staff('POST', `/admin/vendors/${vendorId}/members`, { email }));
+    expect(parse(await add('nobody@example.com')).body.error.code).toBe('no_account');
+    expect(parse(await add('jo@cardcorner.com')).body.error.code).toBe('already_member');
+    expect(parse(await add('maya@cardcorner.com', PLUSH)).body.error.code).toBe('other_vendor');
+
+    const added = parse(await add('Sam@Example.com'));
+    expect(added.status).toBe(201);
+    expect(added.body.items).toContainEqual(
+      expect.objectContaining({ email: 'sam@example.com', role: 'member' }),
+    );
+    expect(db.get(`USER#${SAM}`, 'META')).toMatchObject({
+      roles: ['attendee', 'vendor'],
+      vendorId: MAYA,
+    });
+    expect(cognito.commandCalls(AdminAddUserToGroupCommand)[0]!.args[0].input).toMatchObject({
+      Username: SAM,
+      GroupName: 'vendor',
+    });
+    // The new member is matched to the vendor when they sign in.
+    expect(db.get(`VENDOR#${MAYA}`, `MEMBER#${SAM}`)).toMatchObject({ GSI1PK: `USER#${SAM}` });
+
+    const removed = parse(await handler(staff('DELETE', `/admin/vendors/${MAYA}/members/${SAM}`)));
+    expect(removed.status).toBe(200);
+    expect(removed.body.items).toHaveLength(2);
+    expect(db.get(`VENDOR#${MAYA}`, `MEMBER#${SAM}`)).toBeUndefined();
+    expect(db.get(`USER#${SAM}`, 'META')!.roles).toEqual(['attendee']);
+    expect(db.get(`USER#${SAM}`, 'META')).not.toHaveProperty('vendorId');
+    expect(cognito.commandCalls(AdminRemoveUserFromGroupCommand)[0]!.args[0].input).toMatchObject({
+      Username: SAM,
+      GroupName: 'vendor',
+    });
+
+    // The last member can't be removed; neither can someone who isn't a member.
+    await handler(staff('DELETE', `/admin/vendors/${MAYA}/members/${SECOND}`));
+    const last = parse(await handler(staff('DELETE', `/admin/vendors/${MAYA}/members/${OWNER}`)));
+    expect(last.body.error.code).toBe('last_member');
+    expect(
+      parse(await handler(staff('DELETE', `/admin/vendors/${MAYA}/members/${SAM}`))).status,
+    ).toBe(404);
+    expect(parse(await handler(vendorUser('GET', `/admin/vendors/${MAYA}/members`))).status).toBe(
+      403,
+    );
+  });
+
+  it("filters the orders list to one vendor's orders", async () => {
+    db.put({ ...keys.eventIndex(event), ...event });
+    db.put({ ...keys.venue(venue.id), ...venue });
+    // The bare orders from beforeEach only carry what the counts need; use full ones here.
+    for (const id of ['o1', 'o2', 'o3']) db.items.delete(db.key(`ORDER#${id}`, 'META'));
+    const full = (id: string, ownerId: string, status: string) =>
+      db.put({
+        PK: `ORDER#${id}`,
+        SK: 'META',
+        GSI1PK: `OWNER#${ownerId}`,
+        GSI1SK: `ORDER#2026-10-24#${id}`,
+        GSI2PK: `ORDERS#${status}`,
+        GSI2SK: `2026-10-01#${id}`,
+        id,
+        eventId: EVENT_ID,
+        kind: 'vendor_table',
+        source: 'shopify',
+        ownerId,
+        placedBy: OWNER,
+        status,
+        lines: [
+          {
+            type: 'table',
+            tableId: 'A1',
+            dates: ['2026-10-24'],
+            rate: 'standard',
+            unitCents: 20000,
+            lineCents: 20000,
+          },
+        ],
+        subtotalCents: 20000,
+        feeCents: 0,
+        taxCents: 0,
+        totalCents: 20000,
+        createdAt: '2026-10-01T00:00:00Z',
+        updatedAt: '2026-10-01T00:00:00Z',
+      });
+    full('01HZX3V9K7Q2M4N8P6R5T1W0Y1', MAYA, 'paid');
+    full('01HZX3V9K7Q2M4N8P6R5T1W0Y2', MAYA, 'refunded');
+    full('01HZX3V9K7Q2M4N8P6R5T1W0Y3', PLUSH, 'paid');
+    const ids = async (query: Record<string, string>) => {
+      const r = baseReq('GET', '/admin/orders', { query }) as any;
+      r.requestContext.authorizer = (staff('GET', '/x') as any).requestContext.authorizer;
+      return parse(await handler(r))
+        .body.items.map((o: any) => o.id)
+        .sort();
+    };
+    expect(await ids({ vendorId: MAYA })).toEqual([
+      '01HZX3V9K7Q2M4N8P6R5T1W0Y1',
+      '01HZX3V9K7Q2M4N8P6R5T1W0Y2',
+    ]);
+    expect(await ids({ vendorId: MAYA, status: 'paid' })).toEqual(['01HZX3V9K7Q2M4N8P6R5T1W0Y1']);
   });
 });
