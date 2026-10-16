@@ -1229,3 +1229,16 @@
   font-size: 22px;
   line-height: 1;
 }
+
+/* "Early-bird pricing until Oct 1" under the step title. */
+.priceNote {
+  display: inline-block;
+  margin-top: 6px;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-chip);
+  padding: 3px 10px;
+  background: var(--color-yellow);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 12px;
+}

@@ -15,6 +15,7 @@ import {
   type QuoteInput,
   type Vendor,
 } from '@fgg/types';
+import { tableById, tableUnitCents } from '../booking';
 import { fixtureEvents } from './home';
 import { fid } from './ids';
 
@@ -67,6 +68,8 @@ for (const [ri, row] of ['A', 'B', 'C', 'D', 'E', 'F'].entries()) {
       x: n <= 5 ? n : n + 1,
       y: ri + 1,
       nearby: n <= 5 ? ['art-station'] : ['kids-trading', 'find-em-all'],
+      // F10 is the corner by the entrance: a premium table at $50 more a day.
+      ...(row === 'F' && n === 10 ? { premiumDeltaCents: 5000 } : {}),
     });
   }
 }
@@ -91,6 +94,7 @@ export const floorPlanResponseFixture = EventFloorPlan.parse({
   event: halloween,
   venue,
   floorPlan: floorPlanFixture,
+  pricing: { tableRateCents: 20000, pokeBucksRateCents: 10000 },
   availability: {
     eventId: halloween.id,
     vendorStatus: 'open',
@@ -110,6 +114,13 @@ export const countEventFixture = fixtureEvents.find((e) => e.tableBooking === 'q
 export const countResponseFixture = EventFloorPlan.parse({
   event: countEventFixture,
   venue: { ...venue, ...countEventFixture.venue, address: '797 E Patrick St' },
+  // Winter Fest is in its early-bird window in the fixtures.
+  pricing: {
+    tableRateCents: 15000,
+    pokeBucksRateCents: 7500,
+    windowKind: 'early_bird',
+    windowEndsAt: '2026-12-01T05:00:00.000Z',
+  },
   availability: {
     eventId: countEventFixture.id,
     vendorStatus: 'open',
@@ -125,20 +136,23 @@ export const countResponseFixture = EventFloorPlan.parse({
 export type CartLineFixture = QuoteInput['lines'][number];
 
 export function quoteFixture(lines: CartLineFixture[], rate: 'standard' | 'poke_bucks'): Quote {
-  const unit = rate === 'poke_bucks' ? 10000 : 20000;
+  const byCount = lines.some((l) => 'quantity' in l);
+  const pricing = (byCount ? countResponseFixture : floorPlanResponseFixture).pricing!;
+  const base = rate === 'poke_bucks' ? pricing.pokeBucksRateCents : pricing.tableRateCents;
   const priced = lines.map((l) => {
     if ('quantity' in l) {
       return {
         quantity: l.quantity,
         dates: [...l.dates].sort(),
-        unitCents: unit,
-        lineCents: unit * l.quantity * l.dates.length,
+        unitCents: base,
+        lineCents: base * l.quantity * l.dates.length,
         pricingInputs: {},
       };
     }
     const { tableId, dates } = l;
     const row = tableId[0]!;
     const n = Number(tableId.slice(1));
+    const unit = tableUnitCents(tableById(floorPlanFixture, tableId), base);
     return {
       tableId,
       dates: [...dates].sort(),
@@ -439,6 +453,19 @@ export const adminEventsFixture: AdminEventList = AdminEventList.parse({
     tableBooking: e.tableBooking ?? 'floor_plan',
     ...(e.tableBooking === 'quantity' ? { tableCapacity: 40 } : {}),
     ...(e.posterUrl ? { posterKey: `events/${e.slug}/poster.jpg`, posterUrl: e.posterUrl } : {}),
+    priceWindows:
+      e.tableBooking === 'quantity'
+        ? [
+            {
+              id: fid('01JPRC', 1),
+              kind: 'early_bird',
+              startsAt: '2026-10-01T04:00:00.000Z',
+              endsAt: '2026-12-01T05:00:00.000Z',
+              tableRateCents: 15000,
+              pokeBucksRateCents: 7500,
+            },
+          ]
+        : [],
     createdAt: '2026-09-01T00:00:00Z',
     updatedAt: '2026-09-01T00:00:00Z',
   })),
@@ -447,5 +474,7 @@ export const adminEventsFixture: AdminEventList = AdminEventList.parse({
     address: '2200 York Rd',
     timeZone: 'America/New_York',
     hasFloorPlan: v.id !== countEventFixture.venue.id,
+    tableIds: v.id === venue.id ? floorPlanFixture.tables.map((t) => t.id) : [],
+    premiumTables: v.id === venue.id ? [{ tableId: 'F10', premiumDeltaCents: 5000 }] : [],
   })),
 });

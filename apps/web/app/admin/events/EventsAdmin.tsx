@@ -6,6 +6,7 @@ import type {
   AdminVenue,
   EventImageKind,
   EventInput,
+  PremiumTable,
   TableBooking,
   VendorTableStatus,
 } from '@fgg/types';
@@ -16,6 +17,7 @@ import {
   adminListEvents,
   adminRebuildSite,
   adminSaveEvent,
+  adminSavePremiumTables,
   adminSaveVenue,
   adminUploadEventImage,
 } from '@/lib/api';
@@ -30,6 +32,24 @@ const VENDOR_STATUS: Record<VendorTableStatus, string> = {
 const TIME_ZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles'];
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
+
+const WINDOW_KIND = { early_bird: 'Early bird', standard: 'Standard', late: 'Late' } as const;
+type WindowKind = keyof typeof WINDOW_KIND;
+/** A price window as the form holds it: local date-times and dollars. */
+interface WindowDraft {
+  id?: string | undefined;
+  kind: WindowKind;
+  startsAt: string;
+  endsAt: string;
+  tableRate: string;
+  pokeBucksRate: string;
+}
+/** A premium table as the form holds it. */
+interface PremiumDraft {
+  tableId: string;
+  mode: 'surcharge' | 'fixed';
+  amount: string;
+}
 
 interface DayDraft {
   date: string;
@@ -59,6 +79,7 @@ interface EventDraft {
   cardUrl?: string | undefined;
   published: boolean;
   seriesId?: string | undefined;
+  windows: WindowDraft[];
 }
 interface VenueDraft {
   id?: string;
@@ -96,6 +117,7 @@ const newEvent = (venueId: string): EventDraft => ({
   tableBooking: 'floor_plan',
   tableCapacity: '',
   published: false,
+  windows: [],
 });
 const toDraft = (e: AdminEvent): EventDraft => ({
   id: e.id,
@@ -117,6 +139,14 @@ const toDraft = (e: AdminEvent): EventDraft => ({
   cardUrl: e.cardUrl,
   published: e.published,
   seriesId: e.seriesId,
+  windows: e.priceWindows.map((w) => ({
+    id: w.id,
+    kind: w.kind,
+    startsAt: toLocalInput(w.startsAt),
+    endsAt: toLocalInput(w.endsAt),
+    tableRate: dollars(w.tableRateCents),
+    pokeBucksRate: dollars(w.pokeBucksRateCents),
+  })),
 });
 
 /** The form as the API wants it, or a message about the first thing that's missing. */
@@ -133,6 +163,11 @@ function toInput(d: EventDraft): EventInput | string {
   const capacity = Number(d.tableCapacity);
   if (d.tableBooking === 'quantity' && !(Number.isInteger(capacity) && capacity > 0))
     return 'Say how many tables are for sale each day.';
+  for (const w of d.windows) {
+    if (!w.startsAt || !w.endsAt) return 'Every price window needs a start and an end.';
+    if (![w.tableRate, w.pokeBucksRate].every((s) => s.trim() !== '' && Number(s) >= 0))
+      return 'Enter both price window rates in dollars.';
+  }
   return {
     name: d.name.trim(),
     slug: d.slug,
@@ -154,6 +189,14 @@ function toInput(d: EventDraft): EventInput | string {
     ...(d.cardKey ? { cardKey: d.cardKey } : {}),
     ...(d.seriesId ? { seriesId: d.seriesId } : {}),
     published: d.published,
+    priceWindows: d.windows.map((w) => ({
+      ...(w.id ? { id: w.id } : {}),
+      kind: w.kind,
+      startsAt: new Date(w.startsAt).toISOString(),
+      endsAt: new Date(w.endsAt).toISOString(),
+      tableRateCents: money(w.tableRate),
+      pokeBucksRateCents: money(w.pokeBucksRate),
+    })),
   };
 }
 
@@ -164,6 +207,8 @@ export function EventsAdmin() {
   const [tab, setTab] = useState<'events' | 'venues'>('events');
   const [draft, setDraft] = useState<EventDraft | null>(null);
   const [venueDraft, setVenueDraft] = useState<VenueDraft | null>(null);
+  /** Premium tables of the venue being edited (only venues with a floor plan have any). */
+  const [premium, setPremium] = useState<PremiumDraft[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -195,6 +240,10 @@ export function EventsAdmin() {
   const patch = (p: Partial<EventDraft>) => setDraft((d) => (d ? { ...d, ...p } : d));
   const patchDay = (i: number, p: Partial<DayDraft>) =>
     setDraft((d) => (d ? { ...d, days: d.days.map((x, j) => (j === i ? { ...x, ...p } : x)) } : d));
+  const patchWindow = (i: number, p: Partial<WindowDraft>) =>
+    setDraft((d) =>
+      d ? { ...d, windows: d.windows.map((x, j) => (j === i ? { ...x, ...p } : x)) } : d,
+    );
   /** A new event's link follows its name and year until someone edits the link. */
   const autoSlug = (name: string, firstDate: string) =>
     slugify(`${name} ${firstDate ? year(firstDate) : ''}`);
@@ -265,6 +314,57 @@ export function EventsAdmin() {
       say(`Saved ${saved.name}.`);
     } catch (e) {
       fail(e, 'Could not save the venue');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const editVenue = (v: AdminVenue | null) => {
+    setToast(null);
+    setError(null);
+    if (!v) {
+      setVenueDraft({ name: '', address: '', city: '', state: 'MD', timeZone: TIME_ZONES[0]! });
+      setPremium(null);
+      return;
+    }
+    const { hasFloorPlan, tableIds: _t, premiumTables, ...rest } = v;
+    setVenueDraft(rest);
+    setPremium(
+      hasFloorPlan
+        ? premiumTables.map((p) =>
+            'priceOverrideCents' in p
+              ? { tableId: p.tableId, mode: 'fixed', amount: dollars(p.priceOverrideCents) }
+              : { tableId: p.tableId, mode: 'surcharge', amount: dollars(p.premiumDeltaCents) },
+          )
+        : null,
+    );
+  };
+
+  const savePremium = async () => {
+    if (!venueDraft?.id || !premium) return;
+    const tables: PremiumTable[] = [];
+    for (const p of premium) {
+      const cents = Math.round(Number(p.amount) * 100);
+      if (!p.tableId || p.amount.trim() === '' || !(cents >= 0))
+        return setError('Each premium table needs a table and an amount in dollars.');
+      if (p.mode === 'surcharge' && cents === 0)
+        return setError(`A surcharge on ${p.tableId} has to be more than $0.`);
+      tables.push(
+        p.mode === 'fixed'
+          ? { tableId: p.tableId, priceOverrideCents: cents }
+          : { tableId: p.tableId, premiumDeltaCents: cents },
+      );
+    }
+    if (new Set(tables.map((t) => t.tableId)).size !== tables.length)
+      return setError('Each table can only be listed once.');
+    setBusy('premium');
+    setError(null);
+    try {
+      const saved = await adminSavePremiumTables(venueDraft.id, tables);
+      setVenues((cur) => cur.map((v) => (v.id === saved.id ? saved : v)));
+      say(`Saved premium tables for ${saved.name}. New holds use these prices.`);
+    } catch (e) {
+      fail(e, 'Could not save the premium tables');
     } finally {
       setBusy(null);
     }
@@ -560,6 +660,97 @@ export function EventsAdmin() {
             )}
           </div>
 
+          <span className={styles.cardTitle}>Price windows</span>
+          <span className={styles.muted}>
+            Optional dated rates, such as an early bird. Outside every window the table rates above
+            apply. Times are in your time zone. Prices already held or paid don&apos;t change.
+          </span>
+          <div className={local.days}>
+            {draft.windows.map((w, i) => (
+              <div key={i} className={`${styles.formRow} ${local.windowRow}`}>
+                <label>
+                  Kind
+                  <select
+                    value={w.kind}
+                    onChange={(e) => patchWindow(i, { kind: e.target.value as WindowKind })}
+                  >
+                    {Object.entries(WINDOW_KIND).map(([k, label]) => (
+                      <option key={k} value={k}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Starts
+                  <input
+                    type="datetime-local"
+                    value={w.startsAt}
+                    onChange={(e) => patchWindow(i, { startsAt: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Ends
+                  <input
+                    type="datetime-local"
+                    value={w.endsAt}
+                    onChange={(e) => patchWindow(i, { endsAt: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Table $
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={w.tableRate}
+                    onChange={(e) => patchWindow(i, { tableRate: e.target.value })}
+                  />
+                </label>
+                <label>
+                  PokéBucks $
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={w.pokeBucksRate}
+                    onChange={(e) => patchWindow(i, { pokeBucksRate: e.target.value })}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={local.link}
+                  aria-label={`Remove price window ${i + 1}`}
+                  onClick={() => patch({ windows: draft.windows.filter((_, j) => j !== i) })}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <div>
+              <button
+                type="button"
+                className={local.link}
+                onClick={() =>
+                  patch({
+                    windows: [
+                      ...draft.windows,
+                      {
+                        kind: 'early_bird',
+                        startsAt: '',
+                        endsAt: '',
+                        tableRate: draft.tableRate,
+                        pokeBucksRate: draft.pokeBucksRate,
+                      },
+                    ],
+                  })
+                }
+              >
+                + Add a price window
+              </button>
+            </div>
+          </div>
+
           <span className={styles.cardTitle}>Images</span>
           <div className={local.images}>
             {image(
@@ -708,24 +899,105 @@ export function EventsAdmin() {
         </form>
       )}
 
-      {tab === 'venues' && !venueDraft && (
-        <>
+      {tab === 'venues' && venueDraft?.id && premium && (
+        <div className={styles.card}>
+          <span className={styles.cardTitle}>Premium tables</span>
+          <span className={styles.muted}>
+            Tables that cost more (or less) than the event rate, at every event here: a surcharge on
+            top of the rate, or a fixed price per day. Applies to new holds; prices already held or
+            paid don&apos;t change.
+          </span>
+          <div className={local.days}>
+            {premium.map((p, i) => (
+              <div key={i} className={`${styles.formRow} ${local.premiumRow}`}>
+                <label>
+                  Table
+                  <select
+                    value={p.tableId}
+                    onChange={(e) =>
+                      setPremium(
+                        premium.map((x, j) => (j === i ? { ...x, tableId: e.target.value } : x)),
+                      )
+                    }
+                  >
+                    <option value="">Pick a table</option>
+                    {(venueOf(venueDraft.id!)?.tableIds ?? []).map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Price
+                  <select
+                    value={p.mode}
+                    onChange={(e) =>
+                      setPremium(
+                        premium.map((x, j) =>
+                          j === i ? { ...x, mode: e.target.value as PremiumDraft['mode'] } : x,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="surcharge">Surcharge ($ more per day)</option>
+                    <option value="fixed">Fixed price ($ per day)</option>
+                  </select>
+                </label>
+                <label>
+                  Amount $
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={p.amount}
+                    onChange={(e) =>
+                      setPremium(
+                        premium.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)),
+                      )
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={local.link}
+                  aria-label={`Remove premium table ${p.tableId || i + 1}`}
+                  onClick={() => setPremium(premium.filter((_, j) => j !== i))}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <div>
+              <button
+                type="button"
+                className={local.link}
+                onClick={() =>
+                  setPremium([...premium, { tableId: '', mode: 'surcharge', amount: '' }])
+                }
+              >
+                + Add a premium table
+              </button>
+            </div>
+          </div>
           <div>
             <Button
               type="button"
-              variant="yellow"
+              variant="dark"
               size="sm"
-              onClick={() => {
-                setToast(null);
-                setVenueDraft({
-                  name: '',
-                  address: '',
-                  city: '',
-                  state: 'MD',
-                  timeZone: TIME_ZONES[0]!,
-                });
-              }}
+              disabled={busy !== null}
+              onClick={() => void savePremium()}
             >
+              {busy === 'premium' ? 'Saving…' : 'Save premium tables'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'venues' && !venueDraft && (
+        <>
+          <div>
+            <Button type="button" variant="yellow" size="sm" onClick={() => editVenue(null)}>
               New venue
             </Button>
           </div>
@@ -751,6 +1023,12 @@ export function EventsAdmin() {
                     </td>
                     <td>
                       <span className={styles.chip}>{v.hasFloorPlan ? 'Yes' : 'Not yet'}</span>
+                      {v.premiumTables.length > 0 && (
+                        <span className={styles.sub}>
+                          {v.premiumTables.length} premium{' '}
+                          {v.premiumTables.length === 1 ? 'table' : 'tables'}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <Button
@@ -758,12 +1036,7 @@ export function EventsAdmin() {
                         variant="outline"
                         size="sm"
                         aria-label={`Edit ${v.name}`}
-                        onClick={() => {
-                          setToast(null);
-                          setError(null);
-                          const { hasFloorPlan: _h, ...rest } = v;
-                          setVenueDraft(rest);
-                        }}
+                        onClick={() => editVenue(v)}
                       >
                         Edit
                       </Button>

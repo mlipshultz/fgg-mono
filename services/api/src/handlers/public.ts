@@ -19,6 +19,7 @@ import {
   getEventBySlug,
   getFloorPlan,
   getSettings,
+  listPriceWindows,
   getSettingsItem,
   getVendor,
   keys,
@@ -33,6 +34,7 @@ import {
   type StoredGalleryItem,
 } from '../lib/db.js';
 import { HttpError, Router, json, parseBody, type Req } from '../lib/http.js';
+import { activeWindow } from '../lib/pricing.js';
 import { mediaUrl, thumbUrl } from '../lib/media.js';
 import {
   loadAvailability,
@@ -179,12 +181,14 @@ export const router = new Router()
   })
   .add('GET', '/public/events/{id}/floorplan', async (req, { id }) => {
     const ev = await resolveEvent(id!);
-    const [venue, floorPlan, availability, settings] = await Promise.all([
+    const [venue, floorPlan, availability, settings, windows] = await Promise.all([
       venueFor(ev.venueId),
       getFloorPlan(ev.venueId),
       loadAvailability(ev),
       getSettings(),
+      listPriceWindows(ev.id),
     ]);
+    const win = activeWindow(windows, new Date());
     if (!venue) throw new HttpError(500, 'venue_missing', 'Venue missing');
     const byCount = ev.tableBooking === 'quantity';
     if (!floorPlan && !byCount)
@@ -198,6 +202,11 @@ export const router = new Router()
         holdMinutes: settings.holdMinutes,
         checkoutHoldMinutes: settings.checkoutHoldMinutes,
         refundCutoffDays: settings.refundCutoffDays,
+      },
+      pricing: {
+        tableRateCents: win ? win.tableRateCents : ev.tableRateCents,
+        pokeBucksRateCents: win ? win.pokeBucksRateCents : ev.pokeBucksRateCents,
+        ...(win ? { windowKind: win.kind, windowEndsAt: win.endsAt } : {}),
       },
     };
     return json(req, body, 200, { 'cache-control': 'no-store' });

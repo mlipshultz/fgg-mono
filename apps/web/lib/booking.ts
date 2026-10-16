@@ -1,4 +1,11 @@
-import type { EventAvailability, FloorPlan, FloorTable, IsoDate, Order } from '@fgg/types';
+import type {
+  EventAvailability,
+  EventFloorPlan,
+  FloorPlan,
+  FloorTable,
+  IsoDate,
+  Order,
+} from '@fgg/types';
 import { dayOfWeek, parseIsoDate } from './dates';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -177,6 +184,23 @@ export function tableDaysCount(order: Pick<Order, 'lines'>): number {
 /** Union of booked days, sorted. */
 export function orderDates(order: Pick<Order, 'lines'>): IsoDate[] {
   return [...new Set(bookedLinesOf(order).flatMap((l) => l.dates))].sort();
+}
+
+const WINDOW_LABEL = { early_bird: 'Early-bird', late: 'Late' } as const;
+
+/** "Early-bird pricing until Oct 1", when an early-bird or late window is in force. */
+export function priceWindowNote(pricing?: EventFloorPlan['pricing']): string | undefined {
+  if (!pricing?.windowKind || pricing.windowKind === 'standard' || !pricing.windowEndsAt) return;
+  const end = new Date(new Date(pricing.windowEndsAt).getTime() - 1);
+  const until = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${WINDOW_LABEL[pricing.windowKind]} pricing until ${until}`;
+}
+
+/** What a table costs per day at a base rate: its fixed price, or the rate plus its surcharge. */
+export function tableUnitCents(table: FloorTable | undefined, baseCents: number): number {
+  if (!table) return baseCents;
+  if (table.priceOverrideCents !== undefined) return table.priceOverrideCents;
+  return Math.max(0, baseCents + (table.premiumDeltaCents ?? 0));
 }
 
 export function tableById(plan: FloorPlan, id: string): FloorTable | undefined {

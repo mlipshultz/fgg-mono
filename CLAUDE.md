@@ -33,7 +33,10 @@ spec is `docs/handoff/README.md` and the canvas `docs/handoff/FGG Site.dc.html`.
 - Roles are Cognito groups; every API route checks `can()` from the permissions module.
 - Styling: CSS modules + token variables. No Tailwind. Sticker look = 2px ink border + hard offset
   shadow, only on interactive and hero elements.
-- Changes land via PR to `main`; CI must pass. Merging does not deploy: the GitHub "Deploy" workflow
+- Changes land via PR to `main`. While the site is in development, run `pnpm lint`, `pnpm typecheck`,
+  `pnpm test` and the fixture browser tests locally, then merge the PR straight away
+  (`gh pr merge --squash --admin`) instead of waiting for CI; CI still runs on `main` afterwards and
+  anything it catches gets fixed next. Merging does not deploy: the GitHub "Deploy" workflow
   is manual-only (dev or prod) until prod goes live; use `pnpm dev:deploy` for dev.
 
 ## Gotchas

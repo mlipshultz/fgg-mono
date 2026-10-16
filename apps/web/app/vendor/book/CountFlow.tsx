@@ -31,6 +31,7 @@ import {
   daysShort,
   fmtCents,
   orderDates,
+  priceWindowNote,
   tableCountLabel,
   unassignedTables,
 } from '@/lib/booking';
@@ -209,9 +210,10 @@ export function CountFlow({
   for (const l of served?.lines ?? [])
     if ('quantity' in l) for (const d of l.dates) servedCounts[d] = l.quantity;
   const priced = served && served.rate === rate && countsKey(servedCounts) === key ? served : null;
+  const pricing = data.pricing ?? ev;
   const unit =
     priced?.lines[0]?.unitCents ??
-    (rate === 'poke_bucks' ? ev.pokeBucksRateCents : ev.tableRateCents);
+    (rate === 'poke_bucks' ? pricing.pokeBucksRateCents : pricing.tableRateCents);
   const tableDays = lines.reduce((n, l) => n + l.quantity, 0);
   const subtotal = priced?.subtotalCents ?? unit * tableDays;
   const total = priced?.totalCents ?? subtotal;
@@ -357,6 +359,9 @@ export function CountFlow({
                 {shortDateLabel(ev.startDate, ev.endDate)} · {ev.venue.name}
               </span>
               <h1 className={styles.stepTitle}>How many tables?</h1>
+              {priceWindowNote(data.pricing) && (
+                <span className={styles.priceNote}>{priceWindowNote(data.pricing)}</span>
+              )}
             </div>
             <p className={styles.countNote}>
               We&apos;re still working out the floor plan for {ev.venue.name}, so there&apos;s no
@@ -422,7 +427,7 @@ export function CountFlow({
                 </div>
                 <RateSwitch
                   rate={rate}
-                  pokeBucksCents={ev.pokeBucksRateCents}
+                  pokeBucksCents={pricing.pokeBucksRateCents}
                   disabled={busy}
                   onChange={setRate}
                 />
