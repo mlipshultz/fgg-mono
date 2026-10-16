@@ -33,4 +33,13 @@ test.describe('admin vendors', () => {
     await page.getByRole('button', { name: 'Save vendor' }).click();
     await expect(page.getByText('Enter a valid email.')).toBeVisible();
   });
+
+  test('saves other changes for a vendor with no store description', async ({ page }) => {
+    await page.goto(url('/admin/vendors/'));
+    await page.getByRole('button', { name: 'Edit Plush Pals' }).click();
+    await page.getByLabel('About the store').fill('');
+    await page.getByLabel('Phone').fill('4105550123');
+    await page.getByRole('button', { name: 'Save vendor' }).click();
+    await expect(page.getByText('Saved Plush Pals.')).toBeVisible();
+  });
 });

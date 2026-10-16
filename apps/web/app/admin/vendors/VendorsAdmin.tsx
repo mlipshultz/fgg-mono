@@ -55,7 +55,6 @@ function toInput(d: Draft): AdminVendorInput | string {
   if (!d.contactName.trim()) return 'Add a contact name.';
   if (!/^\S+@\S+\.\S+$/.test(d.email.trim())) return 'Enter a valid email.';
   if (d.phone.replace(/\D/g, '').length < 7) return 'Enter a phone number.';
-  if (!d.sellsDescription.trim()) return 'Describe what the store sells.';
   if (d.website.trim() && !/^https?:\/\/\S+$/.test(d.website.trim()))
     return 'The website needs to start with https://';
   return {
@@ -63,7 +62,8 @@ function toInput(d: Draft): AdminVendorInput | string {
     contactName: d.contactName.trim(),
     email: d.email.trim(),
     phone: d.phone.trim(),
-    sellsDescription: d.sellsDescription.trim(),
+    // Older vendors may have no description; staff can still save other changes.
+    ...(d.sellsDescription.trim() ? { sellsDescription: d.sellsDescription.trim() } : {}),
     sells: d.sells,
     socials: {
       ...(d.instagram.trim() ? { instagram: d.instagram.trim().replace(/^@/, '') } : {}),
