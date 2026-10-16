@@ -1,8 +1,8 @@
 name: Deploy
 
+# Manual only while the site is in development: dev is deployed from a laptop with
+# `pnpm dev:deploy`. Put the `push: branches: [main]` trigger back before prod goes live.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       stage:
@@ -40,7 +40,8 @@ jobs:
           aws-region: us-east-1
       - name: cdk deploy
         working-directory: infra
-        run: pnpm cdk deploy --all -c stage=${{ inputs.stage || 'dev' }} --require-approval never --outputs-file outputs.json
+        # --revert-drift: put back any Lambda code hotswapped onto dev by `pnpm dev:deploy`.
+        run: pnpm cdk deploy --all -c stage=${{ inputs.stage || 'dev' }} --require-approval never --revert-drift --outputs-file outputs.json
       - uses: actions/upload-artifact@v4
         with:
           name: cdk-outputs-${{ inputs.stage || 'dev' }}

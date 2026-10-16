@@ -14,7 +14,8 @@
     "test": "turbo run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "cdk": "pnpm --filter @fgg/infra cdk"
+    "cdk": "pnpm --filter @fgg/infra cdk",
+    "dev:deploy": "bash scripts/dev-deploy.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
