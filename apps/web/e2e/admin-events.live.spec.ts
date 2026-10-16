@@ -149,7 +149,7 @@ test.describe('admin events and venues on dev @live', () => {
     // A harmless edit on an event saves; unpublish it again to keep it out of the way.
     await openEvents(page);
     await page.getByRole('button', { name: `Edit ${NAME}` }).click();
-    await page.getByLabel('Table rate ($ per day)').fill('225');
+    await page.getByLabel('Table $/day').fill('225');
     await page.getByLabel('Published (listed on the site)').uncheck();
     await page.getByRole('button', { name: 'Save event' }).click();
     await expect(row(page, NAME)).toContainText('Draft');

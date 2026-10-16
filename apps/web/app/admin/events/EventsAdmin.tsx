@@ -611,7 +611,7 @@ export function EventsAdmin() {
               </label>
             )}
             <label>
-              Table rate ($ per day)
+              Table $/day
               <input
                 type="number"
                 min={0}
@@ -621,7 +621,7 @@ export function EventsAdmin() {
               />
             </label>
             <label>
-              PokéBucks partner rate ($ per day)
+              PokéBucks $/day
               <input
                 type="number"
                 min={0}
