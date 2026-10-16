@@ -293,6 +293,83 @@ export const UpdateSettingsInput = z.object({
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 
 // ---------------------------------------------------------------------------
+// Admin gallery (staff / superadmin).
+// ---------------------------------------------------------------------------
+
+/** A gallery item as the admin page shows it: the public view plus its order in the event. */
+export const AdminGalleryItem = z.intersection(
+  PublicGalleryItem,
+  z.object({
+    sortOrder: z.number().int(),
+    featured: z.boolean(),
+    /** Photos: the file as uploaded, shown until the resized copies exist (a few seconds). */
+    originalUrl: z.string().url().optional(),
+  }),
+);
+export type AdminGalleryItem = z.infer<typeof AdminGalleryItem>;
+
+/** GET /admin/gallery?eventId= — one event's items, in order. */
+export const AdminGalleryList = z.object({ items: z.array(AdminGalleryItem) });
+export type AdminGalleryList = z.infer<typeof AdminGalleryList>;
+
+/** POST /admin/gallery/image-upload → PUT the photo to `uploadUrl`, then create the item. */
+export const GalleryImageUploadInput = z.object({
+  contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+});
+export type GalleryImageUploadInput = z.infer<typeof GalleryImageUploadInput>;
+export const GalleryImageUploadResponse = z.object({
+  uploadUrl: z.string().url(),
+  key: z.string(),
+  /** The original as uploaded, for an immediate preview (resized copies follow in seconds). */
+  url: z.string().url(),
+});
+export type GalleryImageUploadResponse = z.infer<typeof GalleryImageUploadResponse>;
+
+const GalleryText = { featured: z.boolean().default(false) };
+/** POST /admin/gallery — a new photo, stat or quote at the end of the event's gallery. */
+export const GalleryItemInput = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('photo'),
+    eventId: Ulid,
+    mediaKey: z.string().startsWith('gallery/originals/'),
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
+    caption: z.string().trim().max(200).optional(),
+    ...GalleryText,
+  }),
+  z.object({
+    type: z.literal('stat'),
+    eventId: Ulid,
+    value: z.string().trim().min(1).max(20),
+    label: z.string().trim().min(1).max(60),
+    ...GalleryText,
+  }),
+  z.object({
+    type: z.literal('quote'),
+    eventId: Ulid,
+    text: z.string().trim().min(1).max(300),
+    attribution: z.string().trim().max(80).optional(),
+    ...GalleryText,
+  }),
+]);
+export type GalleryItemInput = z.infer<typeof GalleryItemInput>;
+
+/** PUT /admin/gallery/{id} — the editable text of an item and whether it is featured. */
+export const GalleryItemUpdate = z.object({
+  featured: z.boolean().optional(),
+  caption: z.string().trim().max(200).optional(),
+  value: z.string().trim().min(1).max(20).optional(),
+  label: z.string().trim().min(1).max(60).optional(),
+  text: z.string().trim().min(1).max(300).optional(),
+  attribution: z.string().trim().max(80).optional(),
+});
+export type GalleryItemUpdate = z.infer<typeof GalleryItemUpdate>;
+
+/** POST /admin/gallery/{id}/move — swap with the neighbour before or after it. */
+export const GalleryMoveInput = z.object({ direction: z.enum(['up', 'down']) });
+export type GalleryMoveInput = z.infer<typeof GalleryMoveInput>;
+
+// ---------------------------------------------------------------------------
 // Admin events and venues (staff / superadmin).
 // ---------------------------------------------------------------------------
 

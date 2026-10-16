@@ -5,6 +5,12 @@ import {
   type CancelRequestInput,
   CheckoutResponse,
   AdminEvent,
+  AdminGalleryItem,
+  AdminGalleryList,
+  GalleryImageUploadResponse,
+  type GalleryImageUploadInput,
+  type GalleryItemInput,
+  type GalleryItemUpdate,
   AdminVendor,
   AdminVendorList,
   AdminVendorMemberList,
@@ -866,6 +872,157 @@ export async function adminUploadVendorLogo(
   });
   if (!res.ok) throw new ApiError(`Upload failed (${res.status})`, res.status);
   return { key: up.key, logoUrl: up.logoUrl };
+}
+
+// ---------------------------------------------------------------------------
+// Admin gallery. Fixture mode keeps each event's items in memory.
+// ---------------------------------------------------------------------------
+
+let fixtureGallery: Record<string, AdminGalleryItem[]> | null = null;
+const galleryAdmin = (): Record<string, AdminGalleryItem[]> => {
+  if (fixtureGallery) return fixtureGallery;
+  const byEvent: Record<string, AdminGalleryItem[]> = {};
+  for (const it of localize(galleryFixture).items) {
+    const list = (byEvent[it.eventId] ??= []);
+    list.push({
+      ...it,
+      sortOrder: list.length + 1,
+      featured: 'featured' in it ? it.featured : false,
+      ...(it.type === 'photo' ? { originalUrl: it.url } : {}),
+    });
+  }
+  return (fixtureGallery = byEvent);
+};
+
+export async function adminListGallery(eventId: string): Promise<AdminGalleryList> {
+  if (!hasApi) return fake({ items: galleryAdmin()[eventId] ?? [] });
+  return AdminGalleryList.parse(
+    await authedRequest<unknown>(`/admin/gallery?eventId=${encodeURIComponent(eventId)}`),
+  );
+}
+
+/** Presign, PUT the photo straight to S3, and hand back the key for the new item. */
+export async function adminUploadGalleryPhoto(
+  file: Blob,
+  contentType: GalleryImageUploadInput['contentType'],
+): Promise<{ key: string; url: string }> {
+  if (!hasApi)
+    return fake({ key: 'gallery/originals/fixture.jpg', url: URL.createObjectURL(file) });
+  const up = GalleryImageUploadResponse.parse(
+    await authedRequest<unknown>('/admin/gallery/image-upload', {
+      method: 'POST',
+      body: JSON.stringify({ contentType }),
+    }),
+  );
+  const res = await fetch(up.uploadUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'content-type': contentType },
+  });
+  if (!res.ok) throw new ApiError(`Upload failed (${res.status})`, res.status);
+  return { key: up.key, url: up.url };
+}
+
+export async function adminCreateGalleryItem(
+  input: GalleryItemInput,
+  /** Fixture mode only: the preview URL for a just-uploaded photo. */
+  previewUrl?: string,
+): Promise<AdminGalleryItem> {
+  if (!hasApi) {
+    const all = galleryAdmin();
+    const list = all[input.eventId] ?? [];
+    const base = {
+      id: `01JGAL${String(Date.now()).padStart(20, '0').slice(-20)}`,
+      eventId: input.eventId,
+      eventName: 'Event',
+      eventLabel: 'Event',
+      sortOrder: Math.max(0, ...list.map((i) => i.sortOrder)) + 1,
+      featured: input.featured ?? false,
+    };
+    const item: AdminGalleryItem =
+      input.type === 'photo'
+        ? {
+            ...base,
+            type: 'photo',
+            url: previewUrl ?? '',
+            thumbUrl: previewUrl ?? '',
+            originalUrl: previewUrl ?? '',
+            ...(input.caption ? { caption: input.caption } : {}),
+          }
+        : input.type === 'stat'
+          ? { ...base, type: 'stat', value: input.value, label: input.label }
+          : {
+              ...base,
+              type: 'quote',
+              text: input.text,
+              ...(input.attribution ? { attribution: input.attribution } : {}),
+            };
+    fixtureGallery = { ...all, [input.eventId]: [...list, item] };
+    return fake(item);
+  }
+  return AdminGalleryItem.parse(
+    await authedRequest<unknown>('/admin/gallery', { method: 'POST', body: JSON.stringify(input) }),
+  );
+}
+
+export async function adminUpdateGalleryItem(
+  item: AdminGalleryItem,
+  update: GalleryItemUpdate,
+): Promise<AdminGalleryItem> {
+  if (!hasApi) {
+    const all = galleryAdmin();
+    const next = { ...item, ...update } as AdminGalleryItem;
+    for (const k of ['caption', 'attribution'] as const)
+      if ((update as Record<string, unknown>)[k] === '')
+        delete (next as Record<string, unknown>)[k];
+    fixtureGallery = {
+      ...all,
+      [item.eventId]: (all[item.eventId] ?? []).map((i) => (i.id === item.id ? next : i)),
+    };
+    return fake(next);
+  }
+  return AdminGalleryItem.parse(
+    await authedRequest<unknown>(`/admin/gallery/${encodeURIComponent(item.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    }),
+  );
+}
+
+export async function adminMoveGalleryItem(
+  item: AdminGalleryItem,
+  direction: 'up' | 'down',
+): Promise<AdminGalleryList> {
+  if (!hasApi) {
+    const all = galleryAdmin();
+    const list = [...(all[item.eventId] ?? [])];
+    const i = list.findIndex((x) => x.id === item.id);
+    const j = direction === 'up' ? i - 1 : i + 1;
+    if (list[j]) {
+      [list[i], list[j]] = [list[j]!, list[i]!];
+      list.forEach((x, n) => (x.sortOrder = n + 1));
+    }
+    fixtureGallery = { ...all, [item.eventId]: list };
+    return fake({ items: list });
+  }
+  return AdminGalleryList.parse(
+    await authedRequest<unknown>(`/admin/gallery/${encodeURIComponent(item.id)}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    }),
+  );
+}
+
+export async function adminDeleteGalleryItem(item: AdminGalleryItem): Promise<void> {
+  if (!hasApi) {
+    const all = galleryAdmin();
+    fixtureGallery = {
+      ...all,
+      [item.eventId]: (all[item.eventId] ?? []).filter((i) => i.id !== item.id),
+    };
+    return fake(undefined, 150);
+  }
+  await authedRequest(`/admin/gallery/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
 }
 
 /** Delete an unpublished event that has no orders, bookings or sign-ups. */

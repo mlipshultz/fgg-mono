@@ -402,6 +402,26 @@ export async function queryGallery(q: GalleryQuery): Promise<GalleryResult> {
 }
 
 /** Distinct events that have gallery items (projection query over the small GALLERY partition). */
+/** One event's gallery, in order (the admin page). */
+export async function listEventGallery(eventId: string): Promise<StoredGalleryItem[]> {
+  const items = await queryAll({
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)',
+    ExpressionAttributeValues: { ':pk': `EVENT#${eventId}`, ':sk': 'GALLERY#' },
+  });
+  return (items as unknown as StoredGalleryItem[]).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/** A gallery item by id (the GALLERY partition is small enough to look through). */
+export async function findGalleryItem(id: string): Promise<StoredGalleryItem | undefined> {
+  const items = await queryAll({
+    KeyConditionExpression: 'PK = :pk',
+    FilterExpression: 'id = :id',
+    ExpressionAttributeValues: { ':pk': 'GALLERY', ':id': id },
+  });
+  return items[0] as unknown as StoredGalleryItem | undefined;
+}
+
 export async function listGalleryEvents(): Promise<{ id: string; label: string }[]> {
   const items = await queryAll({
     KeyConditionExpression: 'PK = :pk',

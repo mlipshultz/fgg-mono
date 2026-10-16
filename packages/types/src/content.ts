@@ -25,7 +25,11 @@ export const GalleryItem = z.discriminatedUnion('type', [
     type: z.literal('photo'),
     id: Ulid,
     eventId: Ulid,
+    /** Uploaded photos live under `gallery/originals/`; resized copies under `gallery/derived/`. */
     mediaKey: z.string(),
+    /** Pixel size of the original, measured in the browser at upload (for layout). */
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
     caption: z.string().max(200).optional(),
     featured: z.boolean().default(false),
     sortOrder: z.number().int(),
@@ -47,6 +51,7 @@ export const GalleryItem = z.discriminatedUnion('type', [
     eventId: Ulid,
     value: z.string().max(20),
     label: z.string().max(60),
+    featured: z.boolean().default(false),
     sortOrder: z.number().int(),
   }),
   z.object({
@@ -55,6 +60,7 @@ export const GalleryItem = z.discriminatedUnion('type', [
     eventId: Ulid,
     text: z.string().max(300),
     attribution: z.string().max(80).optional(),
+    featured: z.boolean().default(false),
     sortOrder: z.number().int(),
   }),
 ]);

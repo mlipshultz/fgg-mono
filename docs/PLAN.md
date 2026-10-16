@@ -442,7 +442,7 @@ placeholder. QR on the vendor pass is Phase 5.
 ### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
 Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan editor (on hold);
-3 is built except the floor-plan items (deferred); 4 is built; 5 is next.
+3 is built except the floor-plan items (deferred); 4 is built; 5 is in progress.
 
 1. **Settings and roles.** Built 2026-10-11: `/admin/settings` (superadmin) edits fee, tax, hold
    minutes, checkout hold minutes, refund cutoff and the Calendly link through `GET` / `PUT
@@ -513,7 +513,23 @@ Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan
    - Not built: vendors inviting their own members; owner vs member permissions (the roles
      exist but behave the same).
    - The applications queue already exists.
-5. **Gallery, partners, XP/badge config.** Gallery upload with the resize Lambda.
+5. **Gallery, partners, XP/badge config.**
+   - _Gallery, built 2026-10-16:_ `/admin/gallery` (staff) picks a show and adds photos (several
+     at once), stats and quotes; edits captions and text, features items on the home page,
+     reorders and deletes. Photos upload to `gallery/originals/{id}.{ext}`; `ResizeFn` (in
+     the Media stack, so the bucket notification doesn't make Media and Api depend on each
+     other) fires on that prefix only and writes `gallery/derived/{id}/display.webp` (1600 wide)
+     and `thumb.webp` (480 wide), turned upright from EXIF and never enlarged. The public API
+     serves those copies for uploaded photos and the file itself for older keys (the seeded
+     posters). The browser measures width and height at upload. Deleting a photo removes the
+     original and both copies. Public pages change after a site rebuild.
+   - sharp is installed into the Lambda bundle for Linux arm64 by an `afterBundling` hook. CDK
+     runs each hook command on its own from the repo root, so every path in it is absolute.
+   - Not built: video upload (large files, poster, duration), a backfill of resized copies for
+     the seeded photos, and HEIC (iPhone) photos (sharp's prebuilt Linux build can't read them;
+     export as JPG).
+   - Next: partners and activities. XP levels and badges wait for Phase 5 (nobody earns XP
+     before the mobile check-in scans exist).
 6. **Emails (SES).** Order confirmation, application received / approved, refund issued. Dev can
    send to verified addresses now; production access is a Phase 6 item.
 

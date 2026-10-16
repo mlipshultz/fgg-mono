@@ -25,6 +25,7 @@
     "@fgg/game": "workspace:*",
     "@fgg/types": "workspace:*",
     "pdf-lib": "^1.17.1",
+    "sharp": "0.34.4",
     "ulid": "^3.0.2",
     "zod": "^4.6.5"
   },

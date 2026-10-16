@@ -89,7 +89,7 @@ export const fixtureEvents: PublicEvent[] = [
   },
   // A new venue with no floor plan yet: vendors book a number of tables.
   {
-    id: fid('01JEVT', 9),
+    id: fid('01JEVT', 12),
     slug: 'winter-fest-2027',
     name: 'Winter Fest',
     blurb: 'Our first show in Frederick: snow-day trading, hot cocoa and a winter tournament.',

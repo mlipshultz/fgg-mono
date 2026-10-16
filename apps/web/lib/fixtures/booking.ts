@@ -18,7 +18,7 @@ import {
   type Vendor,
 } from '@fgg/types';
 import { tableById, tableUnitCents } from '../booking';
-import { fixtureEvents } from './home';
+import { fixtureEvents, fixturePastEvents } from './home';
 import { fid } from './ids';
 
 const halloween = fixtureEvents[0]!;
@@ -437,40 +437,62 @@ export const adminOrdersFixture: AdminOrderList = AdminOrderList.parse({
 
 /** Every fixture event as the admin editor sees it, plus the venues to pick from. */
 export const adminEventsFixture: AdminEventList = AdminEventList.parse({
-  events: fixtureEvents.map((e) => ({
-    id: e.id,
-    slug: e.slug,
-    name: e.name,
-    blurb: e.blurb,
-    venueId: e.venue.id,
-    timeZone: e.timeZone,
-    days: e.days,
-    startsAt: e.startsAt,
-    endsAt: e.endsAt,
-    published: true,
-    vendorStatus: e.vendorStatus,
-    ...(e.vendorOpensAt ? { vendorOpensAt: e.vendorOpensAt } : {}),
-    tableRateCents: e.tableRateCents,
-    pokeBucksRateCents: e.pokeBucksRateCents,
-    tableBooking: e.tableBooking ?? 'floor_plan',
-    ...(e.tableBooking === 'quantity' ? { tableCapacity: 40 } : {}),
-    ...(e.posterUrl ? { posterKey: `events/${e.slug}/poster.jpg`, posterUrl: e.posterUrl } : {}),
-    priceWindows:
-      e.tableBooking === 'quantity'
-        ? [
-            {
-              id: fid('01JPRC', 1),
-              kind: 'early_bird',
-              startsAt: '2026-10-01T04:00:00.000Z',
-              endsAt: '2026-12-01T05:00:00.000Z',
-              tableRateCents: 15000,
-              pokeBucksRateCents: 7500,
-            },
-          ]
-        : [],
-    createdAt: '2026-09-01T00:00:00Z',
-    updatedAt: '2026-09-01T00:00:00Z',
-  })),
+  events: [
+    ...fixtureEvents.map((e) => ({
+      id: e.id,
+      slug: e.slug,
+      name: e.name,
+      blurb: e.blurb,
+      venueId: e.venue.id,
+      timeZone: e.timeZone,
+      days: e.days,
+      startsAt: e.startsAt,
+      endsAt: e.endsAt,
+      published: true,
+      vendorStatus: e.vendorStatus,
+      ...(e.vendorOpensAt ? { vendorOpensAt: e.vendorOpensAt } : {}),
+      tableRateCents: e.tableRateCents,
+      pokeBucksRateCents: e.pokeBucksRateCents,
+      tableBooking: e.tableBooking ?? 'floor_plan',
+      ...(e.tableBooking === 'quantity' ? { tableCapacity: 40 } : {}),
+      ...(e.posterUrl ? { posterKey: `events/${e.slug}/poster.jpg`, posterUrl: e.posterUrl } : {}),
+      priceWindows:
+        e.tableBooking === 'quantity'
+          ? [
+              {
+                id: fid('01JPRC', 1),
+                kind: 'early_bird',
+                startsAt: '2026-10-01T04:00:00.000Z',
+                endsAt: '2026-12-01T05:00:00.000Z',
+                tableRateCents: 15000,
+                pokeBucksRateCents: 7500,
+              },
+            ]
+          : [],
+      createdAt: '2026-09-01T00:00:00Z',
+      updatedAt: '2026-09-01T00:00:00Z',
+    })),
+    // Past shows, which the gallery admin picks from.
+    ...fixturePastEvents.map((e) => ({
+      id: e.id,
+      slug: e.slug,
+      name: e.name,
+      blurb: '',
+      venueId: e.venue.id,
+      timeZone: 'America/New_York',
+      days: [{ date: e.startDate, opens: '11:00', closes: '17:00' }],
+      startsAt: `${e.startDate}T15:00:00.000Z`,
+      endsAt: `${e.endDate}T21:00:00.000Z`,
+      published: true,
+      vendorStatus: 'closed' as const,
+      tableRateCents: 20000,
+      pokeBucksRateCents: 10000,
+      tableBooking: 'floor_plan' as const,
+      priceWindows: [],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })),
+  ],
   venues: [...new Map(fixtureEvents.map((e) => [e.venue.id, e.venue])).values()].map((v) => ({
     ...v,
     address: '2200 York Rd',
