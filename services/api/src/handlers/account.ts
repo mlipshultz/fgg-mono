@@ -31,6 +31,7 @@ import {
 import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
 import { addCancelRequestRoutes, refundOrCancel } from './admin-cancel-requests.js';
 import { addEventAdminRoutes } from './admin-events.js';
+import { addGalleryAdminRoutes } from './admin-gallery.js';
 import { addVendorAdminRoutes } from './admin-vendors.js';
 import {
   createUserIfMissing,
@@ -552,5 +553,6 @@ router
 addEventAdminRoutes(router);
 addCancelRequestRoutes(router);
 addVendorAdminRoutes(router);
+addGalleryAdminRoutes(router);
 
 export const handler = (req: Req) => router.handle(req);

@@ -122,8 +122,9 @@ export class FakeDdb {
     const eq = new RegExp(`${skName} = (:\\w+)`).exec(cond);
     if (bw) rows = rows.filter((i) => String(i[skName] ?? '').startsWith(v[bw[1]!]));
     else if (eq) rows = rows.filter((i) => i[skName] === v[eq[1]!]);
-    if (input.FilterExpression === 'featured = :t')
-      rows = rows.filter((i) => i.featured === v[':t']);
+    // Simple `attr = :value` filters (e.g. `featured = :t`, `id = :id`).
+    const filter = /^(\w+) = (:\w+)$/.exec(input.FilterExpression ?? '');
+    if (filter) rows = rows.filter((i) => i[filter[1]!] === v[filter[2]!]);
     rows.sort((a, b) => String(a[skName]).localeCompare(String(b[skName])));
     if (input.ScanIndexForward === false) rows.reverse();
     if (input.Limit) rows = rows.slice(0, input.Limit);

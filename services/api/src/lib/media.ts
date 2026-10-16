@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectsCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 /** Resolve S3 object keys to public URLs on the media CloudFront distribution. */
@@ -7,11 +7,6 @@ const BUCKET = process.env.MEDIA_BUCKET ?? '';
 
 export function mediaUrl(key: string): string {
   return `${BASE}/${key.split('/').map(encodeURIComponent).join('/')}`;
-}
-
-/** Resize variants arrive in Phase 4; until then the thumb is the original. */
-export function thumbUrl(key: string): string {
-  return mediaUrl(key);
 }
 
 export type Presigner = (key: string, contentType: string) => Promise<string>;
@@ -42,4 +37,26 @@ export async function presignUpload(
 /** Test hook. */
 export function setPresigner(p: Presigner | undefined): void {
   presigner = p;
+}
+
+export type MediaDeleter = (keys: string[]) => Promise<void>;
+let deleter: MediaDeleter | undefined;
+
+/** Remove objects from the media bucket (missing keys are fine). */
+export async function deleteMedia(keys: string[]): Promise<void> {
+  if (!keys.length) return;
+  if (deleter) return deleter(keys);
+  if (!BUCKET) throw new Error('MEDIA_BUCKET is not set');
+  s3 ??= new S3Client({});
+  await s3.send(
+    new DeleteObjectsCommand({
+      Bucket: BUCKET,
+      Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+    }),
+  );
+}
+
+/** Test hook. */
+export function setMediaDeleter(d: MediaDeleter | undefined): void {
+  deleter = d;
 }

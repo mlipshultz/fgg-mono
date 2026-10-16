@@ -202,6 +202,9 @@ export class ApiStack extends Stack {
     props.mediaBucket.grantPut(this.accountFn, 'events/*');
     // Staff upload a vendor's logo on its behalf (presigned PUT under vendors/{id}/).
     props.mediaBucket.grantPut(this.accountFn, 'vendors/*');
+    // Gallery: staff upload originals (resized by the media stack) and delete photos with their copies.
+    props.mediaBucket.grantPut(this.accountFn, 'gallery/originals/*');
+    props.mediaBucket.grantDelete(this.accountFn, 'gallery/*');
     const githubSecretName = `fgg/${config.stage}/github`;
     this.accountFn.addEnvironment('GITHUB_SECRET_ID', githubSecretName);
     this.accountFn.addToRolePolicy(

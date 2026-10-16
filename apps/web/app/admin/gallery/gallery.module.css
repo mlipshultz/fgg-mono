@@ -1,0 +1,100 @@
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-12);
+}
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-tile);
+  padding: 12px;
+  background: var(--color-white);
+}
+.thumb {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: var(--radius-tile);
+  background: var(--color-cream, #f5f1e8);
+}
+.textTile {
+  height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  border-radius: var(--radius-tile);
+  background: var(--color-yellow);
+  padding: 10px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+}
+.statValue {
+  font-family: var(--type-brand-font-family);
+  font-size: 32px;
+}
+.kind {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+}
+.field input {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-input);
+  padding: 8px 10px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+}
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+}
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+  color: var(--color-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.add {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-12);
+}

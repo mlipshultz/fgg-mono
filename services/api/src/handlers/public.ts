@@ -11,7 +11,6 @@ import {
   type GalleryPage,
   type Order,
   type HomeContent,
-  type PublicGalleryItem,
   type PublicSettings,
 } from '@fgg/types';
 import {
@@ -31,11 +30,11 @@ import {
   listPublishedEvents,
   putItem,
   queryGallery,
-  type StoredGalleryItem,
 } from '../lib/db.js';
 import { HttpError, Router, json, parseBody, type Req } from '../lib/http.js';
 import { activeWindow } from '../lib/pricing.js';
-import { mediaUrl, thumbUrl } from '../lib/media.js';
+import { toPublicGalleryItem } from '../lib/gallery-media.js';
+import { mediaUrl } from '../lib/media.js';
 import {
   loadAvailability,
   todayIso,
@@ -50,45 +49,6 @@ async function resolveEvent(idOrSlug: string): Promise<Event> {
   const ev = ULID_RE.test(idOrSlug) ? await getEvent(idOrSlug) : await getEventBySlug(idOrSlug);
   if (!ev || !ev.published) throw new HttpError(404, 'event_not_found', 'Event not found');
   return ev;
-}
-
-function toPublicGalleryItem(it: StoredGalleryItem): PublicGalleryItem {
-  const base = {
-    id: it.id,
-    eventId: it.eventId,
-    eventName: it.eventName,
-    eventLabel: it.eventLabel,
-  };
-  switch (it.type) {
-    case 'photo':
-      return {
-        ...base,
-        type: 'photo',
-        url: mediaUrl(it.mediaKey),
-        thumbUrl: thumbUrl(it.mediaKey),
-        ...(it.caption ? { caption: it.caption } : {}),
-        featured: it.featured ?? false,
-      };
-    case 'video':
-      return {
-        ...base,
-        type: 'video',
-        url: mediaUrl(it.mediaKey),
-        posterUrl: mediaUrl(it.posterKey),
-        durationSeconds: it.durationSeconds,
-        ...(it.caption ? { caption: it.caption } : {}),
-        featured: it.featured ?? false,
-      };
-    case 'stat':
-      return { ...base, type: 'stat', value: it.value, label: it.label };
-    case 'quote':
-      return {
-        ...base,
-        type: 'quote',
-        text: it.text,
-        ...(it.attribution ? { attribution: it.attribution } : {}),
-      };
-  }
 }
 
 async function loadSettings(): Promise<PublicSettings> {
