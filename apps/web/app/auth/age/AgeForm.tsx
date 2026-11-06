@@ -1,75 +1,61 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { AuthCard, Field, authStyles as styles } from '@/components/auth/AuthCard';
 import { useAuth } from '@/components/Providers';
 import { ApiError, setBirthYear } from '@/lib/api';
-import { MINIMUM_AGE, takeStashedBirthYear } from '@/lib/auth';
+import { MINIMUM_AGE } from '@/lib/auth';
 import { safeNext, useQuery } from '@/lib/useQuery';
 
 /**
- * The 13+ screen for accounts made with Google, which arrive without a birthdate. A year typed
- * on the sign-up page before choosing Google is sent straight away. Under 13, the server removes
- * the account and we sign out.
+ * "One more step" for accounts made with Google, which arrive without a birthdate and haven't
+ * seen the sign-up form's terms: birth year (13+) and the terms, once. Under 13, the server
+ * removes the account and we sign out.
  */
 export function AgeForm() {
   const q = useQuery();
   const router = useRouter();
   const { status, logOut } = useAuth();
   const [year, setYear] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [terms, setTerms] = useState(false);
+  const [errors, setErrors] = useState<{ year?: string; terms?: string; form?: string }>({});
   const [busy, setBusy] = useState(false);
   const [tooYoung, setTooYoung] = useState(false);
-  const autoSent = useRef(false);
   const thisYear = new Date().getFullYear();
   const next = safeNext(q, '/dashboard');
-
-  const send = useCallback(
-    async (y: number) => {
-      setBusy(true);
-      setError(null);
-      try {
-        await setBirthYear({ birthYear: y });
-        router.replace(next);
-      } catch (err) {
-        if (err instanceof ApiError && err.code === 'under_age') {
-          setTooYoung(true);
-          await logOut().catch(() => undefined);
-        } else {
-          setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
-        }
-      } finally {
-        setBusy(false);
-      }
-    },
-    [logOut, next, router],
-  );
 
   useEffect(() => {
     if (status === 'signed-out' && !tooYoung) router.replace('/login');
   }, [status, tooYoung, router]);
 
-  useEffect(() => {
-    if (status !== 'signed-in' || !q || autoSent.current) return;
-    autoSent.current = true;
-    const stashed = takeStashedBirthYear();
-    if (stashed) {
-      setYear(String(stashed));
-      void send(stashed);
-    }
-  }, [status, q, send]);
-
-  const submit = (ev: FormEvent) => {
+  const submit = async (ev: FormEvent) => {
     ev.preventDefault();
     const y = Number(year);
-    if (!/^\d{4}$/.test(year) || y < 1900 || y > thisYear) {
-      setError('Enter the year you were born');
-      return;
+    const e: typeof errors = {};
+    if (!/^\d{4}$/.test(year) || y < 1900 || y > thisYear) e.year = 'Enter the year you were born';
+    if (!terms) e.terms = 'Please agree to the terms to continue';
+    setErrors(e);
+    if (Object.keys(e).length) return;
+    setBusy(true);
+    try {
+      // Under 13 goes to the server too: it removes the account the Google sign-in created.
+      await setBirthYear({ birthYear: y });
+      router.replace(next);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'under_age') {
+        setTooYoung(true);
+        await logOut().catch(() => undefined);
+      } else {
+        setErrors({
+          form: err instanceof Error ? err.message : 'Something went wrong. Try again.',
+        });
+      }
+    } finally {
+      setBusy(false);
     }
-    // Under 13 goes to the server too: it removes the account the Google sign-in created.
-    void send(y);
   };
 
   if (tooYoung) {
@@ -100,23 +86,40 @@ export function AgeForm() {
   return (
     <AuthCard
       eyebrow="One more step"
-      title="What year were you born?"
+      title="Finish setting up your account"
       lead={`FGG accounts are for fans ${MINIMUM_AGE} and up. We only ask once.`}
     >
       <form className={styles.form} onSubmit={submit} noValidate>
-        <Field label="Birth year" error={error ?? undefined} hint={`Fans ${MINIMUM_AGE}+ only`}>
+        <Field label="Birth year" error={errors.year} hint={`Fans ${MINIMUM_AGE}+ only`}>
           <input
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={4}
-            className={`${styles.input} ${error ? styles.invalid : ''}`}
+            className={`${styles.input} ${errors.year ? styles.invalid : ''}`}
             placeholder="YYYY"
             value={year}
             onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
             autoComplete="bday-year"
-            aria-invalid={error ? true : undefined}
+            aria-invalid={errors.year ? true : undefined}
           />
         </Field>
+        <label className={styles.check}>
+          <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
+          <span>
+            I agree to the <Link href="/terms">terms</Link> and{' '}
+            <Link href="/privacy">privacy policy</Link>.
+          </span>
+        </label>
+        {errors.terms && (
+          <span className={styles.error} role="alert">
+            {errors.terms}
+          </span>
+        )}
+        {errors.form && (
+          <span className={styles.formError} role="alert">
+            {errors.form}
+          </span>
+        )}
         <div className={styles.actions}>
           <Button type="submit" variant="primary" size="lg" block disabled={busy}>
             {busy ? 'Saving…' : 'Continue'}

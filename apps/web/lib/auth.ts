@@ -198,7 +198,6 @@ export async function confirmResetPassword(
 }
 
 const NEXT_KEY = 'fgg.next';
-const BIRTH_YEAR_KEY = 'fgg.birthYear';
 
 function session(): Storage | undefined {
   try {
@@ -209,17 +208,14 @@ function session(): Storage | undefined {
 }
 
 /**
- * Google sign-in leaves the site and comes back to /auth/callback, so where to go next (and the
- * birth year typed on the sign-up page) wait in sessionStorage for the trip.
+ * Google sign-in leaves the site and comes back to /auth/callback, so where to go next waits in
+ * sessionStorage for the trip. A new account answers the age and terms step after it.
  */
-export async function googleSignIn(
-  opts: { next?: string; birthYear?: number } = {},
-): Promise<void> {
+export async function googleSignIn(opts: { next?: string } = {}): Promise<void> {
   configureAmplify();
   const s = session();
   if (opts.next) s?.setItem(NEXT_KEY, opts.next);
   else s?.removeItem(NEXT_KEY);
-  if (opts.birthYear) s?.setItem(BIRTH_YEAR_KEY, String(opts.birthYear));
   await signInWithRedirect({ provider: 'Google' });
 }
 
@@ -229,14 +225,6 @@ export function takeGoogleNext(): string | null {
   const v = s?.getItem(NEXT_KEY) ?? null;
   s?.removeItem(NEXT_KEY);
   return v;
-}
-
-/** The birth year typed on the sign-up page before a Google sign-up. Read once. */
-export function takeStashedBirthYear(): number | undefined {
-  const s = session();
-  const v = Number(s?.getItem(BIRTH_YEAR_KEY));
-  s?.removeItem(BIRTH_YEAR_KEY);
-  return Number.isInteger(v) && v > 1900 ? v : undefined;
 }
 
 /** Password policy from the Cognito pool: 8+ chars, a lowercase letter and a digit. */

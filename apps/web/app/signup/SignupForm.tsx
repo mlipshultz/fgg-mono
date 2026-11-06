@@ -81,22 +81,6 @@ export function SignupForm() {
     }
   };
 
-  // Google accounts carry no birthdate: ask for the year (and the terms) here first, and send
-  // the year along so the age screen after Google is already answered.
-  const continueWithGoogle = () => {
-    const e: Errors = {};
-    const y = Number(year);
-    if (!/^\d{4}$/.test(year) || y < 1900 || y > thisYear) e.year = 'Enter the year you were born';
-    if (!terms) e.terms = 'Please agree to the terms to continue';
-    setErrors(e);
-    if (Object.keys(e).length) return;
-    if (!isOldEnough(y)) {
-      setTooYoung(true);
-      return;
-    }
-    void googleSignIn({ next, birthYear: y });
-  };
-
   if (tooYoung) {
     return (
       <AuthCard
@@ -229,7 +213,8 @@ export function SignupForm() {
                 size="md"
                 block
                 className={styles.google}
-                onClick={continueWithGoogle}
+                // Straight to Google; a new account answers the age and terms step after.
+                onClick={() => void googleSignIn({ next })}
               >
                 <GoogleGlyph /> Continue with Google
               </Button>
