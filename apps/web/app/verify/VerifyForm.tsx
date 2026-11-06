@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { Button } from '@/components/Button';
 import { AuthCard, Field, authStyles as styles } from '@/components/auth/AuthCard';
 import { confirmSignUp, friendlyAuthError, resendCode } from '@/lib/auth';
-import { useQuery } from '@/lib/useQuery';
+import { nextParam, useQuery } from '@/lib/useQuery';
 
 export function VerifyForm() {
   const q = useQuery();
@@ -62,7 +62,7 @@ export function VerifyForm() {
         lead="Log in to see your dashboard and start earning XP at the next show."
       >
         <div className={styles.actions}>
-          <Button href="/login" variant="primary" size="lg" block>
+          <Button href={`/login${nextParam(q)}`} variant="primary" size="lg" block>
             Log in
           </Button>
         </div>
