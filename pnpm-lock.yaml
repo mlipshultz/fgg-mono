@@ -205,6 +205,9 @@ importers:
       '@fgg/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@shopify/checkout-kit':
+        specifier: 4.0.0
+        version: 4.0.0
       aws-amplify:
         specifier: ^6.22.1
         version: 6.22.1
@@ -1399,6 +1402,10 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@shopify/checkout-kit@4.0.0':
+    resolution: {integrity: sha512-zl4xhlItpP+vgaYz+JxDSVTJCOeGzfEOoyCo2/YYaVOhjEMjADkFUQ5xCwCBOw3JPbfqz8IheuCOrWBUifGUMA==}
+    engines: {node: '>=22.14.0'}
 
   '@sinonjs/commons@3.0.1':
     resolution: {integrity: sha512-K3mCHKQ9sVh8o1C9cxkwxaOmXoAMlDxC1mYyHrjqOWEcBjYr76t96zL2zlj5dUGZ3HSw240X1qgH3Mjf1yJWpQ==}
@@ -3692,6 +3699,8 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@shopify/checkout-kit@4.0.0': {}
 
   '@sinonjs/commons@3.0.1':
     dependencies:

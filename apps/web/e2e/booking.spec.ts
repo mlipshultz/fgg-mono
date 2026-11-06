@@ -229,4 +229,43 @@ test.describe('payment step', () => {
       page.getByRole('region', { name: 'Your info' }).getByText('Pocket Monsters MD'),
     ).toBeVisible();
   });
+
+  /** Hold A4 and land on Pay. */
+  async function toPay(page: Page) {
+    await gotoBooking(page);
+    await addTable(page, 'A4');
+    await page
+      .getByRole('complementary', { name: 'Your tables' })
+      .getByRole('button', { name: /^Continue · \$400/ })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Payment' })).toBeVisible();
+  }
+
+  test('checkout opens Shopify in its own window; this page waits, then shows the pass', async ({
+    page,
+  }) => {
+    await toPay(page);
+    const popupOpened = page.waitForEvent('popup');
+    await page.getByRole('button', { name: /Continue to secure checkout/ }).click();
+    const popup = await popupOpened;
+    await expect(
+      page.getByRole('heading', { name: 'Finish paying in the Shopify window' }),
+    ).toBeVisible();
+    await expect(page.getByText('Waiting for your payment…')).toBeVisible();
+    // The fixture "invoice" is our own confirmation page and the fixture order is paid, so the
+    // next check of the order closes the window and moves this page on.
+    await expect(page).toHaveURL(/\/vendor\/orders\/done\/\?id=/, { timeout: 10_000 });
+    await expect.poll(() => popup.isClosed()).toBe(true);
+  });
+
+  test('when the browser blocks the window, checkout opens in this tab as before', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.open = () => null;
+    });
+    await toPay(page);
+    await page.getByRole('button', { name: /Continue to secure checkout/ }).click();
+    await expect(page).toHaveURL(/\/vendor\/orders\/done\/\?id=.*preview=1/);
+  });
 });

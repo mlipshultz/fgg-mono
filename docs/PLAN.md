@@ -256,9 +256,24 @@ and XP audit rows under `EVENT#` are anonymized (owner replaced with `DELETED`),
 - One order covers at most 45 table-days (`MAX_TABLE_DAYS_PER_ORDER`): booking writes two items per
   table-day in one transaction, and DynamoDB caps a transaction at 100 items.
 
-**Returning from Shopify (decided 2026-10-11).**
+**Returning from Shopify (decided 2026-10-11; popup checkout added 2026-11-05).**
 
-- _Now: theme redirect._ Nobody should browse the Shopify storefront; it exists for checkout only.
+- _Now: checkout in a popup window._ "Continue to secure checkout" opens a blank window inside the
+  click (so popup blockers allow it), and once the API returns the draft order, Shopify's Checkout
+  Kit for Web (`@shopify/checkout-kit`, pinned) points that window at the invoice
+  (`app/vendor/book/PopupCheckout.tsx`). The booking page shows "Finish paying in the Shopify
+  window", watches the order, and when the paid webhook lands closes the window and moves to
+  `/vendor/orders/done/`. The vendor never leaves the site.
+  - Why Checkout Kit and not a plain `window.open`: Shopify's checkout normally sends
+    `Cross-Origin-Opener-Policy: same-origin-allow-popups`, which cuts the window off from our
+    page (it reads as closed and can't be closed). With Checkout Kit's delegation parameters the
+    header is left off. Its own `complete` / `start` events don't fire for draft-order checkouts
+    (tested 2026-11-05), so payment is detected from our order, not the component.
+  - Fallbacks: if the window can't open (blocked, some in-app browsers), checkout opens in the
+    same tab as before; if Checkout Kit fails to load or refuses the link, the window is pointed
+    at the invoice directly (pays fine; the page just can't see the window close).
+
+- _Backstop: theme redirect._ Nobody should browse the Shopify storefront; it exists for checkout only.
   The store's theme redirects every page to `{site}/vendor/orders/done/`: paste a
   `<meta http-equiv="refresh">` plus `window.location.replace(...)` pair just after `<head>` in
   `layout/theme.liquid`. Checkout, invoice and thank-you pages are not theme pages and are
@@ -269,7 +284,7 @@ and XP audit rows under `EVENT#` are anonymized (owner replaced with `DELETED`),
   - Production store (Phase 6): add the same two lines with the production site URL, to
     `layout/password.liquid` as well in case password protection is ever on, then check
     "Continue shopping" after a real checkout in a browser that has never entered a password.
-- _Later: a thank-you page button._ A checkout UI extension (target
+- _Probably not needed now: a thank-you page button._ A checkout UI extension (target
   `purchase.thank-you.block.render`) in the existing Shopify app that adds "Back to Feel Good
   Gaming · see your vendor pass", linking to the confirmation page. About half a day:
   - New `apps/shopify` (Shopify CLI app config + the extension), outside the normal build. A

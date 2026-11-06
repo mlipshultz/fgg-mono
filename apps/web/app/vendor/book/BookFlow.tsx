@@ -48,6 +48,7 @@ import {
   useReturnFromCheckout,
 } from './hold';
 import { type Info, Payment } from './Payment';
+import { CheckoutWaiting, usePopupCheckout } from './PopupCheckout';
 import { Picker } from './Picker';
 import { TableConfirm } from './TableConfirm';
 import styles from './book.module.css';
@@ -165,6 +166,7 @@ function MapFlow({
   const [step, setStep] = useState<Step>(1);
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
+  const popup = usePopupCheckout();
   const quoteSeq = useRef(0);
   const holdRef = useRef<HoldResponse | null>(null);
   holdRef.current = hold;
@@ -318,12 +320,14 @@ function MapFlow({
   const cd = useCountdown(hold?.hold.expiresAt);
   useEffect(() => {
     if (!cd?.expired || !hold) return;
-    if (step === 2) setExpired(true);
-    else {
+    // Paying in the Shopify window: a late payment still books free tables, so stay put.
+    if (step === 2) {
+      if (!popup.paying) setExpired(true);
+    } else {
       setHold(null);
       sessionStorage.removeItem(HOLD_KEY);
     }
-  }, [cd?.expired, hold, step]);
+  }, [cd?.expired, hold, step, popup.paying]);
 
   const availOn = (d: IsoDate) =>
     data.floorPlan.tables.filter((t) => openDays.get(t.id)?.has(d)).length;
@@ -437,18 +441,19 @@ function MapFlow({
 
   useReturnFromCheckout(() => setBusy(false));
 
-  /** Save the vendor info on the hold, then hand off to Shopify checkout. */
+  /** Save the vendor info on the hold, then open Shopify checkout in its window. */
   const goCheckout = async (info: VendorInfoInput) => {
     if (!hold) return;
+    popup.prepare(); // inside the click, before any await
     setBusy(true);
     setError(null);
     try {
       const h = await updateHold(hold.hold.id, info);
-      setHold(h);
       const res = await checkout(h.hold.id);
-      sessionStorage.setItem('fgg.order', res.orderId);
-      window.location.href = res.invoiceUrl;
+      setHold({ ...h, hold: { ...h.hold, expiresAt: res.holdExpiresAt } });
+      if (popup.go(res)) setBusy(false);
     } catch (e) {
+      popup.abandon();
       setError(e instanceof Error ? e.message : 'Could not start checkout');
       setBusy(false);
     }
@@ -596,21 +601,35 @@ function MapFlow({
       {topbar}
       {step === 2 && hold ? (
         <div className={styles.body} style={{ gridTemplateColumns: '1fr' }}>
-          <Payment
-            key={hold.hold.id}
-            ev={ev}
-            terms={terms}
-            eventDays={eventDays}
-            hold={hold}
-            user={user}
-            busy={busy}
-            error={error}
-            countdown={countdownChip}
-            onCheckout={(info) => void goCheckout(info)}
-            fallbackInfo={lastInfo}
-            onInfoChange={setLastInfo}
-            onBack={() => setStep(1)}
-          />
+          {popup.paying ? (
+            <CheckoutWaiting
+              paying={popup.paying}
+              countdown={countdownChip}
+              holdExpired={!!cd?.expired}
+              backLabel="← Change my tables"
+              onReopen={popup.reopen}
+              onCancel={() => {
+                popup.cancel();
+                setStep(1);
+              }}
+            />
+          ) : (
+            <Payment
+              key={hold.hold.id}
+              ev={ev}
+              terms={terms}
+              eventDays={eventDays}
+              hold={hold}
+              user={user}
+              busy={busy}
+              error={error}
+              countdown={countdownChip}
+              onCheckout={(info) => void goCheckout(info)}
+              fallbackInfo={lastInfo}
+              onInfoChange={setLastInfo}
+              onBack={() => setStep(1)}
+            />
+          )}
         </div>
       ) : (
         <Picker
