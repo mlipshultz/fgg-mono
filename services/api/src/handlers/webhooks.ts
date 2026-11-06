@@ -227,7 +227,9 @@ async function onRefundsCreate(p: RefundPayload): Promise<Res> {
     if (!event) throw new Error(`event ${order.eventId} missing`);
     try {
       if (so.totalRefundedCents >= order.totalCents) {
-        await closeOrder(order, event, event.startsAt, 'refunded', 'shopify', p.note);
+        // All of it back: drop any earlier partial figure, refundedCents means "less than all".
+        const { refundedCents: _partial, ...whole } = order;
+        await closeOrder(whole, event, event.startsAt, 'refunded', 'shopify', p.note);
         return ok({ ok: true, orderId: order.id });
       }
       await recordPartialRefund(order, so.totalRefundedCents, 'shopify', p.note);

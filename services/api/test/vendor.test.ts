@@ -752,6 +752,7 @@ describe('webhooks', () => {
     shop.orders.set('1001', shopifyOrder('1001', 20000, 20000));
     expect(parse(await refundHook(2, 1001)).status).toBe(200);
     expect(orderStatus(id)).toBe('refunded');
+    expect(stored(id).refundedCents).toBeUndefined();
     expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#A1')).toBeUndefined();
   });
 
