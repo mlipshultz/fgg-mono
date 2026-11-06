@@ -1,0 +1,132 @@
+/* Partners & activities admin. Same building blocks as the gallery admin. */
+.note {
+  margin: 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+  color: var(--color-muted);
+}
+.add {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-12);
+  align-items: end;
+}
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-12);
+}
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-tile);
+  padding: var(--space-12);
+  background: var(--color-white);
+}
+/* Partner logos sit on the same 200x96 tile shape as the home page. */
+.logo {
+  width: 100%;
+  aspect-ratio: 200 / 96;
+  object-fit: contain;
+  border: var(--border-width) solid var(--color-line);
+  border-radius: var(--radius-tile);
+  background: var(--color-white);
+  padding: var(--space-8);
+  box-sizing: border-box;
+}
+.iconRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+.icon {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-tile);
+  background: var(--color-yellow);
+  font-size: 24px;
+  overflow: hidden;
+}
+.icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.kind {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 13px;
+}
+.field input,
+.field textarea {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-input);
+  padding: 8px 10px;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+}
+.field textarea {
+  resize: vertical;
+  min-height: 76px;
+}
+.row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+  color: var(--color-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+/* A file input styled as a link-sized control. */
+.fileLabel {
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-extrabold);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.fileLabel input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.fileLabel:focus-within {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}

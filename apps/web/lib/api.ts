@@ -7,6 +7,16 @@ import {
   AdminEvent,
   AdminGalleryItem,
   AdminGalleryList,
+  AdminActivity,
+  AdminActivityList,
+  AdminPartner,
+  AdminPartnerList,
+  ContentImageUploadResponse,
+  type ActivityInput,
+  type ActivityUpdate,
+  type ContentImageUploadInput,
+  type PartnerInput,
+  type PartnerUpdate,
   GalleryImageUploadResponse,
   type GalleryImageUploadInput,
   type GalleryItemInput,
@@ -1047,6 +1057,224 @@ export async function adminDeleteGalleryItem(item: AdminGalleryItem): Promise<vo
     return fake(undefined, 150);
   }
   await authedRequest(`/admin/gallery/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// Admin partners and activities (the home page's two lists). Fixture mode keeps them in memory.
+// ---------------------------------------------------------------------------
+
+let fixtureActivities: AdminActivity[] | null = null;
+let fixturePartners: AdminPartner[] | null = null;
+const activitiesAdmin = (): AdminActivity[] =>
+  (fixtureActivities ??= homeFixture.activities.map((a) => ({ ...a })));
+const partnersAdmin = (): AdminPartner[] =>
+  (fixturePartners ??= localize(homeFixture).partners.map((p) => ({
+    ...p,
+    logoKey: 'partners/fgg-logo.png',
+  })));
+/** Fixture-mode move: swap with the neighbour and renumber. */
+function moveIn<T extends { id: string; sortOrder: number }>(
+  list: T[],
+  id: string,
+  dir: 'up' | 'down',
+): T[] {
+  const sorted = [...list].sort((a, b) => a.sortOrder - b.sortOrder);
+  const i = sorted.findIndex((x) => x.id === id);
+  const j = dir === 'up' ? i - 1 : i + 1;
+  if (i < 0 || !sorted[j]) return sorted;
+  [sorted[i], sorted[j]] = [sorted[j]!, sorted[i]!];
+  return sorted.map((x, n) => ({ ...x, sortOrder: n + 1 }));
+}
+
+/** Presign, PUT the (already resized) image straight to S3, and hand back its key and URL. */
+export async function adminUploadContentImage(
+  kind: ContentImageUploadInput['kind'],
+  file: Blob,
+  contentType: ContentImageUploadInput['contentType'],
+): Promise<{ key: string; url: string }> {
+  if (!hasApi)
+    return fake({
+      key: `${kind === 'partner' ? 'partners' : 'activities'}/fixture.png`,
+      url: URL.createObjectURL(file),
+    });
+  const up = ContentImageUploadResponse.parse(
+    await authedRequest<unknown>('/admin/content/image-upload', {
+      method: 'POST',
+      body: JSON.stringify({ kind, contentType }),
+    }),
+  );
+  const res = await fetch(up.uploadUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'content-type': contentType },
+  });
+  if (!res.ok) throw new ApiError(`Upload failed (${res.status})`, res.status);
+  return { key: up.key, url: up.url };
+}
+
+export async function adminListActivities(): Promise<AdminActivityList> {
+  if (!hasApi) return fake({ items: activitiesAdmin() });
+  return AdminActivityList.parse(await authedRequest<unknown>('/admin/activities'));
+}
+
+export async function adminCreateActivity(
+  input: ActivityInput,
+  /** Fixture mode only: the preview URL of a just-uploaded icon. */
+  previewUrl?: string,
+): Promise<AdminActivity> {
+  if (!hasApi) {
+    const list = activitiesAdmin();
+    const base =
+      input.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'activity';
+    let id = base;
+    for (let n = 2; list.some((a) => a.id === id); n++) id = `${base}-${n}`;
+    const a: AdminActivity = {
+      id,
+      name: input.name,
+      description: input.description,
+      xp: input.xp,
+      sortOrder: Math.max(0, ...list.map((x) => x.sortOrder)) + 1,
+      ...(input.iconKey
+        ? { iconKey: input.iconKey, ...(previewUrl ? { iconUrl: previewUrl } : {}) }
+        : {}),
+    };
+    fixtureActivities = [...list, a];
+    return fake(a);
+  }
+  return AdminActivity.parse(
+    await authedRequest<unknown>('/admin/activities', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function adminUpdateActivity(
+  a: AdminActivity,
+  update: ActivityUpdate,
+  previewUrl?: string,
+): Promise<AdminActivity> {
+  if (!hasApi) {
+    const { iconKey, ...rest } = update;
+    let next: AdminActivity = { ...a, ...rest };
+    if (iconKey === '') {
+      const { iconKey: _k, iconUrl: _u, ...without } = next;
+      next = without;
+    } else if (iconKey) next = { ...next, iconKey, ...(previewUrl ? { iconUrl: previewUrl } : {}) };
+    fixtureActivities = activitiesAdmin().map((x) => (x.id === a.id ? next : x));
+    return fake(next);
+  }
+  return AdminActivity.parse(
+    await authedRequest<unknown>(`/admin/activities/${encodeURIComponent(a.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    }),
+  );
+}
+
+export async function adminMoveActivity(
+  a: AdminActivity,
+  direction: 'up' | 'down',
+): Promise<AdminActivityList> {
+  if (!hasApi) {
+    fixtureActivities = moveIn(activitiesAdmin(), a.id, direction);
+    return fake({ items: fixtureActivities });
+  }
+  return AdminActivityList.parse(
+    await authedRequest<unknown>(`/admin/activities/${encodeURIComponent(a.id)}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    }),
+  );
+}
+
+export async function adminDeleteActivity(a: AdminActivity): Promise<void> {
+  if (!hasApi) {
+    fixtureActivities = activitiesAdmin().filter((x) => x.id !== a.id);
+    return fake(undefined);
+  }
+  await authedRequest(`/admin/activities/${encodeURIComponent(a.id)}`, { method: 'DELETE' });
+}
+
+export async function adminListPartners(): Promise<AdminPartnerList> {
+  if (!hasApi) return fake({ items: partnersAdmin() });
+  return AdminPartnerList.parse(await authedRequest<unknown>('/admin/partners'));
+}
+
+export async function adminCreatePartner(
+  input: PartnerInput,
+  previewUrl?: string,
+): Promise<AdminPartner> {
+  if (!hasApi) {
+    const list = partnersAdmin();
+    const p: AdminPartner = {
+      id: `01JPTN${String(Date.now()).padStart(20, '0').slice(-20)}`,
+      name: input.name,
+      logoKey: input.logoKey,
+      logoUrl: previewUrl ?? 'https://fixture.local/fgg-logo.png',
+      ...(input.url ? { url: input.url } : {}),
+      sortOrder: Math.max(0, ...list.map((x) => x.sortOrder)) + 1,
+    };
+    fixturePartners = [...list, p];
+    return fake(p);
+  }
+  return AdminPartner.parse(
+    await authedRequest<unknown>('/admin/partners', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function adminUpdatePartner(
+  p: AdminPartner,
+  update: PartnerUpdate,
+  previewUrl?: string,
+): Promise<AdminPartner> {
+  if (!hasApi) {
+    const { url, logoKey, ...rest } = update;
+    let next: AdminPartner = { ...p, ...rest };
+    if (logoKey) next = { ...next, logoKey, ...(previewUrl ? { logoUrl: previewUrl } : {}) };
+    if (url === '') {
+      const { url: _u, ...without } = next;
+      next = without;
+    } else if (url) next = { ...next, url };
+    fixturePartners = partnersAdmin().map((x) => (x.id === p.id ? next : x));
+    return fake(next);
+  }
+  return AdminPartner.parse(
+    await authedRequest<unknown>(`/admin/partners/${encodeURIComponent(p.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    }),
+  );
+}
+
+export async function adminMovePartner(
+  p: AdminPartner,
+  direction: 'up' | 'down',
+): Promise<AdminPartnerList> {
+  if (!hasApi) {
+    fixturePartners = moveIn(partnersAdmin(), p.id, direction);
+    return fake({ items: fixturePartners });
+  }
+  return AdminPartnerList.parse(
+    await authedRequest<unknown>(`/admin/partners/${encodeURIComponent(p.id)}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    }),
+  );
+}
+
+export async function adminDeletePartner(p: AdminPartner): Promise<void> {
+  if (!hasApi) {
+    fixturePartners = partnersAdmin().filter((x) => x.id !== p.id);
+    return fake(undefined);
+  }
+  await authedRequest(`/admin/partners/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
 }
 
 /** Delete an unpublished event that has no orders, bookings or sign-ups. */

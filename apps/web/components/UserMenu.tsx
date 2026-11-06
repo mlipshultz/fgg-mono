@@ -115,6 +115,14 @@ export function UserMenu() {
                 Admin · Gallery
               </Link>
               <Link
+                href="/admin/content"
+                className={styles.item}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+              >
+                Admin · Partners &amp; activities
+              </Link>
+              <Link
                 href="/admin/orders"
                 className={styles.item}
                 role="menuitem"

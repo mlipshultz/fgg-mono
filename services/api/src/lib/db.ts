@@ -355,6 +355,18 @@ async function listConfig<T>(prefix: string): Promise<T[]> {
 export const listActivities = () => listConfig<Activity>('ACTIVITY#');
 export const listPartners = () => listConfig<Partner>('PARTNER#');
 
+/** One activity or partner by id (its key carries the sort order, so it is found by prefix). */
+async function findConfig<T>(prefix: string, id: string): Promise<T | undefined> {
+  const items = await queryAll({
+    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+    FilterExpression: 'id = :id',
+    ExpressionAttributeValues: { ':pk': 'CONFIG', ':sk': prefix, ':id': id },
+  });
+  return items[0] as unknown as T | undefined;
+}
+export const findActivity = (id: string) => findConfig<Activity>('ACTIVITY#', id);
+export const findPartner = (id: string) => findConfig<Partner>('PARTNER#', id);
+
 export async function getSettingsItem(): Promise<Item | undefined> {
   const res = await ddb.send(new GetCommand({ TableName: TABLE, Key: keys.settings() }));
   return res.Item as Item | undefined;

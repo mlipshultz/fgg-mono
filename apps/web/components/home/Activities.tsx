@@ -1,11 +1,11 @@
-import type { Activity } from '@fgg/types';
+import type { PublicActivity } from '@fgg/types';
 import ui from '@/components/ui.module.css';
 import styles from './Sections.module.css';
 
 const GLYPHS = ['★', '◆', '●', '▲', '⇄', '⚑'];
 const BG = [styles.bgYellow, styles.bgPink, styles.bgAqua];
 
-export function Activities({ activities }: { activities: Activity[] }) {
+export function Activities({ activities }: { activities: PublicActivity[] }) {
   const sorted = [...activities].sort((a, b) => a.sortOrder - b.sortOrder);
   return (
     <section id="activities" className={styles.activities} aria-labelledby="activities-title">
@@ -24,7 +24,7 @@ export function Activities({ activities }: { activities: Activity[] }) {
         {sorted.map((a, i) => (
           <div key={a.id} className={styles.activity}>
             <span className={`${styles.activityIcon} ${BG[i % 3]}`} aria-hidden="true">
-              {a.iconKey ? <img src={a.iconKey} alt="" /> : GLYPHS[i % GLYPHS.length]}
+              {a.iconUrl ? <img src={a.iconUrl} alt="" /> : GLYPHS[i % GLYPHS.length]}
             </span>
             <span>
               <span className={styles.activityName}>{a.name}</span>

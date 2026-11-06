@@ -79,6 +79,12 @@ export type PublicEvent = z.infer<typeof PublicEvent>;
 export const PublicPartner = Partner.omit({ logoKey: true }).extend({ logoUrl: z.string().url() });
 export type PublicPartner = z.infer<typeof PublicPartner>;
 
+/** An activity tile on the home page, with its icon (if any) as a CloudFront URL. */
+export const PublicActivity = Activity.omit({ iconKey: true }).extend({
+  iconUrl: z.string().url().optional(),
+});
+export type PublicActivity = z.infer<typeof PublicActivity>;
+
 /** Gallery item with media keys resolved to CloudFront URLs. */
 export const PublicGalleryItem = z.discriminatedUnion('type', [
   z.object({
@@ -158,7 +164,7 @@ export const HomeContent = z.object({
       posterUrl: true,
     }),
   ),
-  activities: z.array(Activity),
+  activities: z.array(PublicActivity),
   partners: z.array(PublicPartner),
   galleryTeaser: z.array(PublicGalleryItem),
   settings: PublicSettings,
@@ -297,6 +303,74 @@ export const UpdateSettingsInput = z.object({
   calendlyUrl: z.string().url().max(500).nullable(),
 });
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
+
+// ---------------------------------------------------------------------------
+// Admin partners and activities (staff / superadmin): the home page's two lists.
+// ---------------------------------------------------------------------------
+
+/** An activity as the admin page shows it: stored fields plus the icon's URL. */
+export const AdminActivity = Activity.extend({ iconUrl: z.string().url().optional() });
+export type AdminActivity = z.infer<typeof AdminActivity>;
+export const AdminActivityList = z.object({ items: z.array(AdminActivity) });
+export type AdminActivityList = z.infer<typeof AdminActivityList>;
+
+/** POST /admin/activities — a new tile at the end. The id is made from the name. */
+export const ActivityInput = z.object({
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(160),
+  xp: z.number().int().min(0).max(10_000),
+  iconKey: z.string().startsWith('activities/').optional(),
+});
+export type ActivityInput = z.infer<typeof ActivityInput>;
+
+/** PUT /admin/activities/{id}. `iconKey: ''` removes the icon (the tile shows a glyph). */
+export const ActivityUpdate = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  description: z.string().trim().max(160).optional(),
+  xp: z.number().int().min(0).max(10_000).optional(),
+  iconKey: z.union([z.literal(''), z.string().startsWith('activities/')]).optional(),
+});
+export type ActivityUpdate = z.infer<typeof ActivityUpdate>;
+
+/** A partner as the admin page shows it: stored fields plus the logo's URL. */
+export const AdminPartner = Partner.extend({ logoUrl: z.string().url() });
+export type AdminPartner = z.infer<typeof AdminPartner>;
+export const AdminPartnerList = z.object({ items: z.array(AdminPartner) });
+export type AdminPartnerList = z.infer<typeof AdminPartnerList>;
+
+const PartnerUrl = z.string().trim().url().max(500);
+/** POST /admin/partners — a new logo tile at the end. */
+export const PartnerInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  logoKey: z.string().startsWith('partners/'),
+  url: PartnerUrl.optional(),
+});
+export type PartnerInput = z.infer<typeof PartnerInput>;
+
+/** PUT /admin/partners/{id}. `url: ''` removes the link. */
+export const PartnerUpdate = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  logoKey: z.string().startsWith('partners/').optional(),
+  url: z.union([z.literal(''), PartnerUrl]).optional(),
+});
+export type PartnerUpdate = z.infer<typeof PartnerUpdate>;
+
+/** POST /admin/content/image-upload → PUT the image to `uploadUrl`, then save its `key`. */
+export const ContentImageUploadInput = z.object({
+  kind: z.enum(['partner', 'activity']),
+  contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+});
+export type ContentImageUploadInput = z.infer<typeof ContentImageUploadInput>;
+export const ContentImageUploadResponse = z.object({
+  uploadUrl: z.string().url(),
+  key: z.string(),
+  url: z.string().url(),
+});
+export type ContentImageUploadResponse = z.infer<typeof ContentImageUploadResponse>;
+
+/** POST /admin/{activities|partners}/{id}/move */
+export const ContentMoveInput = z.object({ direction: z.enum(['up', 'down']) });
+export type ContentMoveInput = z.infer<typeof ContentMoveInput>;
 
 // ---------------------------------------------------------------------------
 // Admin gallery (staff / superadmin).
