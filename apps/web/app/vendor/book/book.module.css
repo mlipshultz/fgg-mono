@@ -978,6 +978,25 @@
   margin: 40px auto;
 }
 
+/* Paying in the Shopify window */
+.waiting {
+  margin: var(--space-40) auto;
+}
+.waitingStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  font-family: var(--type-body-font-family);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-muted-dark);
+}
+.waitingStatus > span:first-child {
+  width: 24px;
+  height: 24px;
+  border-width: 3px;
+  flex: none;
+}
+
 /* Phone */
 .sheet {
   display: none;

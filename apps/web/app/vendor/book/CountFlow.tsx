@@ -38,6 +38,7 @@ import {
 import { shortDateLabel } from '@/lib/dates';
 import { RateSwitch } from './Cart';
 import { type Info, Payment } from './Payment';
+import { CheckoutWaiting, usePopupCheckout } from './PopupCheckout';
 import {
   DEFAULT_TERMS,
   HOLD_KEY,
@@ -98,6 +99,7 @@ export function CountFlow({
   const [step, setStep] = useState<Step>(1);
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
+  const popup = usePopupCheckout();
   const [error, setError] = useState<string | null>(null);
   const [lastInfo, setLastInfo] = useState<Info | undefined>(undefined);
   const quoteSeq = useRef(0);
@@ -221,12 +223,14 @@ export function CountFlow({
   const cd = useCountdown(hold?.hold.expiresAt);
   useEffect(() => {
     if (!cd?.expired || !hold) return;
-    if (step === 2) setExpired(true);
-    else {
+    // Paying in the Shopify window: a late payment still books free tables, so stay put.
+    if (step === 2) {
+      if (!popup.paying) setExpired(true);
+    } else {
       setHold(null);
       sessionStorage.removeItem(HOLD_KEY);
     }
-  }, [cd?.expired, hold, step]);
+  }, [cd?.expired, hold, step, popup.paying]);
 
   const step1 = (d: IsoDate, by: number) => {
     setError(null);
@@ -280,18 +284,19 @@ export function CountFlow({
 
   useReturnFromCheckout(() => setBusy(false));
 
-  /** Save the vendor info on the hold, then hand off to Shopify checkout. */
+  /** Save the vendor info on the hold, then open Shopify checkout in its window. */
   const goCheckout = async (info: VendorInfoInput) => {
     if (!hold) return;
+    popup.prepare(); // inside the click, before any await
     setBusy(true);
     setError(null);
     try {
       const h = await updateHold(hold.hold.id, info);
-      setHold(h);
       const res = await checkout(h.hold.id);
-      sessionStorage.setItem('fgg.order', res.orderId);
-      window.location.href = res.invoiceUrl;
+      setHold({ ...h, hold: { ...h.hold, expiresAt: res.holdExpiresAt } });
+      if (popup.go(res)) setBusy(false);
     } catch (e) {
+      popup.abandon();
       setError(e instanceof Error ? e.message : 'Could not start checkout');
       setBusy(false);
     }
@@ -336,7 +341,19 @@ export function CountFlow({
         <StepPills current={step} />
       </div>
       <div className={styles.body} style={{ gridTemplateColumns: '1fr' }}>
-        {step === 2 && hold ? (
+        {step === 2 && hold && popup.paying ? (
+          <CheckoutWaiting
+            paying={popup.paying}
+            countdown={countdownChip}
+            holdExpired={!!cd?.expired}
+            backLabel="← Change my tables"
+            onReopen={popup.reopen}
+            onCancel={() => {
+              popup.cancel();
+              setStep(1);
+            }}
+          />
+        ) : step === 2 && hold ? (
           <Payment
             key={hold.hold.id}
             ev={ev}
