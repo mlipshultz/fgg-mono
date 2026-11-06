@@ -485,7 +485,7 @@ placeholder. QR on the vendor pass is Phase 5.
 ### Phase 4: Admin console (3–4 days) — **next up** (planned 2026-10-04)
 
 Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan editor (on hold);
-3 is built except the floor-plan items (deferred); 4 is built; 5 is in progress.
+3 is built except the floor-plan items (deferred); 4 is built; 5 is built except XP/badge config (Phase 5); 6 (SES emails) is on hold.
 
 1. **Settings and roles.** Built 2026-10-11: `/admin/settings` (superadmin) edits fee, tax, hold
    minutes, checkout hold minutes, refund cutoff and the Calendly link through `GET` / `PUT
@@ -571,8 +571,17 @@ Build order, smallest payoff first. 1 is built; 2 is built except the floor-plan
    - Not built: video upload (large files, poster, duration), a backfill of resized copies for
      the seeded photos, and HEIC (iPhone) photos (sharp's prebuilt Linux build can't read them;
      export as JPG).
-   - Next: partners and activities. XP levels and badges wait for Phase 5 (nobody earns XP
-     before the mobile check-in scans exist).
+   - _Partners and activities, built 2026-11-05:_ `/admin/content` (staff) adds, edits,
+     reorders and removes the home page's partner logos (name, optional link, logo) and activity
+     tiles (name, one-line description, XP, optional icon). Images are resized in the browser
+     (logos 400 px, icons 160 px) and uploaded to `partners/` and `activities/`; only images
+     uploaded there are deleted with their item, never the seeded shared logo. Activity ids are
+     made from the name on create and never change. The public payload now serves an activity's
+     `iconUrl` (it used to pass the raw key to `<img>`). Routes: `/admin/activities`,
+     `/admin/partners` (GET, POST, PUT `{id}`, POST `{id}/move`, DELETE `{id}`) and
+     `POST /admin/content/image-upload`. Public pages change after a site rebuild.
+   - XP levels and badges wait for Phase 5 (nobody earns XP before the mobile check-in scans
+     exist).
 6. **Emails (SES).** Order confirmation, application received / approved, refund issued. Dev can
    send to verified addresses now; production access is a Phase 6 item.
 

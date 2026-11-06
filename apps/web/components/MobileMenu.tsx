@@ -108,6 +108,11 @@ export function MobileMenu({ links }: { links: NavLink[] }) {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/admin/content" onClick={() => setOpen(false)}>
+                    Admin · Partners &amp; activities
+                  </Link>
+                </li>
+                <li>
                   <Link href="/admin/orders" onClick={() => setOpen(false)}>
                     Admin · Orders
                   </Link>

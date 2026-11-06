@@ -207,6 +207,11 @@ export class ApiStack extends Stack {
     // Gallery: staff upload originals (resized by the media stack) and delete photos with their copies.
     props.mediaBucket.grantPut(this.accountFn, 'gallery/originals/*');
     props.mediaBucket.grantDelete(this.accountFn, 'gallery/*');
+    // Home page partner logos and activity icons, uploaded and removed from admin.
+    for (const prefix of ['partners/*', 'activities/*']) {
+      props.mediaBucket.grantPut(this.accountFn, prefix);
+      props.mediaBucket.grantDelete(this.accountFn, prefix);
+    }
     const githubSecretName = `fgg/${config.stage}/github`;
     this.accountFn.addEnvironment('GITHUB_SECRET_ID', githubSecretName);
     this.accountFn.addToRolePolicy(

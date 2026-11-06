@@ -118,7 +118,16 @@ export const router = new Router()
           venue: p.venue,
           ...(p.posterUrl ? { posterUrl: p.posterUrl } : {}),
         })),
-      activities: [...activities].sort((a, b) => a.sortOrder - b.sortOrder).map(stripKeys),
+      activities: [...activities]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          description: a.description,
+          xp: a.xp,
+          ...(a.iconKey ? { iconUrl: mediaUrl(a.iconKey) } : {}),
+          sortOrder: a.sortOrder,
+        })),
       partners: [...partners]
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((p) => ({
@@ -277,19 +286,6 @@ export const router = new Router()
     });
     return json(req, { ok: true });
   });
-
-function stripKeys<T extends object>(item: T): T {
-  const {
-    PK: _pk,
-    SK: _sk,
-    GSI1PK: _a,
-    GSI1SK: _b,
-    GSI2PK: _c,
-    GSI2SK: _d,
-    ...rest
-  } = item as T & Record<string, unknown>;
-  return rest as T;
-}
 
 /** Best effort: mirror the signup into the existing Klaviyo list. Never fails the request. */
 async function pushToKlaviyo(email: string, source: string): Promise<void> {

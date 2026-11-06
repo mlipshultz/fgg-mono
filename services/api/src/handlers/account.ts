@@ -33,6 +33,7 @@ import {
 import { claimsFrom, contactFor, type Actor } from '../lib/auth.js';
 import { addCancelRequestRoutes, refundOrCancel } from './admin-cancel-requests.js';
 import { addEventAdminRoutes } from './admin-events.js';
+import { addContentAdminRoutes } from './admin-content.js';
 import { addGalleryAdminRoutes } from './admin-gallery.js';
 import { addVendorAdminRoutes } from './admin-vendors.js';
 import {
@@ -607,5 +608,6 @@ addEventAdminRoutes(router);
 addCancelRequestRoutes(router);
 addVendorAdminRoutes(router);
 addGalleryAdminRoutes(router);
+addContentAdminRoutes(router);
 
 export const handler = (req: Req) => router.handle(req);
