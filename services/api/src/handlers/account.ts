@@ -13,6 +13,8 @@ import {
   ReviewInput,
   SetRolesInput,
   UpdateMeInput,
+  BirthYearInput,
+  MINIMUM_AGE,
   VendorApplicationInput,
   type AdminOrderList,
   type AdminUserList,
@@ -35,6 +37,7 @@ import { addGalleryAdminRoutes } from './admin-gallery.js';
 import { addVendorAdminRoutes } from './admin-vendors.js';
 import {
   createUserIfMissing,
+  deleteItem,
   getEvent,
   getFloorPlan,
   getOrder,
@@ -56,6 +59,7 @@ import {
   saveEvent,
   unsaveEvent,
   updateUser,
+  keys,
 } from '../lib/db.js';
 import {
   TableTakenError,
@@ -65,7 +69,8 @@ import {
   toVendorOrder,
   writeOrder,
 } from '../lib/booking.js';
-import { addToGroup } from '../lib/cognito.js';
+import { addToGroup, deleteCognitoUser } from '../lib/cognito.js';
+import { UNDER_AGE_MESSAGE } from './pre-signup.js';
 import { venueFor } from '../lib/events.js';
 import { shopify } from '../lib/shopify.js';
 import { approve, reject } from '../lib/vendor-approval.js';
@@ -77,6 +82,13 @@ import { assignableRoles, require as requireCan } from '../lib/permissions.js';
 const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
 const cognito = new CognitoIdentityProviderClient({});
 
+/**
+ * Accounts made with Google carry no birthdate, so they are stored with 1900 ("never told us")
+ * until the age screen is passed.
+ */
+const UNKNOWN_BIRTH_YEAR = 1900;
+const birthYearKnown = (u: Pick<User, 'birthYear'>) => u.birthYear > UNKNOWN_BIRTH_YEAR;
+
 export function toMe(u: User): Me {
   return {
     sub: u.sub,
@@ -85,6 +97,7 @@ export function toMe(u: User): Me {
     roles: u.roles,
     ...(u.vendorId ? { vendorId: u.vendorId } : {}),
     memberSince: u.memberSince,
+    ...(birthYearKnown(u) ? {} : { needsBirthYear: true }),
   };
 }
 
@@ -106,8 +119,23 @@ export function displayNameFor(name: string | undefined, email: string | undefin
   return (local || 'FGG Fan').slice(0, 60);
 }
 
-/** The caller's USER record, created lazily if the post-confirmation trigger missed it. */
-async function ensureUser(actor: Actor): Promise<User> {
+/**
+ * The caller's USER record, created lazily if the post-confirmation trigger missed it. Refused
+ * (403 birth_year_required) until the account has passed the 13+ screen, except where
+ * `allowUnknownAge` says the route is part of getting there.
+ */
+async function ensureUser(actor: Actor, opts: { allowUnknownAge?: boolean } = {}): Promise<User> {
+  const user = await loadUser(actor);
+  if (!opts.allowUnknownAge && !birthYearKnown(user))
+    throw new HttpError(
+      403,
+      'birth_year_required',
+      'Tell us the year you were born to finish setting up your account.',
+    );
+  return user;
+}
+
+async function loadUser(actor: Actor): Promise<User> {
   const existing = await getUser(actor.sub);
   if (existing) {
     // Groups can change outside the API (admin console, CLI); keep the stored copy in step so
@@ -127,7 +155,7 @@ async function ensureUser(actor: Actor): Promise<User> {
     sub: actor.sub,
     email: actor.email ?? `${actor.sub}@unknown.invalid`,
     displayName: displayNameFor(actor.name, actor.email),
-    birthYear: 1900,
+    birthYear: UNKNOWN_BIRTH_YEAR,
     roles: actor.roles.length ? actor.roles : ['attendee'],
     memberSince: now,
     createdAt: now,
@@ -160,8 +188,29 @@ const router = new Router()
   .add('GET', '/me', async (req) => {
     const actor = claimsFrom(req);
     requireCan(actor, 'read_own', actor.sub);
-    const user = withTokenRoles(await ensureUser(actor), actor);
+    const user = withTokenRoles(await ensureUser(actor, { allowUnknownAge: true }), actor);
     return json(req, toMe(user));
+  })
+  .add('PUT', '/me/birth-year', async (req) => {
+    const actor = claimsFrom(req);
+    requireCan(actor, 'update_own', actor.sub);
+    const { birthYear } = parseBody(req, BirthYearInput);
+    const user = await ensureUser(actor, { allowUnknownAge: true });
+    // Answered once; it isn't changed from here.
+    if (birthYearKnown(user)) return json(req, toMe(withTokenRoles(user, actor)));
+    const thisYear = new Date().getUTCFullYear();
+    if (birthYear > thisYear)
+      throw new HttpError(400, 'bad_birth_year', 'Enter the year you were born');
+    // Year only, as at sign-up: someone born in (this year - 13) counts as 13.
+    if (thisYear - birthYear < MINIMUM_AGE) {
+      // No accounts under 13 (PLAN §2): remove the sign-in and the record rather than keep a
+      // child's details.
+      await deleteCognitoUser(actor.username ?? actor.sub);
+      await deleteItem(keys.user(actor.sub));
+      throw new HttpError(403, 'under_age', UNDER_AGE_MESSAGE);
+    }
+    const updated = await updateUser(actor.sub, { birthYear });
+    return json(req, toMe(withTokenRoles(updated, actor)));
   })
   .add('PATCH', '/me', async (req) => {
     const actor = claimsFrom(req);

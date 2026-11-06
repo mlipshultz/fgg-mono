@@ -202,6 +202,12 @@ export const UpdateMeInput = z.object({
 });
 export type UpdateMeInput = z.infer<typeof UpdateMeInput>;
 
+/** The 13+ screen for accounts made with Google, which don't carry a birthdate. */
+export const BirthYearInput = z.object({
+  birthYear: z.number().int().min(1900).max(2100),
+});
+export type BirthYearInput = z.infer<typeof BirthYearInput>;
+
 /** Derived from the XP total and the Level config (packages/game). */
 export const LevelProgress = z.object({
   level: z.number().int().positive(),
