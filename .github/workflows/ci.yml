@@ -7,7 +7,8 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PR runs are cancelled; every merge to main gets its own complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -29,9 +30,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
-      - run: pnpm turbo run lint typecheck test build --affected
+      # PRs check the packages they change. A push to main checks everything: there origin/main
+      # is the pushed commit itself, so --affected would find nothing to run.
+      - name: Lint, typecheck, test, build (changed packages)
+        if: github.event_name == 'pull_request'
+        run: pnpm turbo run lint typecheck test build --affected
         env:
           TURBO_SCM_BASE: origin/main
+      - name: Lint, typecheck, test, build (everything)
+        if: github.event_name != 'pull_request'
+        run: pnpm turbo run lint typecheck test build
 
   e2e:
     name: Browser tests (fixtures)

@@ -1,5 +1,5 @@
 import { describe, it } from 'vitest';
-import { App } from 'aws-cdk-lib';
+import { testApp } from './app.js';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { MediaStack } from '../lib/media-stack.js';
 import { WebStack } from '../lib/web-stack.js';
@@ -8,7 +8,7 @@ import { stageConfig } from '../lib/stage.js';
 const env = { account: '123456789012', region: 'us-east-1' };
 
 describe('WebStack', () => {
-  const t = Template.fromStack(new WebStack(new App(), 'Web', { env, config: stageConfig('dev') }));
+  const t = Template.fromStack(new WebStack(testApp(), 'Web', { env, config: stageConfig('dev') }));
 
   it('serves a private bucket through CloudFront with an index rewrite and 404 page', () => {
     t.hasResourceProperties('AWS::S3::Bucket', {
@@ -31,7 +31,7 @@ describe('WebStack', () => {
 describe('MediaStack', () => {
   it('owns a private media bucket fronted by an OAC distribution', () => {
     const t = Template.fromStack(
-      new MediaStack(new App(), 'Media', {
+      new MediaStack(testApp(), 'Media', {
         env,
         config: stageConfig('dev'),
         webUrl: 'https://d123.cloudfront.net',

@@ -1,5 +1,6 @@
 import { describe, it } from 'vitest';
-import { App, Stack } from 'aws-cdk-lib';
+import { testApp } from './app.js';
+import { Stack } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -10,7 +11,7 @@ import { stageConfig } from '../lib/stage.js';
 const env = { account: '123456789012', region: 'us-east-1' };
 
 describe('ApiStack', () => {
-  const app = new App();
+  const app = testApp();
   const dataStack = new Stack(app, 'Data', { env });
   const table = dynamodb.TableV2.fromTableName(dataStack, 'Table', 'fgg-dev');
   const mediaBucket = s3.Bucket.fromBucketName(dataStack, 'Media', 'fgg-media-dev-123456789012');

@@ -1,5 +1,6 @@
 import { describe, it } from 'vitest';
-import { App, Stack } from 'aws-cdk-lib';
+import { testApp } from './app.js';
+import { Stack } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { AuthStack, ROLE_GROUPS } from '../lib/auth-stack.js';
@@ -10,7 +11,7 @@ import { stageConfig } from '../lib/stage.js';
 const env = { account: '123456789012', region: 'us-east-1' };
 
 function authStack(stage: 'dev' | 'prod', context: Record<string, unknown> = {}) {
-  const app = new App({ context });
+  const app = testApp(context);
   const holder = new Stack(app, `Holder-${stage}`, { env });
   const table = dynamodb.TableV2.fromTableName(holder, 'Table', `fgg-${stage}`);
   return new AuthStack(app, `Auth-${stage}`, {
@@ -95,7 +96,7 @@ describe('AuthStack', () => {
 
 describe('DataStack', () => {
   const t = Template.fromStack(
-    new DataStack(new App(), 'Data', { env, config: stageConfig('dev') }),
+    new DataStack(testApp(), 'Data', { env, config: stageConfig('dev') }),
   );
 
   it('has PK/SK, two GSIs and TTL', () => {
@@ -116,7 +117,7 @@ describe('DataStack', () => {
 
 describe('GithubOidcStack', () => {
   const t = Template.fromStack(
-    new GithubOidcStack(new App(), 'Oidc', {
+    new GithubOidcStack(testApp(), 'Oidc', {
       env,
       githubRepo: 'mlipshultz/fgg-mono',
       githubSubjects: ['repo:mlipshultz/fgg-mono:*', 'repo:mlipshultz@1/fgg-mono@2:*'],
