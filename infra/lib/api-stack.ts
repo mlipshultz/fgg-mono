@@ -106,6 +106,8 @@ export class ApiStack extends Stack {
           'cognito-idp:AdminRemoveUserFromGroup',
           'cognito-idp:AdminListGroupsForUser',
           'cognito-idp:AdminGetUser',
+          // An account found to be under 13 at the age screen is removed (PLAN §2).
+          'cognito-idp:AdminDeleteUser',
         ],
         resources: [userPool.userPoolArn],
       }),

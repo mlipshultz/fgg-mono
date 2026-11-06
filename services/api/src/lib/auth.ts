@@ -3,6 +3,8 @@ import { HttpError, type Req } from './http.js';
 
 export interface Actor {
   sub: string;
+  /** Cognito username (e.g. `google_…` for Google accounts), for admin calls that need it. */
+  username?: string;
   email?: string;
   name?: string;
   roles: Role[];
@@ -30,8 +32,10 @@ export function claimsFrom(req: Req): Actor {
   const claims = ctx.authorizer?.jwt?.claims;
   const sub = typeof claims?.sub === 'string' ? claims.sub : undefined;
   if (!claims || !sub) throw new HttpError(401, 'unauthenticated', 'Sign in required');
+  const username = claims['cognito:username'] ?? claims.username;
   return {
     sub,
+    ...(typeof username === 'string' ? { username } : {}),
     ...(typeof claims.email === 'string' ? { email: claims.email } : {}),
     ...(typeof claims.name === 'string' ? { name: claims.name } : {}),
     roles: rolesFromGroups(claims['cognito:groups']),

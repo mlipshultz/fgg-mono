@@ -34,6 +34,7 @@ import {
   toTableHold,
   toVendorOrder,
   updateHoldItems,
+  updateOrder,
   writeOrder,
 } from '../lib/booking.js';
 import {
@@ -274,12 +275,10 @@ const router = new Router()
       throw new HttpError(400, 'vendor_info_required', 'Add your vendor info before checkout');
     const ctx = await eventCtx(h.eventId);
     const now = new Date();
-    const extendedTo = new Date(
-      now.getTime() + ctx.settings.checkoutHoldMinutes * 60_000,
-    ).toISOString();
-    await updateHoldItems(items, { expiresAt: extendedTo });
 
-    // Idempotent: a draft order already created for this hold is reused.
+    // Idempotent: a draft order already created for this hold is reused. The hold was
+    // extended when that draft was made and is not extended again, so calling checkout over
+    // and over can't keep tables off the market without paying.
     const existing = (await listOrdersForOwner(vendor.id)).find(
       (o) => o.holdId === h.holdId && o.status === 'pending_payment' && o.shopifyInvoiceUrl,
     );
@@ -287,10 +286,14 @@ const router = new Router()
       const body: CheckoutResponse = {
         orderId: existing.id,
         invoiceUrl: existing.shopifyInvoiceUrl,
-        holdExpiresAt: extendedTo,
+        holdExpiresAt: h.expiresAt,
       };
       return json(req, body, 200, { 'cache-control': 'no-store' });
     }
+    const extendedTo = new Date(
+      now.getTime() + ctx.settings.checkoutHoldMinutes * 60_000,
+    ).toISOString();
+    await updateHoldItems(items, { expiresAt: extendedTo });
 
     const createdAt = now.toISOString();
     const tables = heldTables(items);
@@ -423,7 +426,7 @@ const router = new Router()
       ...(input.reason?.trim() ? { cancelReason: input.reason.trim() } : {}),
       updatedAt: at,
     };
-    await writeOrder(next, ev?.startsAt ?? order.createdAt);
+    await updateOrder(order, next, ev?.startsAt ?? order.createdAt);
     await history(
       order.id,
       order.status,

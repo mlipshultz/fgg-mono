@@ -25,7 +25,7 @@ export function AuthGate({ roles, children }: { roles?: Role[]; children: ReactN
   useEffect(() => {
     if (preview === null || preview) return;
     if (status === 'signed-out') {
-      const next = window.location.pathname + window.location.hash;
+      const next = window.location.pathname + window.location.search + window.location.hash;
       router.replace(`/login?next=${encodeURIComponent(next)}`);
     }
   }, [status, preview, router]);

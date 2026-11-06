@@ -7,7 +7,7 @@ import { Button } from '@/components/Button';
 import { AuthCard, Field, GoogleGlyph, authStyles as styles } from '@/components/auth/AuthCard';
 import { useAuth } from '@/components/Providers';
 import { friendlyAuthError, googleSignIn, hasAuth, hasGoogle, signIn } from '@/lib/auth';
-import { safeNext, useQuery } from '@/lib/useQuery';
+import { nextParam, safeNext, useQuery } from '@/lib/useQuery';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -46,7 +46,7 @@ export function LoginForm() {
     try {
       const result = await signIn(email, password);
       if (result === 'confirm') {
-        router.push(`/verify?email=${encodeURIComponent(email.trim())}`);
+        router.push(`/verify?email=${encodeURIComponent(email.trim())}${nextParam(q, '&')}`);
         return;
       }
       if (result === 'done') {
@@ -118,7 +118,7 @@ export function LoginForm() {
                 size="md"
                 block
                 className={styles.google}
-                onClick={() => void googleSignIn()}
+                onClick={() => void googleSignIn({ next })}
               >
                 <GoogleGlyph /> Continue with Google
               </Button>
@@ -127,7 +127,7 @@ export function LoginForm() {
         </div>
       </form>
       <span className={styles.alt}>
-        New here? <Link href="/signup">Create a free account</Link>
+        New here? <Link href={`/signup${nextParam(q)}`}>Create a free account</Link>
       </span>
     </AuthCard>
   );

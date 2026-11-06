@@ -62,4 +62,29 @@ test.describe('public site', () => {
     await expect(page.getByRole('button', { name: 'Log in' })).toBeEnabled();
     await ctx.close();
   });
+  test('login carries a safe ?next= on to sign-up and drops one that leaves the site', async ({
+    browser,
+    baseURL,
+  }) => {
+    const ctx = await browser.newContext({ baseURL: baseURL!, storageState: undefined });
+    const page = await ctx.newPage();
+    const signupLink = page.getByRole('link', { name: 'Create a free account' });
+
+    // A vendor sent to log in on the way to booking keeps that destination through sign-up.
+    await page.goto(`/login/?next=${encodeURIComponent('/vendor/book/?event=x')}`);
+    await expect(signupLink).toHaveAttribute(
+      'href',
+      `/signup/?next=${encodeURIComponent('/vendor/book/?event=x')}`,
+    );
+    await signupLink.click();
+    await expect(page).toHaveURL(/\/signup\/\?next=%2Fvendor%2Fbook/);
+    await expect(page.getByText('Join the fest')).toBeVisible();
+
+    // Browsers read /\evil.com and /<tab>/evil.com as //evil.com: neither survives.
+    for (const next of ['/%5Cevil.com', '/%09/evil.com', '//evil.com', 'https://evil.com']) {
+      await page.goto(`/login/?next=${next}`);
+      await expect(signupLink).toHaveAttribute('href', '/signup/');
+    }
+    await ctx.close();
+  });
 });

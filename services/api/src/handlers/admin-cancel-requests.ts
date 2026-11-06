@@ -6,7 +6,15 @@ import {
   type Order,
 } from '@fgg/types';
 import { claimsFrom } from '../lib/auth.js';
-import { closeOrder, history, toVendorOrder, writeOrder } from '../lib/booking.js';
+import {
+  OrderChangedError,
+  claimRefund,
+  closeOrder,
+  history,
+  releaseRefundClaim,
+  toVendorOrder,
+  updateOrder,
+} from '../lib/booking.js';
 import { getEvent, getOrder, getSettings, listOrdersByStatus } from '../lib/db.js';
 import { venueFor } from '../lib/events.js';
 import { HttpError, json, parseBody, type Router } from '../lib/http.js';
@@ -16,6 +24,10 @@ import { shopify } from '../lib/shopify.js';
 /**
  * Give an order's money back (or cancel it, if nothing was paid through Shopify) and free its
  * tables. `amountCents` below the total is a partial refund, recorded as `refundedCents`.
+ *
+ * The order is claimed before Shopify is asked, so a double click or two staff at once can't
+ * refund it twice. Shopify's own refund webhook may land before our write; it waits for the
+ * claim, and if it still got there first, that counts as done.
  */
 export async function refundOrCancel(
   order: Order,
@@ -26,26 +38,56 @@ export async function refundOrCancel(
 ): Promise<Order> {
   if (amountCents > order.totalCents)
     throw new HttpError(400, 'too_much', 'A refund cannot be more than the order total');
+  const patch = amountCents < order.totalCents ? { refundedCents: amountCents } : {};
   if (order.status === 'paid' && order.source === 'shopify' && order.shopifyOrderId) {
-    if (amountCents > 0)
-      await shopify().refundOrder(
-        order.shopifyOrderId,
-        amountCents,
-        reason ?? 'Refunded by FGG staff',
+    if (!(await claimRefund(order)))
+      throw new HttpError(
+        409,
+        'refund_in_progress',
+        'This order is already being refunded, or has changed. Refresh to see it.',
       );
-    return closeOrder(
-      order,
-      ev,
-      ev.startsAt,
-      'refunded',
-      by,
-      reason,
-      amountCents < order.totalCents ? { refundedCents: amountCents } : {},
-    );
+    if (amountCents > 0) {
+      try {
+        await shopify().refundOrder(
+          order.shopifyOrderId,
+          amountCents,
+          reason ?? 'Refunded by FGG staff',
+        );
+      } catch (e) {
+        await releaseRefundClaim(order);
+        throw e;
+      }
+    }
+    return settle(order, () => closeOrder(order, ev, ev.startsAt, 'refunded', by, reason, patch));
   }
-  if (order.status === 'paid' || order.status === 'pending_payment')
-    return closeOrder(order, ev, ev.startsAt, 'cancelled', by, reason);
+  if (order.status === 'paid' || order.status === 'pending_payment') {
+    const closed = await settle(order, () =>
+      closeOrder(order, ev, ev.startsAt, 'cancelled', by, reason),
+    );
+    // A payment that lands after a lapsed checkout is booked if the tables are free; staff
+    // cancelling on purpose kill the invoice so this one can't be paid at all.
+    if (order.status === 'pending_payment' && order.shopifyDraftOrderId) {
+      try {
+        await shopify().deleteDraftOrder(order.shopifyDraftOrderId);
+      } catch (e) {
+        console.warn(`could not delete draft order for cancelled order ${order.id}`, e);
+      }
+    }
+    return closed;
+  }
   throw new HttpError(409, 'bad_status', `Order is already ${order.status}`);
+}
+
+/** Run a close; if the order changed first, accept it when it already ended up closed. */
+async function settle(order: Order, close: () => Promise<Order>): Promise<Order> {
+  try {
+    return await close();
+  } catch (e) {
+    if (!(e instanceof OrderChangedError)) throw e;
+    const now = await getOrder(order.id);
+    if (now && (now.status === 'refunded' || now.status === 'cancelled')) return now;
+    throw new HttpError(409, 'order_changed', 'This order just changed. Refresh and try again.');
+  }
 }
 
 async function view(order: Order) {
@@ -107,7 +149,7 @@ export function addCancelRequestRoutes(router: Router): void {
         ...(input.note?.trim() ? { cancelDeclineNote: input.note.trim() } : {}),
         updatedAt: at,
       };
-      await writeOrder(next, ev.startsAt);
+      await updateOrder(order, next, ev.startsAt);
       await history(
         order.id,
         order.status,

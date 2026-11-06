@@ -11,6 +11,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import {
   AdminAddUserToGroupCommand,
+  AdminDeleteUserCommand,
   AdminRemoveUserFromGroupCommand,
   CognitoIdentityProviderClient,
 } from '@aws-sdk/client-cognito-identity-provider';
@@ -135,6 +136,63 @@ describe('GET /me', () => {
       await handler(authed('GET', '/me', { ...claims, 'cognito:groups': 'staff' })),
     );
     expect(res.body.roles).toEqual(['staff']);
+  });
+});
+
+describe('age screen for accounts made with Google', () => {
+  const google = { ...user, birthYear: 1900 };
+  const googleClaims = { ...claims, 'cognito:username': 'google_1234567890' };
+  beforeEach(() => {
+    ddb.on(GetCommand).callsFake((input: any) => {
+      if (input.Key.PK === `USER#${SUB}`) return { Item: google };
+      if (input.Key.PK === `EVENT#${EVENT_ID}`) return { Item: storedEvent };
+      return { Item: undefined };
+    });
+    cognito.on(AdminDeleteUserCommand).resolves({});
+  });
+
+  it('flags the account and keeps it out of everything else until it answers', async () => {
+    const me = parse(await handler(authed('GET', '/me', googleClaims)));
+    expect(me.status).toBe(200);
+    expect(Me.parse(me.body).needsBirthYear).toBe(true);
+    const dash = parse(await handler(authed('GET', '/me/dashboard', googleClaims)));
+    expect(dash.status).toBe(403);
+    expect(dash.body.error.code).toBe('birth_year_required');
+    const save = parse(await handler(authed('PUT', `/me/saved/${EVENT_ID}`, googleClaims)));
+    expect(save.body.error.code).toBe('birth_year_required');
+  });
+
+  it('stores a 13+ birth year', async () => {
+    const res = parse(
+      await handler(authed('PUT', '/me/birth-year', googleClaims, { birthYear: 2000 })),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.needsBirthYear).toBeUndefined();
+    const update = ddb.commandCalls(UpdateCommand)[0]!.args[0].input as any;
+    expect(update.ExpressionAttributeValues[':birthYear']).toBe(2000);
+  });
+
+  it('removes an account that turns out to be under 13', async () => {
+    const thisYear = new Date().getUTCFullYear();
+    const res = parse(
+      await handler(authed('PUT', '/me/birth-year', googleClaims, { birthYear: thisYear - 10 })),
+    );
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('under_age');
+    expect(res.body.error.message).toContain('Ask a parent');
+    expect(cognito.commandCalls(AdminDeleteUserCommand)[0]!.args[0].input).toMatchObject({
+      Username: 'google_1234567890',
+    });
+    expect(ddb.commandCalls(DeleteCommand)[0]!.args[0].input.Key).toEqual(keys.user(SUB));
+    expect(ddb.commandCalls(UpdateCommand)).toHaveLength(0);
+  });
+
+  it("doesn't change a birth year once it's known", async () => {
+    ddb.on(GetCommand).resolves({ Item: user });
+    const res = parse(await handler(authed('PUT', '/me/birth-year', claims, { birthYear: 2019 })));
+    expect(res.status).toBe(200);
+    expect(cognito.commandCalls(AdminDeleteUserCommand)).toHaveLength(0);
+    expect(ddb.commandCalls(UpdateCommand)).toHaveLength(0);
   });
 });
 

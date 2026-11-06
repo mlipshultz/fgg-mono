@@ -512,7 +512,7 @@ export async function createUserIfMissing(user: User): Promise<boolean> {
 export async function updateUser(
   sub: string,
   /** `vendorId: null` removes the link (the user left their vendor). */
-  patch: Partial<Pick<User, 'displayName' | 'roles'>> & { vendorId?: string | null },
+  patch: Partial<Pick<User, 'displayName' | 'roles' | 'birthYear'>> & { vendorId?: string | null },
 ): Promise<User> {
   const sets: string[] = ['#u = :u'];
   const removes: string[] = [];
@@ -796,8 +796,11 @@ export async function updateVendor(
 export const listPriceWindows = (eventId: string) =>
   listEventPrefix<PriceWindow>(eventId, 'PRICE#');
 
+/** Strongly consistent: callers decide what to do next from the status they read. */
 export async function getOrder(id: string): Promise<Order | undefined> {
-  const res = await ddb.send(new GetCommand({ TableName: TABLE, Key: keys.order(id) }));
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE, Key: keys.order(id), ConsistentRead: true }),
+  );
   return res.Item ? (stripKeys(res.Item) as Order) : undefined;
 }
 

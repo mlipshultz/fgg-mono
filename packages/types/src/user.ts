@@ -29,5 +29,8 @@ export const Me = User.pick({
   roles: true,
   vendorId: true,
   memberSince: true,
+}).extend({
+  /** Signed up with Google and hasn't told us their birth year yet (the 13+ screen). */
+  needsBirthYear: z.boolean().optional(),
 });
 export type Me = z.infer<typeof Me>;

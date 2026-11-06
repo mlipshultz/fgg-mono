@@ -18,17 +18,31 @@ class ConditionalCheckFailedException extends Error {
 }
 class TransactionCanceledException extends Error {
   override name = 'TransactionCanceledException';
+  constructor(readonly CancellationReasons: { Code: string }[]) {
+    super(
+      `Transaction cancelled, please refer cancellation reasons for specific reasons [${CancellationReasons.map((r) => r.Code).join(', ')}]`,
+    );
+  }
+}
+class ValidationException extends Error {
+  override name = 'ValidationException';
 }
 
 /**
  * Just enough DynamoDB to exercise the booking transactions: single table keyed by PK/SK,
- * GSI1/GSI2 equality + begins_with queries, the few condition expressions the code uses,
- * ADD/SET updates, and all-or-nothing TransactWrite.
+ * GSI1/GSI2 equality + begins_with queries, condition expressions (attribute_[not_]exists,
+ * comparisons, AND/OR without parentheses), ADD/SET/REMOVE updates, and TransactWrite that is
+ * all-or-nothing, checks every condition against the state before the transaction, reports
+ * per-item CancellationReasons, and enforces the 100-item and one-operation-per-item limits.
+ *
+ * Every read is strongly consistent; tests reproduce stale reads by handing the code an old copy.
  */
 export class FakeDdb {
   items = new Map<string, Item>();
   /** Runs once, just before the next TransactWrite: lets a test land a competing write. */
   beforeTransact: (() => void) | undefined;
+  /** The next N TransactWrites fail with a TransactionConflict, as when two overlap in AWS. */
+  transactConflicts = 0;
   readonly mock = mockClient(DynamoDBDocumentClient);
 
   constructor() {
@@ -50,40 +64,72 @@ export class FakeDdb {
   }
   reset() {
     this.items.clear();
+    this.beforeTransact = undefined;
+    this.transactConflicts = 0;
     this.mock.reset();
     this.install();
   }
 
-  private check(existing: Item | undefined, cond: string | undefined, values: Item = {}) {
-    if (!cond) return;
-    if (cond === 'attribute_not_exists(PK)') {
-      if (existing) throw new ConditionalCheckFailedException('exists');
-      return;
-    }
-    if (cond === 'attribute_exists(PK)') {
-      if (!existing) throw new ConditionalCheckFailedException('missing');
-      return;
-    }
-    if (cond === 'attribute_not_exists(PK) OR orderId = :oid') {
-      if (existing && existing.orderId !== values[':oid'])
-        throw new ConditionalCheckFailedException('taken');
-      return;
-    }
-    if (cond === 'attribute_not_exists(#v)') {
-      if (existing?.version !== undefined) throw new ConditionalCheckFailedException('moved');
-      return;
-    }
-    if (cond === '#v = :cur') {
-      if (existing?.version !== values[':cur']) throw new ConditionalCheckFailedException('moved');
-      return;
-    }
-    throw new Error(`fake-ddb: unsupported condition ${cond}`);
+  /** Evaluate a condition expression: OR of ANDs of simple atoms (DynamoDB precedence). */
+  private holds(
+    existing: Item | undefined,
+    cond: string | undefined,
+    values: Item = {},
+    names: Record<string, string> = {},
+  ): boolean {
+    if (!cond) return true;
+    const attr = (n: string) => names[n] ?? n;
+    const atom = (raw: string): boolean => {
+      const a = raw.trim();
+      let m = /^attribute_not_exists\(([#\w]+)\)$/.exec(a);
+      if (m) return existing?.[attr(m[1]!)] === undefined;
+      m = /^attribute_exists\(([#\w]+)\)$/.exec(a);
+      if (m) return existing?.[attr(m[1]!)] !== undefined;
+      m = /^([#\w]+) (=|<>|<=|>=|<|>) (:\w+)$/.exec(a);
+      if (m) {
+        const l = existing?.[attr(m[1]!)];
+        const r = values[m[3]!];
+        if (l === undefined || r === undefined) return m[2] === '<>' && l !== r;
+        switch (m[2]) {
+          case '=':
+            return l === r;
+          case '<>':
+            return l !== r;
+          case '<':
+            return l < r;
+          case '<=':
+            return l <= r;
+          case '>':
+            return l > r;
+          default:
+            return l >= r;
+        }
+      }
+      throw new Error(`fake-ddb: unsupported condition ${cond}`);
+    };
+    return cond.split(/\s+OR\s+/).some((d) => d.split(/\s+AND\s+/).every(atom));
   }
 
-  private applyUpdate(input: any): Item {
+  private check(
+    existing: Item | undefined,
+    cond: string | undefined,
+    values: Item = {},
+    names: Record<string, string> = {},
+  ) {
+    if (!this.holds(existing, cond, values, names))
+      throw new ConditionalCheckFailedException('The conditional request failed');
+  }
+
+  private applyUpdate(input: any, checked = false): Item {
     const { PK, SK } = input.Key;
     const existing = this.get(PK, SK);
-    this.check(existing, input.ConditionExpression, input.ExpressionAttributeValues);
+    if (!checked)
+      this.check(
+        existing,
+        input.ConditionExpression,
+        input.ExpressionAttributeValues,
+        input.ExpressionAttributeNames,
+      );
     const item: Item = existing ?? { PK, SK };
     const names: Record<string, string> = input.ExpressionAttributeNames ?? {};
     const values: Record<string, any> = input.ExpressionAttributeValues ?? {};
@@ -140,11 +186,18 @@ export class FakeDdb {
         this.get(input.Item.PK, input.Item.SK),
         input.ConditionExpression,
         input.ExpressionAttributeValues,
+        input.ExpressionAttributeNames,
       );
       this.put(input.Item);
       return {};
     });
     this.mock.on(DeleteCommand).callsFake((input: any) => {
+      this.check(
+        this.get(input.Key.PK, input.Key.SK),
+        input.ConditionExpression,
+        input.ExpressionAttributeValues,
+        input.ExpressionAttributeNames,
+      );
       this.items.delete(this.key(input.Key.PK, input.Key.SK));
       return {};
     });
@@ -161,38 +214,47 @@ export class FakeDdb {
       const race = this.beforeTransact;
       this.beforeTransact = undefined;
       race?.();
-      const snapshot = new Map(this.items);
-      try {
-        for (const t of input.TransactItems) {
-          if (t.Put) {
-            this.check(
-              this.get(t.Put.Item.PK, t.Put.Item.SK),
-              t.Put.ConditionExpression,
-              t.Put.ExpressionAttributeValues,
-            );
-            this.put(t.Put.Item);
-          } else if (t.Delete) {
-            this.check(
-              this.get(t.Delete.Key.PK, t.Delete.Key.SK),
-              t.Delete.ConditionExpression,
-              t.Delete.ExpressionAttributeValues,
-            );
-            this.items.delete(this.key(t.Delete.Key.PK, t.Delete.Key.SK));
-          } else if (t.ConditionCheck) {
-            this.check(
-              this.get(t.ConditionCheck.Key.PK, t.ConditionCheck.Key.SK),
-              t.ConditionCheck.ConditionExpression,
-              t.ConditionCheck.ExpressionAttributeValues,
-            );
-          } else if (t.Update) {
-            this.applyUpdate(t.Update);
-          }
-        }
-      } catch (e) {
-        this.items = snapshot;
-        if ((e as Error).name === 'ConditionalCheckFailedException')
-          throw new TransactionCanceledException('cancelled');
-        throw e;
+      const ops: any[] = input.TransactItems;
+      if (ops.length > 100)
+        throw new ValidationException(
+          'Member must have length less than or equal to 100 (TransactItems)',
+        );
+      const target = (t: any) =>
+        t.Put ? t.Put.Item : (t.Delete ?? t.ConditionCheck ?? t.Update).Key;
+      const seen = new Set<string>();
+      for (const t of ops) {
+        const k = this.key(target(t).PK, target(t).SK);
+        if (seen.has(k))
+          throw new ValidationException(
+            'Transaction request cannot include multiple operations on one item',
+          );
+        seen.add(k);
+      }
+      if (this.transactConflicts > 0) {
+        this.transactConflicts--;
+        throw new TransactionCanceledException(
+          ops.map((_, i) => ({ Code: i === 0 ? 'TransactionConflict' : 'None' })),
+        );
+      }
+      // Every condition is judged against the table as it was before the transaction.
+      const reasons = ops.map((t) => {
+        const op = t.Put ?? t.Delete ?? t.ConditionCheck ?? t.Update;
+        const { PK, SK } = target(t);
+        return this.holds(
+          this.get(PK, SK),
+          op.ConditionExpression,
+          op.ExpressionAttributeValues,
+          op.ExpressionAttributeNames,
+        )
+          ? 'None'
+          : 'ConditionalCheckFailed';
+      });
+      if (reasons.some((r) => r !== 'None'))
+        throw new TransactionCanceledException(reasons.map((Code) => ({ Code })));
+      for (const t of ops) {
+        if (t.Put) this.put(t.Put.Item);
+        else if (t.Delete) this.items.delete(this.key(t.Delete.Key.PK, t.Delete.Key.SK));
+        else if (t.Update) this.applyUpdate(t.Update, true);
       }
       return {};
     });

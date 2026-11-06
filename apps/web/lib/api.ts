@@ -47,6 +47,7 @@ import {
   SavedEventIds,
   type SubscribeInput,
   type UpdateMeInput,
+  type BirthYearInput,
   VendorApplication,
   type VendorApplicationInput,
   VendorApplicationList,
@@ -126,14 +127,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Same as request(), with the Cognito ID token attached. Throws ApiError(401) when signed out. */
+/**
+ * Same as request(), with the Cognito ID token attached. Throws ApiError(401) when signed out.
+ * An account that hasn't passed the 13+ screen yet (Google sign-ups) is sent to it.
+ */
 async function authedRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getIdToken();
   if (!token) throw new ApiError('Please log in', 401, 'unauthorized');
-  return request<T>(path, {
-    ...init,
-    headers: { authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
-  });
+  try {
+    return await request<T>(path, {
+      ...init,
+      headers: { authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
+    });
+  } catch (e) {
+    if (
+      e instanceof ApiError &&
+      e.code === 'birth_year_required' &&
+      !window.location.pathname.startsWith('/auth/age')
+    ) {
+      const here = window.location.pathname + window.location.search;
+      window.location.assign(`/auth/age/?next=${encodeURIComponent(here)}`);
+    }
+    throw e;
+  }
 }
 
 /** Build-time: everything the homepage needs. Falls back to the fixture without an API. */
@@ -210,6 +226,14 @@ export async function joinWaitlist(eventId: string, input: WaitlistInput): Promi
 export async function getMe(): Promise<Me> {
   if (!hasApi) return fake(dashboardFixture.me);
   return Me.parse(await authedRequest<unknown>('/me'));
+}
+
+/** The 13+ screen. Throws ApiError 403 `under_age` (the account is then gone). */
+export async function setBirthYear(input: BirthYearInput): Promise<Me> {
+  if (!hasApi) return fake(dashboardFixture.me);
+  return Me.parse(
+    await authedRequest<unknown>('/me/birth-year', { method: 'PUT', body: JSON.stringify(input) }),
+  );
 }
 
 export async function updateMe(input: UpdateMeInput): Promise<Me> {

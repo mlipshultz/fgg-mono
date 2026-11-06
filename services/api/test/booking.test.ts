@@ -252,6 +252,132 @@ describe('finalizePaidOrder / closeOrder', () => {
   });
 });
 
+describe('order writes never overwrite a newer state', () => {
+  const paidOrder = async (shopifyOrderId = '42') => {
+    const o = order();
+    await booking.writeOrder(o, event.startsAt);
+    return booking.finalizePaidOrder({
+      order: o,
+      event,
+      startsAt: event.startsAt,
+      shopifyOrderId,
+      by: 'shopify',
+    });
+  };
+
+  it('closeOrder refuses a stale copy and leaves the order and its tables alone', async () => {
+    const o = order();
+    await booking.writeOrder(o, event.startsAt);
+    const stale = { ...o };
+    await booking.finalizePaidOrder({
+      order: o,
+      event,
+      startsAt: event.startsAt,
+      shopifyOrderId: '7',
+      by: 'shopify',
+    });
+    await expect(
+      booking.closeOrder(stale, event, event.startsAt, 'cancelled', 'system'),
+    ).rejects.toBeInstanceOf(booking.OrderChangedError);
+    expect(db.get(`ORDER#${o.id}`, 'META')?.status).toBe('paid');
+    expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#A1')?.orderId).toBe(o.id);
+  });
+
+  it('finalizePaidOrder refuses an order that is no longer in the status it was read in', async () => {
+    const o = order();
+    await booking.writeOrder(o, event.startsAt);
+    db.put({ ...db.get(`ORDER#${o.id}`, 'META')!, status: 'cancelled' });
+    await expect(
+      booking.finalizePaidOrder({ order: o, event, startsAt: event.startsAt, by: 'shopify' }),
+    ).rejects.toBeInstanceOf(booking.OrderChangedError);
+    expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#A1')).toBeUndefined();
+  });
+
+  it('closeOrder indexes the Shopify order id, so refund webhooks find conflict orders', async () => {
+    const o = order();
+    await booking.writeOrder(o, event.startsAt);
+    await booking.closeOrder(
+      { ...o, shopifyOrderId: '313' },
+      event,
+      event.startsAt,
+      'conflict',
+      'system',
+    );
+    expect(db.get('SHOPIFYORDER#313', 'ORDER')?.orderId).toBe(o.id);
+  });
+
+  it('only one staff refund can claim an order at a time, and a stale claim can be taken over', async () => {
+    const paid = await paidOrder();
+    expect(await booking.claimRefund(paid)).toBe(true);
+    expect(await booking.claimRefund(paid)).toBe(false);
+    expect(booking.refundInFlight(db.get(`ORDER#${paid.id}`, 'META') as Order)).toBe(true);
+    const later = new Date(Date.now() + booking.REFUND_CLAIM_MS + 1000);
+    expect(await booking.claimRefund(paid, later)).toBe(true);
+    await booking.releaseRefundClaim(paid);
+    expect(db.get(`ORDER#${paid.id}`, 'META')?.refundingAt).toBeUndefined();
+  });
+
+  it('records a partial refund and keeps the booking; refuses once the order is not paid', async () => {
+    const paid = await paidOrder();
+    const next = await booking.recordPartialRefund(paid, 1500, 'shopify');
+    expect(next.refundedCents).toBe(1500);
+    expect(db.get(`ORDER#${paid.id}`, 'META')).toMatchObject({
+      status: 'paid',
+      refundedCents: 1500,
+    });
+    expect(db.get(`EVENT#${EVENT_ID}`, 'TABLE#2026-10-24#A1')?.orderId).toBe(paid.id);
+    db.put({ ...db.get(`ORDER#${paid.id}`, 'META')!, status: 'refunded' });
+    await expect(booking.recordPartialRefund(paid, 2500, 'shopify')).rejects.toBeInstanceOf(
+      booking.OrderChangedError,
+    );
+  });
+
+  it('updateOrder refuses an edit made from a copy someone has since changed', async () => {
+    const paid = await paidOrder();
+    const later = {
+      ...paid,
+      cancelRequestedAt: new Date().toISOString(),
+      updatedAt: new Date(Date.now() + 1).toISOString(),
+    };
+    await booking.updateOrder(paid, later, event.startsAt);
+    await expect(
+      booking.updateOrder(
+        paid,
+        { ...paid, cancelDeclinedAt: new Date().toISOString() },
+        event.startsAt,
+      ),
+    ).rejects.toMatchObject({ status: 409, code: 'order_changed' });
+  });
+
+  it('retries a hold that only overlapped another transaction', async () => {
+    db.transactConflicts = 2;
+    const items = await booking.createHold({
+      event,
+      vendorId: VENDOR,
+      heldBy: SUB,
+      quote: quote(),
+      holdMinutes: 10,
+    });
+    expect(items).toHaveLength(2);
+  });
+
+  it("a comp can't take a table that a vendor holds right now", async () => {
+    await booking.createHold({
+      event,
+      vendorId: OTHER,
+      heldBy: 'x',
+      quote: quote(),
+      holdMinutes: 10,
+    });
+    const comp = order({ source: 'manual', totalCents: 0 });
+    await booking.writeOrder(comp, event.startsAt);
+    await expect(
+      booking.finalizePaidOrder({ order: comp, event, startsAt: event.startsAt, by: SUB }),
+    ).rejects.toBeInstanceOf(booking.TableTakenError);
+    expect(db.get(`EVENT#${EVENT_ID}`, 'HOLD#2026-10-24#A1')?.vendorId).toBe(OTHER);
+  });
+});
+
 describe('quantity events (no floor plan)', () => {
   const BOTH = ['2026-10-24', '2026-10-25'];
   const countQuote = (quantity: number, dates = BOTH) =>

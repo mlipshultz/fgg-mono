@@ -171,4 +171,19 @@ describe('resolveQuote', () => {
       resolveQuote({ ...args, event, floorPlan, lines: [{ quantity: 1, dates }] }),
     ).toThrow(/on the map/);
   });
+  it('caps an order at 45 table-days, which one DynamoDB transaction can book', () => {
+    const dates = Array.from({ length: 8 }, (_, i) => `2026-10-${String(20 + i).padStart(2, '0')}`);
+    const week = {
+      ...event,
+      days: dates.map((date) => ({ date, opens: '11:00', closes: '17:00' })),
+    };
+    const lines = floorPlan.tables.map((t) => ({ tableId: t.id, dates }));
+    expect(() => resolveQuote({ ...base, event: week, lines, rate: 'standard' })).toThrowError(
+      expect.objectContaining({ status: 400, code: 'cart_too_big' }),
+    );
+    // 5 tables x 8 days = 40 is fine.
+    expect(
+      resolveQuote({ ...base, event: week, lines: lines.slice(0, 5), rate: 'standard' }).lines,
+    ).toHaveLength(5);
+  });
 });

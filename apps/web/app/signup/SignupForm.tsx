@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/Button';
 import { useAuth } from '@/components/Providers';
 import { AuthCard, Field, GoogleGlyph, authStyles as styles } from '@/components/auth/AuthCard';
+import { nextParam, safeNext, useQuery } from '@/lib/useQuery';
 import {
   friendlyAuthError,
   googleSignIn,
@@ -22,14 +23,16 @@ type Errors = Partial<Record<'name' | 'email' | 'year' | 'password' | 'confirm' 
 
 export function SignupForm() {
   const router = useRouter();
+  const q = useQuery();
   const { status } = useAuth();
+  // Where the visitor was going (e.g. booking a table), else the vendor application when that
+  // was the goal, else the dashboard.
+  const next = safeNext(q, q?.get('vendor') === '1' ? '/vendor/apply' : '/dashboard');
 
-  // Already signed in: skip to the dashboard (or the vendor application when that was the goal).
+  // Already signed in: skip ahead.
   useEffect(() => {
-    if (status !== 'signed-in') return;
-    const vendor = new URLSearchParams(window.location.search).get('vendor') === '1';
-    router.replace(vendor ? '/vendor/apply' : '/dashboard');
-  }, [status, router]);
+    if (status === 'signed-in' && q) router.replace(next);
+  }, [status, q, next, router]);
   const thisYear = new Date().getFullYear();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -68,12 +71,30 @@ export function SignupForm() {
     setFormError(null);
     try {
       await signUp({ name, email, birthYear: y, password });
-      router.push(`/verify?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      router.push(
+        `/verify?email=${encodeURIComponent(email.trim().toLowerCase())}${nextParam(q, '&')}`,
+      );
     } catch (err) {
       setFormError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
+  };
+
+  // Google accounts carry no birthdate: ask for the year (and the terms) here first, and send
+  // the year along so the age screen after Google is already answered.
+  const continueWithGoogle = () => {
+    const e: Errors = {};
+    const y = Number(year);
+    if (!/^\d{4}$/.test(year) || y < 1900 || y > thisYear) e.year = 'Enter the year you were born';
+    if (!terms) e.terms = 'Please agree to the terms to continue';
+    setErrors(e);
+    if (Object.keys(e).length) return;
+    if (!isOldEnough(y)) {
+      setTooYoung(true);
+      return;
+    }
+    void googleSignIn({ next, birthYear: y });
   };
 
   if (tooYoung) {
@@ -208,7 +229,7 @@ export function SignupForm() {
                 size="md"
                 block
                 className={styles.google}
-                onClick={() => void googleSignIn()}
+                onClick={continueWithGoogle}
               >
                 <GoogleGlyph /> Continue with Google
               </Button>
