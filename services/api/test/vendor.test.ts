@@ -788,6 +788,13 @@ describe('webhooks', () => {
     expect(shop.refunds).toHaveLength(1);
   });
 
+  it('kills the invoice when staff cancel an unpaid order', async () => {
+    const id = await checkoutA1();
+    const done = await refundOrCancel(stored(id), event, SUB, 'vendor asked');
+    expect(done.status).toBe('cancelled');
+    expect(shop.deletedDrafts).toEqual(['draft-1']);
+  });
+
   it('lets staff try again after Shopify refuses a refund', async () => {
     const id = await checkoutA1();
     await pay(id, 1301);

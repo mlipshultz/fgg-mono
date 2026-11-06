@@ -60,8 +60,21 @@ export async function refundOrCancel(
     }
     return settle(order, () => closeOrder(order, ev, ev.startsAt, 'refunded', by, reason, patch));
   }
-  if (order.status === 'paid' || order.status === 'pending_payment')
-    return settle(order, () => closeOrder(order, ev, ev.startsAt, 'cancelled', by, reason));
+  if (order.status === 'paid' || order.status === 'pending_payment') {
+    const closed = await settle(order, () =>
+      closeOrder(order, ev, ev.startsAt, 'cancelled', by, reason),
+    );
+    // A payment that lands after a lapsed checkout is booked if the tables are free; staff
+    // cancelling on purpose kill the invoice so this one can't be paid at all.
+    if (order.status === 'pending_payment' && order.shopifyDraftOrderId) {
+      try {
+        await shopify().deleteDraftOrder(order.shopifyDraftOrderId);
+      } catch (e) {
+        console.warn(`could not delete draft order for cancelled order ${order.id}`, e);
+      }
+    }
+    return closed;
+  }
   throw new HttpError(409, 'bad_status', `Order is already ${order.status}`);
 }
 
