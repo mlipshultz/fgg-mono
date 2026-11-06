@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   DynamoDBDocumentClient,
@@ -98,7 +98,6 @@ function stubReads(opts: { holds?: unknown[]; tables?: unknown[] } = {}) {
 beforeEach(() => {
   ddb.reset();
   clearVenueCache();
-  vi.useRealTimers();
 });
 
 describe('GET /public/home', () => {
