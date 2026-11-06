@@ -27,6 +27,8 @@ export interface ShopifyOrderView {
   name: string;
   financialStatus: string;
   totalCents: number;
+  /** Everything refunded on the order so far, across every refund. */
+  totalRefundedCents: number;
   email?: string;
   noteAttributes: Record<string, string>;
 }
@@ -146,6 +148,7 @@ export class GraphqlShopifyClient implements ShopifyClient {
         displayFinancialStatus: string;
         email?: string;
         totalPriceSet: { shopMoney: { amount: string } };
+        totalRefundedSet: { shopMoney: { amount: string } };
         customAttributes: { key: string; value: string }[];
       } | null;
     }>(
@@ -153,6 +156,7 @@ export class GraphqlShopifyClient implements ShopifyClient {
         order(id: $id) {
           id name displayFinancialStatus email
           totalPriceSet { shopMoney { amount } }
+          totalRefundedSet { shopMoney { amount } }
           customAttributes { key value }
         }
       }`,
@@ -165,6 +169,7 @@ export class GraphqlShopifyClient implements ShopifyClient {
       name: o.name,
       financialStatus: o.displayFinancialStatus,
       totalCents: Math.round(Number(o.totalPriceSet.shopMoney.amount) * 100),
+      totalRefundedCents: Math.round(Number(o.totalRefundedSet.shopMoney.amount) * 100),
       ...(o.email ? { email: o.email } : {}),
       noteAttributes: Object.fromEntries(o.customAttributes.map((a) => [a.key, a.value])),
     };

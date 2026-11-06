@@ -58,6 +58,7 @@ import {
   updateUser,
 } from '../lib/db.js';
 import {
+  TableTakenError,
   closeOrder,
   finalizePaidOrder,
   history,
@@ -519,14 +520,17 @@ router
         by: actor.sub,
       });
       return json(req, await adminOrderView(paid), 201);
-    } catch {
+    } catch (e) {
+      // Only a taken table cancels the comp; anything else may have struck after the booking
+      // was written, so it is left for a retry or a look rather than cancelled blind.
+      if (!(e instanceof TableTakenError)) throw e;
       await closeOrder(order, ev, ev.startsAt, 'cancelled', actor.sub, 'comp failed: table taken');
       throw new HttpError(
         409,
         'table_unavailable',
         byCount
           ? 'There are not that many tables left on one of those days'
-          : 'That table is already booked on one of those days',
+          : 'That table is booked, or a vendor is checking out with it, on one of those days',
       );
     }
   })

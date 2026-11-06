@@ -133,6 +133,12 @@ export function priceTableCount(args: PriceArgs & TableCountInput): TableCountQu
  * stored on the hold and never recomputed, so a window closing mid-checkout changes nothing.
  * Fee and tax apply to the subtotal across all tables.
  */
+/**
+ * Booking a floor-plan order writes two items per table-day in one DynamoDB transaction (the
+ * booked row and the hold's removal) plus the order rows; transactions top out at 100 items.
+ */
+export const MAX_TABLE_DAYS_PER_ORDER = 45;
+
 export function resolveQuote(args: QuoteArgs): Quote {
   const { settings } = args;
   const byCount = args.event.tableBooking === 'quantity';
@@ -155,6 +161,13 @@ export function resolveQuote(args: QuoteArgs): Quote {
     seen.add(l.tableId);
     return priceLine({ ...args, ...l });
   });
+  const tableDays = lines.reduce((n, l) => n + ('tableId' in l ? l.dates.length : 0), 0);
+  if (tableDays > MAX_TABLE_DAYS_PER_ORDER)
+    throw new HttpError(
+      400,
+      'cart_too_big',
+      `One order can cover up to ${MAX_TABLE_DAYS_PER_ORDER} table-days. Book some of these in a second order.`,
+    );
   const subtotal = lines.reduce((n, l) => n + l.lineCents, 0);
   const fee = Math.round((subtotal * settings.processingFeePct) / 100);
   const tax = Math.round((subtotal * settings.taxPct) / 100);

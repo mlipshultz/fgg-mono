@@ -219,7 +219,8 @@ export class FakeDdb {
         throw new ValidationException(
           'Member must have length less than or equal to 100 (TransactItems)',
         );
-      const target = (t: any) => (t.Put ? t.Put.Item : (t.Delete ?? t.ConditionCheck ?? t.Update).Key);
+      const target = (t: any) =>
+        t.Put ? t.Put.Item : (t.Delete ?? t.ConditionCheck ?? t.Update).Key;
       const seen = new Set<string>();
       for (const t of ops) {
         const k = this.key(target(t).PK, target(t).SK);

@@ -1,4 +1,9 @@
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DeleteCommand,
+  PutCommand,
+  UpdateCommand,
+  type TransactWriteCommandInput,
+} from '@aws-sdk/lib-dynamodb';
 import { ulid } from 'ulid';
 import type {
   Event,
@@ -32,10 +37,96 @@ import {
 import { fmtTime, tablesUsedByDay, toPublicEvent } from './events.js';
 import { HttpError } from './http.js';
 
+type TransactItems = NonNullable<TransactWriteCommandInput['TransactItems']>;
+
+/** Per-item codes of a cancelled transaction, in TransactItems order (undefined if absent). */
+function cancellationCodes(e: unknown): string[] | undefined {
+  const reasons = (e as { CancellationReasons?: ({ Code?: string } | undefined)[] })
+    .CancellationReasons;
+  return Array.isArray(reasons) ? reasons.map((r) => r?.Code ?? 'None') : undefined;
+}
+
+/**
+ * A condition we wrote failed: the item isn't in the state we expected. A cancelled transaction
+ * counts only when one of its items failed its condition; one cancelled because it overlapped
+ * another transaction is transient and retried by `transact` instead.
+ */
 export const isConditionalFailure = (e: unknown): boolean => {
   const name = (e as { name?: string }).name ?? '';
-  return name === 'ConditionalCheckFailedException' || name === 'TransactionCanceledException';
+  if (name === 'ConditionalCheckFailedException') return true;
+  if (name !== 'TransactionCanceledException') return false;
+  const codes = cancellationCodes(e);
+  return !codes || codes.includes('ConditionalCheckFailed');
 };
+
+const TRANSIENT = new Set([
+  'TransactionConflict',
+  'ThrottlingError',
+  'ProvisionedThroughputExceeded',
+  'RequestLimitExceeded',
+]);
+
+function isTransientCancel(e: unknown): boolean {
+  if ((e as { name?: string }).name !== 'TransactionCanceledException') return false;
+  const codes = cancellationCodes(e);
+  return (
+    !!codes && !codes.includes('ConditionalCheckFailed') && codes.some((c) => TRANSIENT.has(c))
+  );
+}
+
+/** Did the item at `index` fail its condition? Unknown (no reasons) counts as yes. */
+function failedAt(e: unknown, index: number): boolean {
+  if (!isConditionalFailure(e)) return false;
+  const codes = cancellationCodes(e);
+  return !codes || codes[index] === 'ConditionalCheckFailed';
+}
+
+const TRANSACT_ATTEMPTS = 4;
+
+/**
+ * TransactWriteItems, retried when DynamoDB cancels it only because it overlapped another
+ * transaction on the same items (or throttled). Condition failures are thrown at once.
+ */
+export async function transact(items: TransactItems): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await ddb.send(new TransactWriteCommand({ TransactItems: items }));
+      return;
+    } catch (e) {
+      if (!isTransientCancel(e) || attempt >= TRANSACT_ATTEMPTS) throw e;
+      await new Promise((r) => setTimeout(r, 20 * attempt + Math.random() * 40));
+    }
+  }
+}
+
+/**
+ * The order is no longer in the status the caller read: someone else (a webhook, the sweep,
+ * staff) changed it first. Re-read it and decide again rather than overwrite their change.
+ */
+export class OrderChangedError extends Error {
+  constructor(readonly orderId: string) {
+    super(`order ${orderId} changed while we were updating it`);
+  }
+}
+
+/** Where the canonical order item sits in a transaction (to read its cancellation reason). */
+function indexOfOrderPut(items: TransactItems, orderId: string): number {
+  const { PK, SK } = keys.order(orderId);
+  return items.findIndex((t) => t.Put?.Item?.PK === PK && t.Put?.Item?.SK === SK);
+}
+
+/** The order item, written only if its stored status is still the one we read. */
+function putOrderIfStatus(order: Order, startsAt: string, expected: OrderStatus) {
+  return {
+    Put: {
+      TableName: TABLE,
+      Item: { ...keys.orderIndex(order, startsAt), ...order },
+      ConditionExpression: '#s = :expected',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: { ':expected': expected },
+    },
+  };
+}
 
 const nowIso = () => new Date().toISOString();
 const epoch = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
@@ -150,13 +241,27 @@ export async function createHold(args: CreateHoldArgs): Promise<HoldItem[]> {
     await deleteItem({ PK: prev.PK, SK: prev.SK });
   }
   if (event.tableBooking === 'quantity') return createCountHold(args, now);
-  // Clear expired holds on the requested table-days (best effort).
+  // Clear expired holds on the requested table-days (best effort). The list can be stale, so
+  // each delete re-checks that the hold is still the expired one, never a fresh hold.
   const lines = quote.lines.flatMap((l) => ('tableId' in l ? [l] : []));
   const wanted = new Set(lines.flatMap((l) => l.dates.map((d) => `${l.tableId}#${d}`)));
   const stale = (await listHolds(event.id)).filter(
     (h) => wanted.has(`${h.tableId}#${h.date}`) && isExpired(h, now),
   );
-  for (const s of stale) await deleteItem({ PK: s.PK, SK: s.SK });
+  for (const s of stale) {
+    try {
+      await ddb.send(
+        new DeleteCommand({
+          TableName: TABLE,
+          Key: { PK: s.PK, SK: s.SK },
+          ConditionExpression: 'attribute_not_exists(PK) OR expiresAt < :now',
+          ExpressionAttributeValues: { ':now': now.toISOString() },
+        }),
+      );
+    } catch (e) {
+      if (!isConditionalFailure(e)) throw e;
+    }
+  }
 
   const holdId = ulid();
   const expiresAt = new Date(now.getTime() + args.holdMinutes * 60_000).toISOString();
@@ -168,21 +273,19 @@ export async function createHold(args: CreateHoldArgs): Promise<HoldItem[]> {
     })),
   );
   try {
-    await ddb.send(
-      new TransactWriteCommand({
-        TransactItems: items.flatMap((it) => [
-          {
-            Put: { TableName: TABLE, Item: it, ConditionExpression: 'attribute_not_exists(PK)' },
+    await transact(
+      items.flatMap((it) => [
+        {
+          Put: { TableName: TABLE, Item: it, ConditionExpression: 'attribute_not_exists(PK)' },
+        },
+        {
+          ConditionCheck: {
+            TableName: TABLE,
+            Key: keys.bookedTable(event.id, it.date, it.tableId!),
+            ConditionExpression: 'attribute_not_exists(PK)',
           },
-          {
-            ConditionCheck: {
-              TableName: TABLE,
-              Key: keys.bookedTable(event.id, it.date, it.tableId!),
-              ConditionExpression: 'attribute_not_exists(PK)',
-            },
-          },
-        ]),
-      }),
+        },
+      ]),
     );
   } catch (e) {
     if (isConditionalFailure(e)) {
@@ -304,14 +407,10 @@ async function createCountHold(args: CreateHoldArgs, now: Date): Promise<HoldIte
       }
     }
     try {
-      await ddb.send(
-        new TransactWriteCommand({
-          TransactItems: [
-            ...items.map((it) => ({ Put: { TableName: TABLE, Item: it } })),
-            bumpCapacity(event.id, version),
-          ],
-        }),
-      );
+      await transact([
+        ...items.map((it) => ({ Put: { TableName: TABLE, Item: it } })),
+        bumpCapacity(event.id, version),
+      ]);
       return items;
     } catch (e) {
       if (!isConditionalFailure(e)) throw e;
@@ -376,6 +475,36 @@ export async function updateHoldItems(
 // Orders
 // ---------------------------------------------------------------------------
 
+/**
+ * Save an edit to an existing order (a cancel request, a decline), only if nobody changed the
+ * order since `prev` was read; otherwise 409, so a stale copy never undoes a payment or refund.
+ */
+export async function updateOrder(prev: Order, next: Order, startsAt: string): Promise<void> {
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: { ...keys.orderIndex(next, startsAt), ...next },
+        ConditionExpression: '#u = :prev',
+        ExpressionAttributeNames: { '#u': 'updatedAt' },
+        ExpressionAttributeValues: { ':prev': prev.updatedAt },
+      }),
+    );
+  } catch (e) {
+    if (isConditionalFailure(e))
+      throw new HttpError(409, 'order_changed', 'This order just changed. Refresh and try again.');
+    throw e;
+  }
+  await putItem({
+    ...keys.eventOrder(next.eventId, next.id),
+    orderId: next.id,
+    status: next.status,
+    ownerId: next.ownerId,
+    createdAt: next.createdAt,
+  });
+}
+
+/** Write a new order (or overwrite one nobody else can be touching yet). */
 export async function writeOrder(order: Order, startsAt: string): Promise<void> {
   await putItem({ ...keys.orderIndex(order, startsAt), ...order });
   await putItem({
@@ -480,9 +609,14 @@ export interface PaidArgs {
 /**
  * Take the table days for a paid (or comped) order: write TABLE# rows conditioned on no owner,
  * delete the hold rows, and mark the order paid with a pass number. Throws `TableTakenError`
- * when another vendor owns one of the days (caller refunds). On a `quantity` event the rows carry
- * the number of tables instead, and it throws when the day no longer has room (the hold expired
- * and others booked the rest).
+ * when another vendor owns one of the days, or holds it right now (caller refunds). On a
+ * `quantity` event the rows carry the number of tables instead, and it throws when the day no
+ * longer has room (the hold expired and others booked the rest).
+ *
+ * The order is written only if its stored status is still `order.status`, so a payment never
+ * lands on an order someone else just changed (and the sweep can't cancel one that was just
+ * paid); `OrderChangedError` tells the caller to re-read. `order.status` may be `cancelled` for
+ * a payment that arrived after the checkout was given up on, as long as the tables are free.
  */
 export class TableTakenError extends Error {}
 
@@ -517,19 +651,15 @@ export async function finalizePaidOrder(args: PaidArgs): Promise<Order> {
           );
       }
     }
+    const writes = finalizeWrites(args, paid, lines, wanted);
+    const orderIndex = indexOfOrderPut(writes, order.id);
     try {
-      await ddb.send(
-        new TransactWriteCommand({
-          TransactItems: [
-            ...finalizeWrites(args, paid, lines, wanted),
-            ...(capacity ? [bumpCapacity(event.id, capacity.version)] : []),
-          ],
-        }),
-      );
+      await transact([...writes, ...(capacity ? [bumpCapacity(event.id, capacity.version)] : [])]);
       break;
     } catch (e) {
       if (!isConditionalFailure(e)) throw e;
-      // Specific tables: someone else owns one. By number: capacity moved, so look again.
+      if (failedAt(e, orderIndex) && cancellationCodes(e)) throw new OrderChangedError(order.id);
+      // Specific tables: someone else owns or holds one. By number: capacity moved, look again.
       if (!capacity) throw new TableTakenError(`one of ${tablesLabel(order)} is already booked`);
       if (attempt + 1 >= CAPACITY_ATTEMPTS) throw e;
     }
@@ -543,9 +673,24 @@ function finalizeWrites(
   paid: Order,
   lines: ReturnType<typeof tableLines>,
   wanted: Map<string, number>,
-) {
+): TransactItems {
   const { order, event } = args;
   const paidAt = paid.paidAt!;
+  // A table-day's hold is removed only if it is ours or has run out. Another vendor's live
+  // hold means they may be paying for it right now: this payment loses (TableTakenError).
+  const holdDelete = (date: string, tableId: string) => ({
+    Delete: {
+      TableName: TABLE,
+      Key: keys.hold(event.id, date, tableId),
+      ConditionExpression: order.holdId
+        ? 'attribute_not_exists(PK) OR holdId = :hid OR expiresAt < :now'
+        : 'attribute_not_exists(PK) OR expiresAt < :now',
+      ExpressionAttributeValues: {
+        ':now': paidAt,
+        ...(order.holdId ? { ':hid': order.holdId } : {}),
+      },
+    },
+  });
   return [
     ...[...wanted].map(([date, quantity]) => ({
       Put: {
@@ -582,12 +727,8 @@ function finalizeWrites(
         },
       })),
     ),
-    ...lines.flatMap((line) =>
-      line.dates.map((date) => ({
-        Delete: { TableName: TABLE, Key: keys.hold(event.id, date, line.tableId) },
-      })),
-    ),
-    { Put: { TableName: TABLE, Item: { ...keys.orderIndex(paid, args.startsAt), ...paid } } },
+    ...lines.flatMap((line) => line.dates.map((date) => holdDelete(date, line.tableId))),
+    putOrderIfStatus(paid, args.startsAt, order.status),
     {
       Put: {
         TableName: TABLE,
@@ -613,7 +754,11 @@ function finalizeWrites(
   ];
 }
 
-/** Move an order to a terminal status and free its table days. */
+/**
+ * Move an order to a terminal status and free its table days. Written only if the stored order
+ * is still in `order.status`; otherwise `OrderChangedError` (someone got there first). A Shopify
+ * order id on the order is indexed, so later refund webhooks find conflict orders too.
+ */
 export async function closeOrder(
   order: Order,
   event: Event,
@@ -626,8 +771,9 @@ export async function closeOrder(
 ): Promise<Order> {
   const lines = tableLines(order);
   const at = nowIso();
+  const { refundingAt: _lock, ...rest } = order as Order & { refundingAt?: string };
   const next: Order = {
-    ...order,
+    ...rest,
     ...patch,
     status,
     updatedAt: at,
@@ -652,29 +798,130 @@ export async function closeOrder(
           Delete: { TableName: TABLE, Key: keys.bookedCount(event.id, date, order.id) },
         }))
       : [];
-  await ddb.send(
-    new TransactWriteCommand({
-      TransactItems: [
-        ...frees,
-        ...freedCounts,
-        { Put: { TableName: TABLE, Item: { ...keys.orderIndex(next, startsAt), ...next } } },
-        {
-          Put: {
-            TableName: TABLE,
-            Item: {
-              ...keys.eventOrder(event.id, order.id),
-              orderId: order.id,
-              status,
-              ownerId: order.ownerId,
-              createdAt: order.createdAt,
+  const items: TransactItems = [
+    ...frees,
+    ...freedCounts,
+    putOrderIfStatus(next, startsAt, order.status),
+    {
+      Put: {
+        TableName: TABLE,
+        Item: {
+          ...keys.eventOrder(event.id, order.id),
+          orderId: order.id,
+          status,
+          ownerId: order.ownerId,
+          createdAt: order.createdAt,
+        },
+      },
+    },
+    ...(next.shopifyOrderId
+      ? [
+          {
+            Put: {
+              TableName: TABLE,
+              Item: { ...keys.shopifyOrder(next.shopifyOrderId), orderId: order.id },
             },
           },
-        },
-      ],
-    }),
-  );
+        ]
+      : []),
+  ];
+  try {
+    await transact(items);
+  } catch (e) {
+    if (failedAt(e, indexOfOrderPut(items, order.id))) throw new OrderChangedError(order.id);
+    throw e;
+  }
   await history(order.id, status, by, order.status, note);
   return next;
+}
+
+/** How long a staff refund may hold its claim before another attempt can take over. */
+export const REFUND_CLAIM_MS = 2 * 60_000;
+
+/** A staff refund of this order is in flight (claimed less than REFUND_CLAIM_MS ago). */
+export function refundInFlight(order: Order, now = new Date()): boolean {
+  const at = (order as Order & { refundingAt?: string }).refundingAt;
+  return !!at && now.getTime() - new Date(at).getTime() < REFUND_CLAIM_MS;
+}
+
+/**
+ * Claim a paid order for a staff refund before any money moves, so a double click or two staff
+ * at once can't refund it twice. False if the order isn't `paid` any more or another refund
+ * holds a fresh claim. `closeOrder` drops the claim; `releaseRefundClaim` undoes a failed one.
+ */
+export async function claimRefund(order: Order, now = new Date()): Promise<boolean> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: TABLE,
+        Key: keys.order(order.id),
+        // updatedAt moves too, so an edit made from a copy read before the claim is refused.
+        UpdateExpression: 'SET #r = :now, #u = :now',
+        ConditionExpression:
+          '#s = :paid AND attribute_not_exists(#r) OR #s = :paid AND #r < :stale',
+        ExpressionAttributeNames: { '#s': 'status', '#r': 'refundingAt', '#u': 'updatedAt' },
+        ExpressionAttributeValues: {
+          ':now': now.toISOString(),
+          ':paid': 'paid',
+          ':stale': new Date(now.getTime() - REFUND_CLAIM_MS).toISOString(),
+        },
+      }),
+    );
+    return true;
+  } catch (e) {
+    if (isConditionalFailure(e)) return false;
+    throw e;
+  }
+}
+
+export async function releaseRefundClaim(order: Order): Promise<void> {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE,
+      Key: keys.order(order.id),
+      UpdateExpression: 'REMOVE #r',
+      ExpressionAttributeNames: { '#r': 'refundingAt' },
+    }),
+  );
+}
+
+/**
+ * Part of a paid order's money went back (a refund made in Shopify for less than the total):
+ * record the running total on the order and keep the booking. Idempotent; throws
+ * `OrderChangedError` if the order is no longer paid.
+ */
+export async function recordPartialRefund(
+  order: Order,
+  refundedCents: number,
+  by: OrderHistoryEntry['by'],
+  note?: string,
+): Promise<Order> {
+  if (order.refundedCents === refundedCents) return order;
+  const at = nowIso();
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: TABLE,
+        Key: keys.order(order.id),
+        UpdateExpression: 'SET #rc = :rc, #u = :at',
+        ConditionExpression: '#s = :paid',
+        ExpressionAttributeNames: { '#s': 'status', '#rc': 'refundedCents', '#u': 'updatedAt' },
+        ExpressionAttributeValues: { ':rc': refundedCents, ':at': at, ':paid': 'paid' },
+      }),
+    );
+  } catch (e) {
+    if (isConditionalFailure(e)) throw new OrderChangedError(order.id);
+    throw e;
+  }
+  const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+  await history(
+    order.id,
+    'paid',
+    by,
+    'paid',
+    `${dollars(refundedCents)} of ${dollars(order.totalCents)} refunded; booking kept${note ? ` (${note})` : ''}`,
+  );
+  return { ...order, refundedCents, updatedAt: at };
 }
 
 // ---------------------------------------------------------------------------

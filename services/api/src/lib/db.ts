@@ -796,8 +796,11 @@ export async function updateVendor(
 export const listPriceWindows = (eventId: string) =>
   listEventPrefix<PriceWindow>(eventId, 'PRICE#');
 
+/** Strongly consistent: callers decide what to do next from the status they read. */
 export async function getOrder(id: string): Promise<Order | undefined> {
-  const res = await ddb.send(new GetCommand({ TableName: TABLE, Key: keys.order(id) }));
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE, Key: keys.order(id), ConsistentRead: true }),
+  );
   return res.Item ? (stripKeys(res.Item) as Order) : undefined;
 }
 
